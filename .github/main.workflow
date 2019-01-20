@@ -12,3 +12,4 @@ action "build" {
   uses = "avsm/actions-ocaml/dune@master"
   args = "build"
 }
+
