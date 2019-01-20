@@ -1,8 +1,6 @@
 Real World OCaml v2
 -------------------
 
-test
-
 This is the source code for the Real World OCaml 2nd edition, which
 is still a work in progress.  The original edition was written by
 Yaron Minsky, Anil Madhavapeddy and Jason Hickey, and the revised
