@@ -1,8 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name alternate_list)
-   (libraries (core))
-  )
-)

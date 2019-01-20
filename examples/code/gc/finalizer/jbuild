@@ -1,9 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name finalizer)
-   (modules finalizer)
-   (libraries (core async))
-  )
-)

@@ -1,8 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name parse_book)
-   (libraries (core yojson))
-  )
-)

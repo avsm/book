@@ -1,6 +1,8 @@
 open Core
 open Core_bench
 
+exception Exit
+
 let simple_computation () =
   List.range 0 10
   |> List.fold ~init:0 ~f:(fun sum x -> sum + x * x)

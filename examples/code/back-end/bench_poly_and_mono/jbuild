@@ -1,9 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name bench_poly_and_mono)
-   (modules bench_poly_and_mono)
-   (libraries (core_bench))
-  )
-)

@@ -6,16 +6,15 @@ platform:
   arch: amd64
 
 steps:
-- name: build
-  image: ocaml/opam2
-  pull: always
-  environment:
-    OPAMYES: 1
-    OPAMJOBS: 32
-    OPAMERRLOGLEN: 0
-  commands:
-  - git -C /home/opam/opam-repository pull origin master && opam update -u
-  - opam pin add . -n
-  - opam depext rwo
-  - opam install rwo --deps-only
-  - opam exec -- dune build
+- name: docker
+  image: plugins/docker
+  when:
+    branch:
+    - drone-it-up
+  settings:
+    repo: ocaml/rwo
+    tags: base
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password

@@ -1,17 +1,26 @@
-.PHONY: all clean dep code publish
+.PHONY: all clean dep publish promote test test-all docker
 
 all:
-	@jbuilder build @site
+	@dune build @site
 	@echo Site has been generated in _build/default/static/
 
-code:
-	jbuilder build @code
+test:
+	dune runtest
+
+test-all:
+	dune build @runtest-all
 
 dep:
-	jbuilder exec -- rwo-jbuild
+	dune exec -- rwo-dep
+
+promote:
+	dune promote
 
 clean:
-	jbuilder clean
+	dune clean
+
+docker:
+	docker build -t ocaml/rwo .
 
 publish:
 	rm -rf .gh-pages
@@ -20,6 +29,7 @@ publish:
 	git -C .gh-pages reset
 	git -C .gh-pages clean -dxf
 	cp -r _build/default/static/* .gh-pages/
+	echo dev.realworldocaml.org > .gh-pages/CNAME
 	git -C .gh-pages add .
 	git -C .gh-pages commit -m "Update Pages"
 	git -C .gh-pages push origin gh-pages -f

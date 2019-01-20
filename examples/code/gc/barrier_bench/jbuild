@@ -1,9 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name barrier_bench)
-   (modules barrier_bench)
-   (libraries (core core_bench))
-  )
-)

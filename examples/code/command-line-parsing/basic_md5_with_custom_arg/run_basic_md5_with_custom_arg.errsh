@@ -1,3 +1,0 @@
-jbuilder build basic_md5_with_custom_arg.exe
-./_build/default/basic_md5_with_custom_arg.exe /etc/passwd
-./_build/default/basic_md5_with_custom_arg.exe /dev/null

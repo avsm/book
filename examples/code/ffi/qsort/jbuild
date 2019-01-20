@@ -1,8 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name qsort)
-   (libraries (core ctypes.foreign))
-  )
-)

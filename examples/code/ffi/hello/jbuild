@@ -1,9 +1,0 @@
-(jbuild_version 1)
-(include jbuild.inc)
-
-(executable
-  ((name hello)
-   (libraries (ctypes.foreign))
-   (flags (:standard -cclib -lncurses))
-  )
-)
