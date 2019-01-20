@@ -19,6 +19,7 @@ steps:
 kind: pipeline
 name: build
 
+steps:
 - name: book
   image: ocaml/rwo:base
   pull: always
