@@ -1,12 +1,8 @@
 kind: pipeline
-name: amd
-
-platform:
-  os: linux
-  arch: amd64
+name: image
 
 steps:
-- name: docker
+- name: base
   image: plugins/docker
   when:
     branch:
@@ -18,3 +14,21 @@ steps:
       from_secret: docker_username
     password:
       from_secret: docker_password
+--
+kind: pipeline
+name: build
+
+- name: book
+  image: ocaml/rwo:base
+  pull: always
+  environment:
+    OPAMYES: 1
+    OPAMJOBS: 32
+    OPAMERRLOGLEN: 0
+  commands:
+  - git -C /home/opam/opam-repository pull origin master && opam update -u
+  - sudo chown -R opam .
+  - opam pin add . -n
+  - opam install rwo --deps-only
+  - opam upgrade
+  - opam exec -- dune build
