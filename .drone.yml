@@ -1,0 +1,19 @@
+kind: pipeline
+name: amd
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+- name: build
+  image: ocaml/opam2
+  environment:
+    OPAMYES: 1
+    OPAMJOBS: 32
+    OPAMERRLOGLEN: 0
+  commands:
+  - opam pin add . -n
+  - opam depext rwo
+  - opam install rwo --deps-only
+  - opam exec -- dune build
