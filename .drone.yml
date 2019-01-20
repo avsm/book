@@ -33,4 +33,7 @@ steps:
   - opam pin add . -n
   - opam install rwo --deps-only
   - opam upgrade
-  - opam exec -- dune build
+  - opam exec -- make all
+  - opam exec -- make test
+  - opam exec -- make promote
+  - git diff
