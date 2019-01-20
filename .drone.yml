@@ -27,6 +27,7 @@ steps:
     OPAMYES: 1
     OPAMJOBS: 32
     OPAMERRLOGLEN: 0
+    OPAMCOLOR: always
   commands:
   - git -C /home/opam/opam-repository pull origin master && opam update -u
   - sudo chown -R opam .
