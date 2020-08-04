@@ -1,0 +1,12 @@
+*.dvi
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.haux
+*.htoc
+manual.image.tex
