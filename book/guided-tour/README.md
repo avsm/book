@@ -331,7 +331,7 @@ annotations can be placed on any expression in an OCaml program.
 ### Inferring Generic Types
 
 Sometimes, there isn't enough information to fully determine the concrete
-type of a given value. Consider this function..[type inference/generic
+type of a given value. Consider this function:[type inference/generic
 types]{.idx}
 
 ```ocaml env=main
