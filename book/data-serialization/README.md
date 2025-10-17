@@ -629,8 +629,7 @@ environment variable to suppress the stack trace here.)
 $ OCAMLRUNPARAM=b=0 dune exec -- ./read_foo.exe
 Uncaught exception:
 
-  (Of_sexp_error "int_of_sexp: (Failure int_of_string)"
-   (invalid_sexp not-a-string))
+  (Of_sexp_error "option_of_sexp: only none can be atom" (invalid_sexp 1.0))
 
 [2]
 ```
@@ -664,8 +663,8 @@ If we run it again, we'll see a more informative error.
 $ OCAMLRUNPARAM=b=0 dune exec -- ./read_foo.exe
 Uncaught exception:
 
-  (Of_sexp_error example.scm:2:4 "int_of_sexp: (Failure int_of_string)"
-   (invalid_sexp not-an-integer))
+  (Of_sexp_error example.scm:3:4 "option_of_sexp: only none can be atom"
+   (invalid_sexp 1.0))
 
 [2]
 ```
