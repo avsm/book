@@ -1573,7 +1573,7 @@ work with GADTs.
     | Int : int number_kind
     | Float : float number_kind
   [@@deriving sexp];;
-Lines 1-4, characters 1-20:
+Line 2, characters 5-28:
 Error: This expression has type int number_kind
        but an expression was expected of type a__007_ number_kind
        Type int is not compatible with type a__007_
