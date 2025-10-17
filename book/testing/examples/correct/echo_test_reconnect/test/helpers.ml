@@ -19,7 +19,7 @@ let rec connect ~port =
   with
   | Ok (_, r, w) -> return (r, w)
   | Error _ ->
-    let%bind () = Clock.after (Time.Span.of_sec 0.01) in
+    let%bind () = Clock.after (Time_float.Span.of_sec 0.01) in
     connect ~port
 (* $MDX part-end *)
 

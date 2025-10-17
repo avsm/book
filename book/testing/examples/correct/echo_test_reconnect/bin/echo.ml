@@ -2,7 +2,7 @@ open Core
 open Async
 
 let run ~uppercase ~port =
-  let%bind () = Clock.after (Time.Span.of_sec 0.1) in
+  let%bind () = Clock.after (Time_float.Span.of_sec 0.1) in
   let host_and_port =
     Tcp.Server.create
       ~on_handler_error:`Raise

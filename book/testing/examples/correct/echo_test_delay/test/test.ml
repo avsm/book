@@ -7,7 +7,7 @@ let%expect_test "test uppercase echo" =
   let%bind process = launch ~port ~uppercase:true in
   Monitor.protect
     (fun () ->
-      let%bind () = Clock.after (Time.Span.of_sec 1.) in
+      let%bind () = Clock.after (Time_float.Span.of_sec 1.) in
       let%bind r, w = connect ~port in
       let%bind () = send_data r w "one two three\n" in
       [%expect {| ONE TWO THREE |}];
