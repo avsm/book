@@ -596,7 +596,7 @@ lightweight way:
 
 ```ocaml file=examples/erroneous/session_info/session_info.ml
 open Base
-module Time = Core.Time
+module Time = Core.Time_float
 
 module type ID = sig
   type t
