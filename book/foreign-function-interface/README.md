@@ -456,7 +456,7 @@ We can now call `time` immediately in the same toplevel. The argument is
 actually optional, so we'll just pass a null pointer that has been coerced
 into becoming a null pointer to `time_t`:
 
-```ocaml env=posix non-deterministic
+```ocaml env=posix,non-deterministic=output
 # let cur_time = time (from_voidp time_t null);;
 val cur_time : time_t = 1760681110
 ```
