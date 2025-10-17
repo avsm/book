@@ -456,9 +456,9 @@ We can now call `time` immediately in the same toplevel. The argument is
 actually optional, so we'll just pass a null pointer that has been coerced
 into becoming a null pointer to `time_t`:
 
-```ocaml env=posix
+```ocaml env=posix non-deterministic
 # let cur_time = time (from_voidp time_t null);;
-val cur_time : time_t = <abstr>
+val cur_time : time_t = 1760681110
 ```
 
 Since we're going to call `time` a few times, let's create a wrapper function
@@ -639,10 +639,7 @@ continuing on from the previous definitions:
 # type timeval;;
 type timeval
 # let timeval : timeval structure typ = structure "timeval";;
-val timeval : timeval structure typ =
-  Ctypes_static.Struct
-   {Ctypes_static.tag = "timeval";
-    spec = Ctypes_static.Incomplete {Ctypes_static.isize = 0}; fields = []}
+val timeval : timeval structure typ = struct timeval
 ```
 
 The first command defines a new OCaml type `timeval` that we'll use to
@@ -665,12 +662,10 @@ unions/field addition]{.idx}
 ```ocaml env=posix
 # let tv_sec  = field timeval "tv_sec" long;;
 val tv_sec : (Signed.long, timeval structure) field =
-  {Ctypes_static.ftype = Ctypes_static.Primitive Ctypes_primitive_types.Long;
-   foffset = 0; fname = "tv_sec"}
+  {Ctypes_static.ftype = long; foffset = 0; fname = "tv_sec"}
 # let tv_usec = field timeval "tv_usec" long;;
 val tv_usec : (Signed.long, timeval structure) field =
-  {Ctypes_static.ftype = Ctypes_static.Primitive Ctypes_primitive_types.Long;
-   foffset = 8; fname = "tv_usec"}
+  {Ctypes_static.ftype = long; foffset = 8; fname = "tv_usec"}
 # seal timeval;;
 - : unit = ()
 ```
@@ -695,10 +690,7 @@ unions/incomplete structure definitions]{.idx}
 # type timezone;;
 type timezone
 # let timezone : timezone structure typ = structure "timezone";;
-val timezone : timezone structure typ =
-  Ctypes_static.Struct
-   {Ctypes_static.tag = "timezone";
-    spec = Ctypes_static.Incomplete {Ctypes_static.isize = 0}; fields = []}
+val timezone : timezone structure typ = struct timezone
 ```
 
 We don't ever need to create `struct timezone` values, so we can leave this
@@ -991,8 +983,7 @@ definition. Since type descriptions are regular values, we can just use
 # open Core open Ctypes open PosixTypes open Foreign open Ctypes_static;;
 # let compare_t = ptr void @-> ptr void @-> returning int;;
 val compare_t : (unit Ctypes_static.ptr -> unit Ctypes_static.ptr -> int) fn =
-  Function (Pointer Void,
-   Function (Pointer Void, Returns (Primitive Ctypes_primitive_types.Int)))
+  int(void*, void*)
 # let qsort =
     foreign "qsort"
       (ptr void @-> size_t @-> size_t @-> funptr compare_t
