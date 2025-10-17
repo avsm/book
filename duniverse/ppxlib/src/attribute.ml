@@ -23,6 +23,7 @@ module Context = struct
     | Class_infos : _ class_infos t
     | Class_expr : class_expr t
     | Class_field : class_field t
+    | Class_type_decl : class_type_declaration t
     | Module_type : module_type t
     | Module_declaration : module_declaration t
     | Module_type_declaration : module_type_declaration t
@@ -54,6 +55,7 @@ module Context = struct
   let class_infos = Class_infos
   let class_expr = Class_expr
   let class_field = Class_field
+  let class_type_decl = Class_type_decl
   let module_type = Module_type
   let module_declaration = Module_declaration
   let module_type_declaration = Module_type_declaration
@@ -101,6 +103,7 @@ module Context = struct
     | Class_infos -> x.pci_attributes
     | Class_expr -> x.pcl_attributes
     | Class_field -> x.pcf_attributes
+    | Class_type_decl -> x.pci_attributes
     | Module_type -> x.pmty_attributes
     | Module_declaration -> x.pmd_attributes
     | Module_type_declaration -> x.pmtd_attributes
@@ -135,6 +138,7 @@ module Context = struct
     | Class_infos -> { x with pci_attributes = attrs }
     | Class_expr -> { x with pcl_attributes = attrs }
     | Class_field -> { x with pcf_attributes = attrs }
+    | Class_type_decl -> { x with pci_attributes = attrs }
     | Module_type -> { x with pmty_attributes = attrs }
     | Module_declaration -> { x with pmd_attributes = attrs }
     | Module_type_declaration -> { x with pmtd_attributes = attrs }
@@ -176,6 +180,7 @@ module Context = struct
     | Class_infos -> "class declaration"
     | Class_expr -> "class expression"
     | Class_field -> "class field"
+    | Class_type_decl -> "class type declaration"
     | Module_type -> "module type"
     | Module_declaration -> "module declaration"
     | Module_type_declaration -> "module type declaration"
@@ -257,7 +262,8 @@ type packed_context =
 
 type _ payload_parser =
   | Payload_parser :
-      (payload, 'a, 'b) Ast_pattern.t * (name_loc:Location.t -> 'a)
+      (payload, 'a, 'b) Ast_pattern.t
+      * (attr_loc:Location.t -> name_loc:Location.t -> 'a)
       -> 'b payload_parser
 
 type ('a, 'b) t = {
@@ -277,7 +283,7 @@ let registrar =
     | On_item t -> Some (Context.desc t)
     | Floating t -> Some (Floating_context.desc t ^ " (floating)"))
 
-let declare_with_name_loc name context pattern k =
+let declare_with_all_args name context pattern k =
   Name.Registrar.register ~kind:`Attribute registrar (On_item context) name;
   {
     name = Name.Pattern.make name;
@@ -286,13 +292,29 @@ let declare_with_name_loc name context pattern k =
   }
 
 let declare name context pattern k =
-  declare_with_name_loc name context pattern (fun ~name_loc:_ -> k)
+  declare_with_all_args name context pattern (fun ~attr_loc:_ ~name_loc:_ -> k)
 
-module Attribute_table = Caml.Hashtbl.Make (struct
+let declare_with_name_loc name context pattern k =
+  declare_with_all_args name context pattern (fun ~attr_loc:_ ~name_loc ->
+      k ~name_loc)
+
+let declare_with_attr_loc name context pattern k =
+  declare_with_all_args name context pattern (fun ~attr_loc ~name_loc:_ ->
+      k ~attr_loc)
+
+type 'a flag = ('a, unit) t
+
+let declare_flag name context =
+  let payload_pattern = Ast_pattern.(pstr nil) in
+  let continuation ~attr_loc:_ ~name_loc:_ = () in
+  declare_with_all_args name context payload_pattern continuation
+
+module Attribute_table = Stdlib.Hashtbl.Make (struct
   type t = string loc
 
-  let hash : t -> int = Hashtbl.hash
-  let equal : t -> t -> bool = Poly.equal
+  let normalize t = { t with loc = { t.loc with loc_ghost = true } }
+  let hash t = Hashtbl.hash (normalize t)
+  let equal x y = Poly.equal (normalize x) (normalize y)
 end)
 
 let not_seen = Attribute_table.create 128
@@ -301,7 +323,7 @@ let mark_as_handled_manually = mark_as_seen
 
 let explicitly_drop =
   object
-    inherit Ast_traverse.iter
+    inherit Ast_traverse0.iter
     method! attribute = mark_as_seen
   end
 
@@ -332,7 +354,7 @@ let convert ?(do_mark_as_seen = true) pattern attr =
   Ast_pattern.parse_res pattern
     (Common.loc_of_payload attr)
     attr.attr_payload
-    (k ~name_loc:attr.attr_name.loc)
+    (k ~attr_loc:attr.attr_loc ~name_loc:attr.attr_name.loc)
 
 let get_res t ?mark_as_seen:do_mark_as_seen x =
   let open Result in
@@ -345,6 +367,16 @@ let get_res t ?mark_as_seen:do_mark_as_seen x =
 
 let get t ?mark_as_seen:do_mark_as_seen x =
   get_res t ?mark_as_seen:do_mark_as_seen x
+  |> Result.handle_error ~f:(fun (err, _) -> Location.Error.raise err)
+
+let has_flag_res t ?mark_as_seen x =
+  match get_res ?mark_as_seen t x with
+  | Ok (Some ()) -> Ok true
+  | Ok None -> Ok false
+  | Error _ as e -> e
+
+let has_flag t ?mark_as_seen x =
+  has_flag_res t ?mark_as_seen x
   |> Result.handle_error ~f:(fun (err, _) -> Location.Error.raise err)
 
 let consume_res t x =
@@ -400,8 +432,7 @@ let pattern_res t p =
 let pattern t p =
   pattern_res t p |> Ast_pattern.to_func
   |> (fun f a b c d ->
-       f a b c d
-       |> Result.handle_error ~f:(fun (err, _) -> Location.Error.raise err))
+  f a b c d |> Result.handle_error ~f:(fun (err, _) -> Location.Error.raise err))
   |> Ast_pattern.of_func
 
 module Floating = struct
@@ -420,7 +451,7 @@ module Floating = struct
     {
       name = Name.Pattern.make name;
       context;
-      payload = Payload_parser (pattern, fun ~name_loc:_ -> k);
+      payload = Payload_parser (pattern, fun ~attr_loc:_ ~name_loc:_ -> k);
     }
 
   let convert_res ts x =
@@ -465,7 +496,7 @@ let collect_attribute_errors registrar context name =
 
 let collect_unused_attributes_errors =
   object (self)
-    inherit [Location.Error.t list] Ast_traverse.fold as super
+    inherit [Location.Error.t list] Ast_traverse0.fold as super
 
     method! attribute { attr_name = name; _ } _ =
       [
@@ -483,8 +514,7 @@ let collect_unused_attributes_errors =
             let errors =
               List.map attrs
                 ~f:(fun
-                     ({ attr_name = name; attr_payload = payload; _ } as attr)
-                   ->
+                    ({ attr_name = name; attr_payload = payload; _ } as attr) ->
                   let collected_errors =
                     self#payload payload []
                     @ collect_attribute_errors registrar (On_item context) name
@@ -659,7 +689,7 @@ let raise_if_non_empty = function
 
 let check_unused =
   object (self)
-    inherit Ast_traverse.iter as super
+    inherit Ast_traverse0.iter as super
 
     method private check_node : type a. a Context.t -> a -> a =
       fun context node ->
@@ -668,8 +698,8 @@ let check_unused =
         | [] -> node
         | _ ->
             List.iter attrs
-              ~f:(fun ({ attr_name = name; attr_payload = payload; _ } as attr)
-                 ->
+              ~f:(fun
+                  ({ attr_name = name; attr_payload = payload; _ } as attr) ->
                 self#payload payload;
                 check_attribute registrar (On_item context) name;
                 (* If we allow the attribute to pass through, mark it as seen *)
@@ -781,7 +811,7 @@ let reset_checks () = Attribute_table.clear not_seen
 
 let collect =
   object
-    inherit Ast_traverse.iter as super
+    inherit Ast_traverse0.iter as super
 
     method! attribute ({ attr_name = name; attr_payload = payload; _ } as attr)
         =
@@ -807,7 +837,7 @@ let check_all_seen () =
 
 let remove_attributes_present_in table =
   object
-    inherit Ast_traverse.iter as super
+    inherit Ast_traverse0.iter as super
 
     method! attribute { attr_name = name; attr_payload = payload; _ } =
       super#payload payload;

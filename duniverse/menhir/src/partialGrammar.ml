@@ -8,6 +8,7 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Attribute
 open Syntax
 open Positions
 
@@ -179,8 +180,8 @@ let rewrite_parameter phi parameter =
 let rewrite_producer phi ((ido, parameter, attrs) : producer) =
   ido, rewrite_parameter phi parameter, attrs
 
-let rewrite_branch phi ({ pr_producers = producers } as branch) =
-  { branch with pr_producers = List.map (rewrite_producer phi) producers }
+let rewrite_branch phi ({ pb_producers = producers } as branch) =
+  { branch with pb_producers = List.map (rewrite_producer phi) producers }
 
 let rewrite_branches phi branches =
   match phi with
@@ -464,7 +465,7 @@ let symbols_of grammar (pgrammar : Syntax.partial_grammar) =
     let symbols = List.fold_left (fun symbols branch ->
       List.fold_left (fun symbols (_, p, _) ->
         store_except_rule_parameters symbols p
-      ) symbols branch.pr_producers
+      ) symbols branch.pb_producers
     ) symbols prule.pr_branches
     in
       (* Store the symbol declaration. *)
@@ -530,7 +531,7 @@ let merge_rules symbols pgs =
   in
 
     (* Merge public nonterminal definitions
-       and copy private nonterminal definitions. Since the clash between
+       and copy private nonterminal definitions. Since the clashes between
        private symbols have already been resolved, these copies are safe. *)
     List.fold_left
       (fun rules rpg -> List.fold_left
@@ -593,9 +594,9 @@ let join grammar pgrammar =
 (* If a rule is marked %inline, then it must not carry an attribute. *)
 let check_inline_attribute prule =
   match prule.pr_inline_flag, prule.pr_attributes with
-  | true, (id, _payload) :: _attributes ->
+  | true, attr :: _ ->
       Error.error
-        [Positions.position id]
+        [attr.origin]
         "the nonterminal symbol %s is declared %%inline.\n\
          It cannot carry an attribute."
         prule.pr_nt
@@ -705,8 +706,8 @@ let check_parameterized_grammar_is_well_defined grammar =
               );
 
          (* Check each branch. *)
-         List.iter (fun { pr_producers = producers;
-                pr_branch_prec_annotation;
+         List.iter (fun { pb_producers = producers;
+                pb_prec_annotation;
               } -> ignore (List.fold_left
 
             (* Check the producers. *)
@@ -733,7 +734,7 @@ let check_parameterized_grammar_is_well_defined grammar =
 
            Option.iter (fun terminal ->
              check_identifier_reference true terminal.value terminal.position
-           ) pr_branch_prec_annotation)
+           ) pb_prec_annotation)
 
          prule.pr_branches;
 

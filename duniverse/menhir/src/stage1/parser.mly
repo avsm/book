@@ -32,7 +32,7 @@ open Positions
 %token <Stretch.ocamltype> OCAMLTYPE
 %token <Stretch.t Lazy.t> PERCENTPERCENT
 %token <Syntax.raw_action> ACTION
-%token <Syntax.attribute> ATTRIBUTE GRAMMARATTRIBUTE
+%token <Attribute.attribute> ATTRIBUTE GRAMMARATTRIBUTE
 /* For the new rule syntax: */
 %token LET TILDE UNDERSCORE COLONEQUAL EQUALEQUAL
 %start grammar
@@ -306,8 +306,12 @@ modifier:
     { unknown_pos "list" }
 
 /* ------------------------------------------------------------------------- */
-/* A production group consists of a list of productions, followed by a
-   semantic action and an optional precedence specification. */
+/* A production group is a set of productions that share a semantic action.
+
+   Thus a production group is a list of productions,
+   followed by a semantic action,
+   followed by an optional precedence specification,
+   followed by a possibly empty list of attributes. */
 
 production_groups:
   /* epsilon */
@@ -316,26 +320,30 @@ production_groups:
     { $3 :: $1 }
 
 production_group:
-  productions ACTION /* action is lexically delimited by braces */ optional_precedence
+  productions
+  ACTION /* action is lexically delimited by braces */
+  optional_precedence
+  attributes
     {
-      let productions, action, oprec2 = $1, $2, $3 in
+      let productions, action, oprec2, attrs = $1, $2, $3, $4 in
       (* If multiple productions share a single semantic action, check
          that all of them bind the same names. *)
       ParserAux.check_production_group productions;
       (* Then, *)
       List.map (fun (producers, oprec1, level, pos) ->
         (* Replace [$i] with [_i]. *)
-        let pr_producers = ParserAux.normalize_producers producers in
-        (* Distribute the semantic action. Also, check that every [$i]
-           is within bounds. *)
+        let pb_producers = ParserAux.normalize_producers producers in
+        (* Distribute the semantic action and attributes onto every production.
+           Also, check that every [$i] is within bounds. *)
         let names = ParserAux.producer_names producers in
-        let pr_action = action Settings.dollars names in
+        let pb_action = action Settings.dollars names in
         {
-          pr_producers;
-          pr_action;
-          pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
-          pr_branch_production_level  = level;
-          pr_branch_position          = pos
+          pb_producers;
+          pb_action;
+          pb_prec_annotation  = ParserAux.override pos oprec1 oprec2;
+          pb_production_level = level;
+          pb_position         = pos;
+          pb_attributes       = attrs;
         })
       productions
     }

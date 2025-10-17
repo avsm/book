@@ -1,4 +1,4 @@
-version: "5.1.1"
+version: "8.0.0"
 opam-version: "2.0"
 maintainer: "anil@recoil.org"
 authors: [
@@ -10,10 +10,10 @@ homepage: "https://github.com/mirage/ocaml-conduit"
 doc: "https://mirage.github.io/ocaml-conduit/"
 bug-reports: "https://github.com/mirage/ocaml-conduit/issues"
 depends: [
-  "ocaml" {>= "4.03.0"}
+  "ocaml" {>= "4.13.0"}
   "dune" {>= "2.0"}
   "ppx_sexp_conv" {>="v0.13.0"}
-  "sexplib"
+  "sexplib0"
   "astring"
   "uri"
   "logs" {>= "0.5.0"}
@@ -47,3 +47,4 @@ The useful opam packages available that extend this library are:
 - `conduit-async` the Jane Street Async implementation
 - `conduit-mirage`: the MirageOS compatible implementation
 """
+x-maintenance-intent: [ "(latest)" ]

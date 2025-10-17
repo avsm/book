@@ -123,7 +123,7 @@ let load pkglist =
 
 
                  begin try
-                     match Hashtbl.find Toploop.directive_table "ppx" with
+                     match Hashtbl.find (Toploop.directive_table [@ocaml.alert "-deprecated"]) "ppx" with
                        | Toploop.Directive_string fn -> 
                             fn ppx; !log (ppx ^ ": activated")
                        | _ -> assert false
@@ -166,6 +166,10 @@ let load_deeply pkglist =
   (* Get the sorted list of ancestors *)
   let eff_pkglist =
     Findlib.package_deep_ancestors !predicates pkglist in
+  List.iter (fun pkg ->
+    try let error = Findlib.package_property !predicates pkg "error" in
+      failwith ("Error from package `" ^ pkg ^ "': " ^ error)
+    with Not_found -> ()) eff_pkglist ;
   (* Load the packages in turn: *)
   load eff_pkglist
 ;;
@@ -248,8 +252,7 @@ let protect f arg =
 
 (* Add "#require" directive: *)
 
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "require"
     (Toploop.Directive_string
        (fun s ->
@@ -258,8 +261,7 @@ Hashtbl.add
 ;;
 
 (* Add "#predicates" directive: *)
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "predicates"
     (Toploop.Directive_string
        (fun s ->
@@ -270,8 +272,7 @@ Hashtbl.add
 
 (* Add "#camlp4o" directive: *)
 
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "camlp4o"
     (Toploop.Directive_none
        (fun () ->
@@ -283,8 +284,7 @@ Hashtbl.add
 
 (* Add "#camlp4r" directive: *)
 
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "camlp4r"
     (Toploop.Directive_none
        (fun () ->
@@ -297,8 +297,7 @@ Hashtbl.add
 
 (* Add "#list" directive: *)
 
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "list"
     (Toploop.Directive_none
        (fun () ->
@@ -309,8 +308,7 @@ Hashtbl.add
 
 (* Add "#thread" directive: *)
 
-Hashtbl.add
-    Toploop.directive_table
+Toploop.add_directive
     "thread"
     (Toploop.Directive_none
        (fun () ->

@@ -4,6 +4,13 @@
 How to Load Additional Files at Runtime
 ***************************************
 
+.. TODO(diataxis)
+
+   Split between:
+
+   - an how-to guide
+   - some reference material
+
 There are many ways for applications to load files at runtime and Dune provides
 a well-tested, key-in-hand portable system for doing so. The Dune model works by
 defining ``sites`` where files will be installed and looked up at runtime. At
@@ -20,13 +27,14 @@ Sites
 Defining a Site
 ---------------
 
-A site is defined in a package :ref:`package` in the ``dune-project`` file. It
-consists of a name and a :ref:`section<install>` (e.g ``lib``, ``share``,
-``etc``) where the site will be installed as a sub-directory.
+A site is defined in a package :doc:`/reference/dune-project/package` in the
+``dune-project`` file. It consists of a name and a :doc:`section
+</reference/dune/install>` (e.g ``lib``, ``share``, ``etc``) where the site
+will be installed as a sub-directory.
 
-.. code:: scheme
+.. code:: dune
 
-   (lang dune 3.4)
+   (lang dune 3.20)
    (using dune_site 0.1)
    (name mygui)
 
@@ -34,17 +42,17 @@ consists of a name and a :ref:`section<install>` (e.g ``lib``, ``share``,
     (name mygui)
     (sites (share themes)))
 
-Adding Files to a Site 
+Adding Files to a Site
 ----------------------
 
 Here the package ``mygui`` defines a site named ``themes`` that will be located
 in the section ``share``. This package can add files to this ``site`` using the
-:ref:`install stanza<install>`:
+:doc:`install stanza </reference/dune/install>`:
 
-.. code:: scheme
+.. code:: dune
 
    (install
-    (section (site mygui themes))
+    (section (site (mygui themes)))
     (files
      (layout.css as default/layout.css)
      (ok.png  as default/ok.png)
@@ -54,7 +62,7 @@ Another package ``mygui_material_theme`` can install files inside ``mygui``
 directory for adding a new theme. Inside the scope of ``mygui_material_theme``
 the ``dune`` file contains:
 
-.. code:: scheme
+.. code:: dune
 
    (install
     (section (site mygui themes))
@@ -73,9 +81,10 @@ Getting the Locations of a Site at Runtime
 ------------------------------------------
 
 The executable ``mygui`` will be able to get the locations of the ``themes``
-site using the :ref:`generate sites module stanza<generate_sites_module>`
+site using the :doc:`generate_sites_module stanza
+</reference/dune/generate_sites_module>`.
 
-.. code:: scheme
+.. code:: dune
 
    (executable
     (name mygui)
@@ -86,8 +95,18 @@ site using the :ref:`generate sites module stanza<generate_sites_module>`
     (module mysites)
     (sites mygui))
 
-The generated module `mysites` depends on the library `dune-site` provided by
-Dune.
+The generated module ``mysites`` depends on the library ``dune-site`` provided
+by Dune. As such, the the dependency on ``dune-site`` must be specified
+explicitly.
+
+.. note::
+
+   The dependency on ``dune-site`` also needs to be added to the ``depends``
+   field of your project. If left out it might be accidentally captured via
+   transitive dependencies, however this will not work if
+   :doc:`implicit_transitive_deps </reference/dune-project/implicit_transitive_deps>`
+   is set to ``false`` in the ``dune-project`` file. It is always recommended
+   to specify ``dune-site`` as a dependency explicitly.
 
 Then inside ``mygui.ml`` module the locations can be recovered and used:
 
@@ -96,23 +115,22 @@ Then inside ``mygui.ml`` module the locations can be recovered and used:
    (** Locations of the site for the themes *)
    let themes_locations : string list = Mysites.Sites.themes
 
-   (** Merge the content of the directories in [dirs] *)
-   let rec readdirs dirs =
-     List.concat
-       (List.map
-          (fun dir -> Array.to_list (Sys.readdir dir))
-          (List.filter Sys.file_exists dirs))
+   (** Merge the contents of the directories in [dirs] *)
+   let lookup_dirs dirs =
+     List.filter Sys.file_exists dirs
+     |> List.map (fun dir -> Array.to_list (Sys.readdir dir))
+     |> List.concat
 
-   (** Get the lists of the available themes  *)
-   let find_available_themes () : string list = lookup_dirs themes_locations
+   (** Get the available themes *)
+   let find_available_themes () = lookup_dirs themes_locations
 
-   (** Lookup a file in the directories *)
-   let rec lookup_file filename = function
-     | [] -> raise Not_found
-     | dir::dirs ->
-        let filename' = Filename.concat dir filename in
-        if Sys.file_exists filename' then filename'
-        else lookup_file filename dirs
+   (** [lookup_file name dirs] finds the first file called [name] in [dirs] *)
+   let lookup_file filename dirs =
+     List.find_map
+       (fun dir ->
+         let filename' = Filename.concat dir filename in
+         if Sys.file_exists filename' then Some filename' else None)
+       dirs
 
    (** [lookup_theme_file theme file] get the [file] of the [theme] *)
    let lookup_theme_file file theme =
@@ -140,10 +158,11 @@ install --relocatable --prefix $dir``. The files will be copied to the directory
 to its location. So even if the directory ``$dir`` is moved,
 ``themes_locations`` will be correct.
 
-For installation trough opam, ``dune install`` must be invoked with the option
+For installation through opam, ``dune install`` must be invoked with the option
 ``--create-install-files`` which creates an install file ``<pkg>.install`` and
 copy the file that needs substitution to an intermediary directory. The
-``<pkg>.opam`` file generated by Dune :ref:`generate_opam_files` does the right
+``<pkg>.opam`` file generated by Dune
+:doc:`/reference/dune-project/generate_opam_files` does the right
 invocation.
 
 Implementation Details
@@ -224,9 +243,9 @@ Main Executable (C)
 
 - The ``dune-project`` file:
 
-.. code:: scheme
+.. code:: dune
 
-  (lang dune 3.4)
+  (lang dune 3.20)
   (using dune_site 0.1)
   (name app)
 
@@ -237,7 +256,7 @@ Main Executable (C)
 
 - The ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
   (executable
     (public_name app)
@@ -255,6 +274,12 @@ Main Executable (C)
 
 The generated module `sites` depends here also on the library
 `dune-site.plugins` because the `plugins` optional field is requested.
+
+If the executable being created is an OCaml toplevel, then the
+``libraries`` stanza needs to also include the ``dune-site.toplevel``
+library.  This causes the loading to use the toplevel's normal loading
+mechanism rather than ``Dynload.loadfile`` (which is not allowed in
+toplevels).
 
 - The module ``registration.ml`` of the library ``app.registration``:
 
@@ -278,9 +303,9 @@ The Plugin "plugin1"
 
 - The ``plugin/dune-project`` file:
 
-.. code:: scheme
+.. code:: dune
 
-  (lang dune 3.4)
+  (lang dune 3.20)
   (using dune_site 0.1)
 
   (generate_opam_files true)
@@ -291,7 +316,7 @@ The Plugin "plugin1"
 
 - The ``plugin/dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
   (library
     (public_name plugin1.plugin1_impl)
@@ -317,7 +342,7 @@ The Plugin "plugin1"
 Running the Example
 ^^^^^^^^^^^^^^^^^^^
 
-.. code::
+.. code:: console
 
   $ dune build @install && dune exec ./app.exe
   Registration of Plugin1

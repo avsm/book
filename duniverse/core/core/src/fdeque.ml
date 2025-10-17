@@ -174,11 +174,11 @@ module Arbitrary_order = struct
   ;;
 
   let fold t ~init ~f =
-    List.fold t.front ~init ~f |> fun init -> List.fold t.back ~init ~f
+    (List.fold t.front ~init ~f |> fun init -> List.fold t.back ~init ~f) [@nontail]
   ;;
 
   let fold_result t ~init ~f = Container.fold_result ~fold ~init ~f t
-  let fold_until t ~init ~f = Container.fold_until ~fold ~init ~f t
+  let fold_until t ~init ~f ~finish = Container.fold_until ~fold ~init ~f t ~finish
 
   let find t ~f =
     match List.find t.front ~f with
@@ -227,7 +227,7 @@ struct
   let min_elt t ~compare = List.min_elt (to_list t) ~compare
   let max_elt t ~compare = List.max_elt (to_list t) ~compare
   let fold_result t ~init ~f = Container.fold_result ~fold ~init ~f t
-  let fold_until t ~init ~f = Container.fold_until ~fold ~init ~f t
+  let fold_until t ~init ~f ~finish = Container.fold_until ~fold ~init ~f t ~finish
 end
 
 module Front_to_back = struct
@@ -333,6 +333,12 @@ module Stable = struct
           loop next empty 0
         ;;
       end)
+
+    (* The binary representation produced by Bin_prot.Utils.Make_iterable_binable1 is
+       assumed to be stable (if the 'a is stable). *)
+    let stable_witness (_ : 'a Stable_witness.t) : 'a t Stable_witness.t =
+      Stable_witness.assert_stable
+    ;;
   end
 end
 

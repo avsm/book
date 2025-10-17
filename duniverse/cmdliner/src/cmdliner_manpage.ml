@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2011 The cmdliner programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (* Manpages *)
@@ -26,12 +26,11 @@ let s_arguments = "ARGUMENTS"
 let s_options = "OPTIONS"
 let s_common_options = "COMMON OPTIONS"
 let s_exit_status = "EXIT STATUS"
-let s_exit_status_intro =
-  `P "$(tname) exits with the following status:"
+let s_exit_status_intro = `P "$(iname) exits with:"
 
 let s_environment = "ENVIRONMENT"
 let s_environment_intro =
-  `P "These environment variables affect the execution of $(tname):"
+  `P "These environment variables affect the execution of $(iname):"
 
 let s_files = "FILES"
 let s_examples = "EXAMPLES"
@@ -314,34 +313,35 @@ let pp_plain_blocks ~errs subst ppf ts =
   let b = Buffer.create 1024 in
   let markup t = doc_to_plain ~errs b ~subst t in
   let pp_tokens ppf t = pp_tokens ~spaces:true ppf t in
-  let rec loop = function
+  let rec blank_line = function
+  | `Noblank :: ts -> loop ts
+  | ts -> Format.pp_print_cut ppf (); loop ts
+  and loop = function
   | [] -> ()
   | t :: ts ->
-      begin match t with
-      | `Noblank -> ()
-      | `Blocks bs -> loop bs (* not T.R. *)
-      | `P s -> pf ppf "%a@[%a@]@," pp_indent p_indent pp_tokens (markup s)
-      | `S s -> pf ppf "@[%a@]" pp_tokens (markup s)
-      | `Pre s -> pf ppf "%a@[%a@]@," pp_indent p_indent pp_lines (markup s)
+      match t with
+      | `Noblank -> loop ts
+      | `Blocks bs -> loop (bs @ ts)
+      | `P s ->
+          pf ppf "%a@[%a@]@," pp_indent p_indent pp_tokens (markup s);
+          blank_line ts
+      | `S s -> pf ppf "@[%a@]@," pp_tokens (markup s); loop ts
+      | `Pre s ->
+          pf ppf "%a@[%a@]@," pp_indent p_indent pp_lines (markup s);
+          blank_line ts
       | `I (label, s) ->
-          let label = markup label in
-          let s = markup s in
+          let label = markup label and s = markup s in
           pf ppf "@[%a@[%a@]" pp_indent p_indent pp_tokens label;
-          if s = "" then pf ppf "@]@," else
-          let ll = String.length label in
-          begin match ll < l_indent with
-          | true ->
-              pf ppf "%a@[%a@]@]" pp_indent (l_indent - ll) pp_tokens s
-          | false ->
-              pf ppf "@\n%a@[%a@]@]"
-                pp_indent (p_indent + l_indent) pp_tokens s
+          begin match s with
+          | "" -> pf ppf "@]@,"
+          | s ->
+              let ll = String.length label in
+              if ll < l_indent
+              then (pf ppf "%a@[%a@]@]@," pp_indent (l_indent - ll) pp_tokens s)
+              else (pf ppf "@\n%a@[%a@]@]@,"
+                      pp_indent (p_indent + l_indent) pp_tokens s)
           end;
-          match ts with `I _ :: _ -> pf ppf "@," | _ -> ()
-      end;
-      begin match ts with
-      | `Noblank :: ts -> loop ts
-      | ts -> Format.pp_print_cut ppf (); loop ts
-      end
+          blank_line ts
   in
   loop ts
 
@@ -435,18 +435,30 @@ let pp_to_temp_file pp_v v =
     Some file
   with Sys_error _ -> None
 
+let tmp_file_for_pager () =
+  try
+    let exec = Filename.basename Sys.argv.(0) in
+    let file = Filename.temp_file exec "tty" in
+    at_exit (fun () -> try Sys.remove file with Sys_error e -> ());
+    Some file
+  with Sys_error _ -> None
+
 let find_cmd cmds =
-  let test, null = match Sys.os_type with
-  | "Win32" -> "where", " NUL"
-  | _ -> "command -v", "/dev/null"
+  let find_win32 (cmd, _args) =
+    (* `where` does not support full path lookups *)
+    if String.equal (Filename.basename cmd) cmd
+    then (Sys.command (strf "where %s 1> NUL 2> NUL" cmd) = 0)
+    else Sys.file_exists cmd
   in
-  let cmd (c, _) = Sys.command (strf "%s %s 1>%s 2>%s" test c null null) = 0 in
-  try Some (List.find cmd cmds) with Not_found -> None
+  let find_posix (cmd, _args) =
+    Sys.command (strf "command -v %s 1>/dev/null 2>/dev/null" cmd) = 0
+  in
+  let find = if Sys.win32 then find_win32 else find_posix in
+  try Some (List.find find cmds) with Not_found -> None
 
 let pp_to_pager print ppf v =
   let pager =
-    let cmds = ["less"," -R"; "more", ""] in
-    (* Fundamentally env var lookups should try to cut the exec name. *)
+    let cmds = ["less", ""; "more", ""] in
     let cmds = try (Sys.getenv "PAGER", "") :: cmds with Not_found -> cmds in
     let cmds = try (Sys.getenv "MANPAGER", "") :: cmds with Not_found -> cmds in
     find_cmd cmds
@@ -454,7 +466,10 @@ let pp_to_pager print ppf v =
   match pager with
   | None -> print `Plain ppf v
   | Some (pager, opts) ->
-      let pager = pager ^ opts in
+      let pager = match Sys.win32 with
+      | false -> "LESS=FRX " ^ pager ^ opts
+      | true -> "set LESS=FRX && " ^ pager ^ opts
+      in
       let groffer =
         let cmds =
           ["mandoc", " -m man -K utf-8 -T utf8";
@@ -473,7 +488,17 @@ let pp_to_pager print ppf v =
           let groffer = groffer ^ opts in
           begin match pp_to_temp_file (print `Groff) v with
           | None -> None
-          | Some f -> Some (strf "%s < %s | %s" groffer f pager)
+          | Some f when Sys.win32 ->
+              (* For some obscure reason the pipe below does not
+                 work. We need to use a temporary file.
+                 https://github.com/dbuenzli/cmdliner/issues/166 *)
+              begin match tmp_file_for_pager () with
+              | None -> None
+              | Some tmp ->
+                  Some (strf "%s <%s >%s && %s <%s" groffer f tmp pager tmp)
+              end
+          | Some f ->
+              Some (strf "%s < %s | %s" groffer f pager)
           end
       in
       match cmd with
@@ -485,29 +510,18 @@ let pp_to_pager print ppf v =
 type format = [ `Auto | `Pager | `Plain | `Groff ]
 
 let rec print
-    ?(errs = Format.err_formatter)
-    ?(subst = fun x -> None) fmt ppf page =
+    ?(errs = Format.err_formatter) ?(subst = fun x -> None) fmt ppf page
+  =
   match fmt with
   | `Pager -> pp_to_pager (print ~errs ~subst) ppf page
   | `Plain -> pp_plain_page ~errs subst ppf page
   | `Groff -> pp_groff_page ~errs subst ppf page
   | `Auto ->
-      match try (Some (Sys.getenv "TERM")) with Not_found -> None with
-      | None | Some "dumb" -> print ~errs ~subst `Plain ppf page
-      | Some _ -> print ~errs ~subst `Pager ppf page
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2011 The cmdliner programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)
+      let fmt =
+        match Sys.getenv "TERM" with
+        | exception Not_found when Sys.win32 -> `Pager
+        | exception Not_found -> `Plain
+        | "dumb" -> `Plain
+        | _ -> `Pager
+      in
+      print ~errs ~subst fmt ppf page

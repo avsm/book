@@ -16,7 +16,7 @@ module Stable = struct
     include T
 
     module Format = struct
-      type 'a t = 'a list [@@deriving bin_io, sexp]
+      type 'a t = 'a list [@@deriving bin_io, sexp, stable_witness]
     end
 
     include
@@ -49,6 +49,12 @@ module Stable = struct
       { untyped = List (Cons (element, Many element)) }
     ;;
 
+    let stable_witness (type a) : a Stable_witness.t -> a t Stable_witness.t =
+      fun witness ->
+        let module Stable_witness = Stable_witness.Of_serializable1 (Format) (T) in
+        Stable_witness.of_serializable Format.stable_witness of_list_exn to_list witness
+    ;;
+
     let%expect_test _ =
       print_endline [%bin_digest: int t];
       [%expect {| eaa5c1535ea5c1691291b3bdbbd7b014 |}]
@@ -71,7 +77,7 @@ module Stable = struct
         { hd : 'a
         ; tl : 'a list
         }
-      [@@deriving bin_io, compare]
+      [@@deriving bin_io, compare, stable_witness]
 
       let of_nonempty_list (hd :: tl) = { hd; tl }
       let to_nonempty_list { hd; tl } = hd :: tl
@@ -86,6 +92,16 @@ module Stable = struct
           let to_binable = Record_format.of_nonempty_list
           let of_binable = Record_format.to_nonempty_list
         end)
+
+    let stable_witness (type a) : a Stable_witness.t -> a t Stable_witness.t =
+      fun witness ->
+      let module Stable_witness = Stable_witness.Of_serializable1 (Record_format) (T) in
+      Stable_witness.of_serializable
+        Record_format.stable_witness
+        Record_format.to_nonempty_list
+        Record_format.of_nonempty_list
+        witness
+    ;;
 
     let%expect_test _ =
       print_endline [%bin_digest: int t];
@@ -104,7 +120,7 @@ module Stable = struct
     include T
 
     module Pair_format = struct
-      type 'a t = 'a * 'a list [@@deriving bin_io, compare]
+      type 'a t = 'a * 'a list [@@deriving bin_io, compare, stable_witness]
 
       let of_nonempty_list (hd :: tl) = hd, tl
       let to_nonempty_list (hd, tl) = hd :: tl
@@ -120,6 +136,16 @@ module Stable = struct
           let of_binable = Pair_format.to_nonempty_list
         end)
 
+    let stable_witness (type a) : a Stable_witness.t -> a t Stable_witness.t =
+      fun witness ->
+      let module Stable_witness = Stable_witness.Of_serializable1 (Pair_format) (T) in
+      Stable_witness.of_serializable
+        Pair_format.stable_witness
+        Pair_format.to_nonempty_list
+        Pair_format.of_nonempty_list
+        witness
+    ;;
+
     let%expect_test _ =
       print_endline [%bin_digest: int t];
       [%expect {| f27871ef428aef2925f18d6be687bf9c |}]
@@ -127,12 +153,13 @@ module Stable = struct
   end
 end
 
+
 open Core
 module Unstable = Stable.V3
 
 module T' = struct
   type 'a t = 'a Stable.V3.t = ( :: ) of 'a * 'a list
-  [@@deriving compare, equal, hash, quickcheck, typerep]
+  [@@deriving compare, equal, hash, quickcheck, typerep, bin_io]
 
   let sexp_of_t = Stable.V3.sexp_of_t
   let t_of_sexp = Stable.V3.t_of_sexp
@@ -153,6 +180,7 @@ module T' = struct
   ;;
 
   let fold (hd :: tl) ~init ~f = List.fold tl ~init:(f init hd) ~f
+  let foldi = `Define_using_fold
 
   let iter =
     `Custom
@@ -161,6 +189,7 @@ module T' = struct
          List.iter tl ~f)
   ;;
 
+  let iteri = `Define_using_fold
   let length = `Custom (fun (_ :: tl) -> 1 + List.length tl)
 end
 
@@ -173,8 +202,8 @@ include struct
   (* [Container.Make] would fold through the tail and re-cons every elt. *)
   let to_list = to_list
 
-  module From_container_make = Container.Make (T')
-  open From_container_make
+  module From_indexed_container_make = Indexed_container.Make (T')
+  open From_indexed_container_make
 
   let mem = mem
   let length = length
@@ -191,6 +220,13 @@ include struct
   let to_array = to_array
   let min_elt = min_elt
   let max_elt = max_elt
+  let iteri = iteri
+  let find_mapi = find_mapi
+  let findi = findi
+  let counti = counti
+  let for_alli = for_alli
+  let existsi = existsi
+  let foldi = foldi
 end
 
 let invariant f t = iter t ~f
@@ -198,10 +234,51 @@ let create hd tl = hd :: tl
 let singleton hd = [ hd ]
 let cons x (hd :: tl) = x :: hd :: tl
 
+let nth (hd :: tl) n =
+  match n with
+  | 0 -> Some hd
+  | n -> List.nth tl (n - 1)
+;;
+
+let nth_exn t n =
+  match nth t n with
+  | None ->
+    invalid_argf "Nonempty_list.nth_exn %d called on list of length %d" n (length t) ()
+  | Some a -> a
+;;
+
 let mapi (hd :: tl) ~f =
   (* Being overly cautious about evaluation order *)
   let hd = f 0 hd in
   hd :: List.mapi tl ~f:(fun i x -> f (i + 1) x)
+;;
+
+let filter_map (hd :: tl) ~f : _ list =
+  match f hd with
+  | None -> List.filter_map tl ~f
+  | Some hd -> hd :: List.filter_map tl ~f
+;;
+
+let filter_mapi (hd :: tl) ~f : _ list =
+  let hd = f 0 hd in
+  let[@inline always] f i x = f (i + 1) x in
+  match hd with
+  | None -> List.filter_mapi tl ~f
+  | Some hd -> hd :: List.filter_mapi tl ~f
+;;
+
+let filter (hd :: tl) ~f : _ list =
+  match f hd with
+  | false -> List.filter tl ~f
+  | true -> hd :: List.filter tl ~f
+;;
+
+let filteri (hd :: tl) ~f : _ list =
+  let include_hd = f 0 hd in
+  let[@inline always] f i x = f (i + 1) x in
+  match include_hd with
+  | false -> List.filteri tl ~f
+  | true -> hd :: List.filteri tl ~f
 ;;
 
 let map t ~f = mapi t ~f:(fun (_ : int) x -> f x)
@@ -269,14 +346,15 @@ let min_elt' (hd :: tl) ~compare =
 
 let max_elt' t ~compare = min_elt' t ~compare:(fun x y -> compare y x)
 
+let map_add_multi map ~key ~data =
+  Map.update map key ~f:(function
+    | None -> singleton data
+    | Some t -> cons data t)
+;;
+
 let map_of_container_multi fold container ~comparator =
-  fold container ~init:(Map.empty comparator) ~f:(fun acc (key, value) ->
-    let t =
-      match Map.find acc key with
-      | None -> singleton value
-      | Some t -> create value (to_list t)
-    in
-    Map.set acc ~key ~data:t)
+  fold container ~init:(Map.empty comparator) ~f:(fun acc (key, data) ->
+    map_add_multi acc ~key ~data)
 ;;
 
 let map_of_alist_multi alist = map_of_container_multi List.fold alist
@@ -292,6 +370,12 @@ let folding_map (hd :: tl) ~init ~f =
   hd :: List.folding_map tl ~init:acc ~f
 ;;
 
+let fold_map (hd :: tl) ~init:acc ~f =
+  let acc, hd = f acc hd in
+  let acc, tl = List.fold_map tl ~init:acc ~f in
+  acc, hd :: tl
+;;
+
 let combine_errors t =
   match Result.combine_errors (to_list t) with
   | Ok oks -> Ok (of_list_exn oks)
@@ -304,6 +388,13 @@ let combine_errors_unit t =
   | Error errors -> Error (of_list_exn errors)
 ;;
 
+let combine_or_errors t =
+  match Or_error.combine_errors (to_list t) with
+  | Ok oks -> Ok (of_list_exn oks)
+  | Error _ as e -> e
+;;
+
+let combine_or_errors_unit t = to_list t |> Or_error.combine_errors_unit
 let validate ~name check t = Validate.list ~name check (to_list t)
 let validate_indexed check t = Validate.list_indexed check (to_list t)
 
@@ -313,8 +404,17 @@ let rec rev_append xs acc =
   | hd :: tl -> rev_append tl (cons hd acc)
 ;;
 
+let init n ~f =
+  if n < 1 then invalid_argf "Nonempty_list.init %d" n ();
+  (* [List.init] calls [f] on the highest index first and works its way down.
+     We do the same here. *)
+  let tl = List.init (n - 1) ~f:(fun i -> f (i + 1)) in
+  let hd = f 0 in
+  hd :: tl
+;;
+
 module Reversed = struct
-  type 'a t = ( :: ) of 'a * 'a Reversed_list.t [@@deriving sexp_of]
+  type 'a t = ( :: ) of 'a * 'a Reversed_list.t
 
   let to_rev_list (hd :: tl) : _ Reversed_list.t = hd :: tl
   let rev_append (hd :: tl : _ t) xs = rev_append tl (hd :: xs)
@@ -329,12 +429,41 @@ module Reversed = struct
   let rev_mapi (hd :: tl : _ t) ~f = rev_map_aux 1 tl ~f ([ f 0 hd ] : _ T'.t)
   let rev_map t ~f = rev_mapi t ~f:(fun _ x -> f x)
   let cons x t = x :: to_rev_list t
+
+  module With_sexp_of = struct
+    type nonrec 'a t = 'a t
+
+    let sexp_of_t sexp_of_a t =
+      Reversed_list.With_sexp_of.sexp_of_t sexp_of_a (to_rev_list t)
+    ;;
+  end
+
+  module With_rev_sexp_of = struct
+    type nonrec 'a t = 'a t
+
+    let sexp_of_t sexp_of_a t =
+      Reversed_list.With_rev_sexp_of.sexp_of_t sexp_of_a (to_rev_list t)
+    ;;
+  end
 end
+
+let rev' (hd :: tl) =
+  List.fold tl ~init:([ hd ] : _ Reversed.t) ~f:(Fn.flip Reversed.cons)
+;;
 
 let flag arg_type =
   Command.Param.map_flag
     (Command.Param.one_or_more_as_pair arg_type)
     ~f:(fun (one, more) -> one :: more)
+;;
+
+let comma_separated_argtype ?key ?strip_whitespace ?unique_values arg_type =
+  arg_type
+  |> Command.Param.Arg_type.comma_separated
+       ~allow_empty:false
+       ?strip_whitespace
+       ?unique_values
+  |> Command.Param.Arg_type.map ?key ~f:of_list_exn
 ;;
 
 type 'a nonempty_list = 'a t
@@ -363,11 +492,7 @@ module Option = struct
     | _ :: _ as l -> unchecked_value l
   ;;
 
-  let value t ~default =
-    match t with
-    | [] -> default
-    | _ :: _ as l -> unchecked_value l
-  ;;
+  let value t ~default = Bool.select (is_none t) default (unchecked_value t)
 
   module Optional_syntax = struct
     module Optional_syntax = struct

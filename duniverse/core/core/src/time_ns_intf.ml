@@ -1,5 +1,4 @@
 open! Import
-open Std_internal
 
 module type Span = sig
   (** [t] is immediate on 64bit boxes and so plays nicely with the GC write barrier. *)
@@ -90,10 +89,46 @@ module type Span = sig
   end
   [@@deprecated "[since 2018-04] use [Span.sexp_of_t] and [Span.t_of_sexp] instead"]
 
-  val arg_type : [ `Use_Time_ns_unix ] [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+  val arg_type : t Command.Arg_type.t
 
-  module Option : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
-  module Stable : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+  (** [Span.Option.t] is like [Span.t option], except that the value is immediate on
+      architectures where [Int63.t] is immediate.  This module should mainly be used to
+      avoid allocations. *)
+  module Option : sig
+    include Immediate_option.S_int63 with type value := t
+    include Identifiable.S with type t := t
+    include Quickcheck.S with type t := t
+
+    module Stable : sig
+      module V1 : Stable_int63able.With_stable_witness.S with type t = t
+      module V2 : Stable_int63able.With_stable_witness.S with type t = t
+    end
+  end
+
+  module Stable : sig
+    module V1 : sig
+      type nonrec t = t [@@deriving hash, equal]
+
+      include Stable_int63able.With_stable_witness.S with type t := t
+    end
+
+    module V2 : sig
+      type nonrec t = t [@@deriving hash, equal, sexp_grammar]
+      type nonrec comparator_witness = comparator_witness
+
+      include
+        Stable_int63able.With_stable_witness.S
+        with type t := t
+        with type comparator_witness := comparator_witness
+
+      include
+        Comparable.Stable.V1.With_stable_witness.S
+        with type comparable := t
+        with type comparator_witness := comparator_witness
+
+      include Stringable.S with type t := t
+    end
+  end
 
   (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 
@@ -165,7 +200,7 @@ end
 
 (** Time represented as an [Int63.t] number of nanoseconds since the epoch.
 
-    See {!Core.Time_ns} for important user documentation.
+    See {!Time_ns_unix} for important user documentation.
 
     Internally, arithmetic is not overflow-checked. Instead, overflows are silently
     ignored as for [int] arithmetic, unless specifically documented otherwise. Conversions
@@ -339,12 +374,15 @@ module type Time_ns = sig
   end
 
   module Stable : sig
-    module V1 : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+    module V1 : sig end
+    [@@deprecated "[since 2021-03] Use [Time_ns_unix] or [Time_ns.Alternate_sexp]"]
+
     module Option : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
 
     module Alternate_sexp : sig
       module V1 : sig
-        type t = Alternate_sexp.t [@@deriving bin_io, compare, hash, sexp, sexp_grammar]
+        type t = Alternate_sexp.t
+        [@@deriving bin_io, compare, hash, sexp, sexp_grammar, stable_witness]
 
         include
           Comparator.Stable.V1.S
@@ -352,27 +390,32 @@ module type Time_ns = sig
            and type comparator_witness = Alternate_sexp.comparator_witness
 
         include
-          Comparable.Stable.V1.S
+          Comparable.Stable.V1.With_stable_witness.S
           with type comparable := t
           with type comparator_witness := comparator_witness
       end
     end
 
     module Span : sig
-      module V1 : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+      module V1 : sig
+        type nonrec t = Span.t [@@deriving hash, equal]
+
+        include Stable_int63able.With_stable_witness.S with type t := t
+      end
+
       module Option : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
 
       module V2 : sig
-        type t = Span.t [@@deriving hash, equal]
+        type t = Span.t [@@deriving hash, equal, sexp_grammar]
         type nonrec comparator_witness = Span.comparator_witness
 
         include
-          Stable_int63able
+          Stable_int63able.With_stable_witness.S
           with type t := t
           with type comparator_witness := comparator_witness
 
         include
-          Comparable.Stable.V1.S
+          Comparable.Stable.V1.With_stable_witness.S
           with type comparable := t
           with type comparator_witness := comparator_witness
 
@@ -381,10 +424,14 @@ module type Time_ns = sig
     end
 
     module Ofday : sig
-      module V1 :
-        Stable_int63able
-        with type t = Ofday.t
-         and type comparator_witness = Ofday.comparator_witness
+      module V1 : sig
+        type t = Ofday.t [@@deriving equal, hash]
+
+        include
+          Stable_int63able.With_stable_witness.S
+          with type t := t
+           and type comparator_witness = Ofday.comparator_witness
+      end
 
       module Option : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
       module Zoned : sig end [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
@@ -433,14 +480,14 @@ module type Time_ns = sig
   val set_sexp_zone : [ `Use_Time_ns_unix ]
   [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
 
-  val sexp_of_t : [ `Use_Time_ns_unix ]
-  [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+  val sexp_of_t : [ `Use_Time_ns_unix_or_Time_ns_alternate_sexp ]
+  [@@deprecated "[since 2021-03] Use [Time_ns_unix] or [Time_ns.Alternate_sexp]"]
 
   val sexp_of_t_abs : [ `Use_Time_ns_unix ]
   [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
 
-  val t_of_sexp : [ `Use_Time_ns_unix ]
-  [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]
+  val t_of_sexp : [ `Use_Time_ns_unix_or_Time_ns_alternate_sexp ]
+  [@@deprecated "[since 2021-03] Use [Time_ns_unix] or [Time_ns.Alternate_sexp]"]
 
   val t_of_sexp_abs : [ `Use_Time_ns_unix ]
   [@@deprecated "[since 2021-03] Use [Time_ns_unix]"]

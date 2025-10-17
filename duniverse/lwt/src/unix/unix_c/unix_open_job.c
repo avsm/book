@@ -35,7 +35,7 @@
 #define caml_unix_cloexec_default unix_cloexec_default
 #endif
 
-static int open_flag_table[] = {
+static const int open_flag_table[] = {
     O_RDONLY, O_WRONLY, O_RDWR,  O_NONBLOCK, O_APPEND, O_CREAT, O_TRUNC,
     O_EXCL,   O_NOCTTY, O_DSYNC, O_SYNC,     O_RSYNC,  0, /* O_SHARE_DELETE,
                                                              Windows-only */
@@ -113,8 +113,8 @@ static value result_open(struct job_open *job)
 CAMLprim value lwt_unix_open_job(value name, value flags, value perms)
 {
     LWT_UNIX_INIT_JOB_STRING(job, open, 0, name);
-    job->fd = caml_convert_flag_list(flags, open_cloexec_table);
-    job->flags = caml_convert_flag_list(flags, open_flag_table);
+    job->fd = lwt_convert_flag_list(flags, open_cloexec_table);
+    job->flags = lwt_convert_flag_list(flags, open_flag_table);
     job->perms = Int_val(perms);
     return lwt_unix_alloc_job(&(job->job));
 }

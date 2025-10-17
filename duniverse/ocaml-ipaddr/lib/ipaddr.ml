@@ -23,7 +23,6 @@ let try_with_result fn a =
   try Ok (fn a) with Parse_error (msg, _) -> Error (`Msg ("Ipaddr: " ^ msg))
 
 let failwith_msg = function Ok x -> x | Error (`Msg m) -> failwith m
-let map_result v f = match v with Ok v -> Ok (f v) | Error _ as e -> e
 
 let string_of_scope = function
   | Point -> "point"
@@ -108,35 +107,10 @@ let reject_octal s i =
     if s.[!i] == '0' && is_number 10 (int_of_char s.[!i + 1]) then
       raise (octal_notation s)
 
-let hex_char_of_int = function
-  | 0 -> '0'
-  | 1 -> '1'
-  | 2 -> '2'
-  | 3 -> '3'
-  | 4 -> '4'
-  | 5 -> '5'
-  | 6 -> '6'
-  | 7 -> '7'
-  | 8 -> '8'
-  | 9 -> '9'
-  | 10 -> 'a'
-  | 11 -> 'b'
-  | 12 -> 'c'
-  | 13 -> 'd'
-  | 14 -> 'e'
-  | 15 -> 'f'
-  | _ -> raise (Invalid_argument "not a hex int")
-
-let hex_string_of_int32 i = String.make 1 (hex_char_of_int (Int32.to_int i))
-
 module V4 = struct
   type t = int32
 
-  let compare a b =
-    (* ignore the sign *)
-    let c = Int32.compare (a >|> 1) (b >|> 1) in
-    if c = 0 then Int32.compare (a &&& 1l) (b &&& 1l) else c
-
+  let compare = Int32.unsigned_compare
   let make a b c d = ~|a <! 24 ||| (~|b <! 16) ||| (~|c <! 8 ||| (~|d <! 0))
 
   (* parsing *)
@@ -400,12 +374,45 @@ module V4 = struct
     let address (addr, _) = addr
     let bits (_, sz) = sz
     let netmask subnet = mask (bits subnet)
+    let hostmask cidr = Int32.logxor (netmask cidr) 0xFF_FF_FF_FFl
 
     let first ((_, sz) as cidr) =
       if sz > 30 then network cidr else network cidr |> succ |> failwith_msg
 
     let last ((_, sz) as cidr) =
       if sz > 30 then broadcast cidr else broadcast cidr |> pred |> failwith_msg
+
+    let hosts ?(usable = true) ((_, sz) as cidr) =
+      let rec iter_seq start stop =
+        if compare (start, 32) (stop, 32) > 0 then Seq.Nil
+        else
+          match succ start with
+          | Ok start_succ -> Seq.Cons (start, fun () -> iter_seq start_succ stop)
+          | Error _ -> Seq.Cons (start, fun () -> Seq.Nil)
+      in
+      if usable && sz = 32 then fun () -> Seq.Nil
+      else
+        let start, stop =
+          if usable then (first cidr, last cidr)
+          else (network cidr, broadcast cidr)
+        in
+        fun () -> iter_seq start stop
+
+    let subnets n ((_, sz) as cidr) =
+      let rec iter_seq start stop steps =
+        if compare (start, 32) (stop, 32) > 0 then Seq.Nil
+        else
+          let prefix = make n start in
+          let start_succ = Int32.add start steps in
+          if start_succ = 0l then Seq.Cons (prefix, fun () -> Seq.Nil)
+          else Seq.Cons (prefix, fun () -> iter_seq start_succ stop steps)
+      in
+      if sz > n || n > 32 then fun () -> Seq.Nil
+      else
+        let start = network cidr in
+        let stop = broadcast cidr in
+        let steps = Int32.add (hostmask cidr) 1l >|> n - sz in
+        fun () -> iter_seq start stop steps
   end
 
   (* TODO: this could be optimized with something trie-like *)
@@ -441,110 +448,271 @@ module V4 = struct
   end)
 end
 
-module B128 = struct
-  type t = int32 * int32 * int32 * int32
+module S128 : sig
+  exception Overflow
+
+  type t
+
+  val zero : t [@@ocaml.warning "-32"]
+  val max_int : t
+  val compare : t -> t -> int
+  val equal : t -> t -> bool
+  val fold_left : ('a -> int -> 'a) -> 'a -> t -> 'a
+  val of_octets_exn : string -> t
+  val to_octets : t -> string
+  val of_int64 : int64 * int64 -> t
+  val to_int64 : t -> int64 * int64
+  val of_int32 : int32 * int32 * int32 * int32 -> t
+  val to_int32 : t -> int32 * int32 * int32 * int32
+  val of_int16 : int * int * int * int * int * int * int * int -> t
+  val to_int16 : t -> int * int * int * int * int * int * int * int
+  val add_exn : t -> t -> t [@@ocaml.warning "-32"]
+  val pred_exn : t -> t [@@ocaml.warning "-32"]
+  val add : t -> t -> t option
+  val logand : t -> t -> t
+  val logor : t -> t -> t
+  val logxor : t -> t -> t
+  val lognot : t -> t
+
+  module Byte : sig
+    val get_lsbits : int -> int -> int [@@ocaml.warning "-32"]
+    val get_msbits : int -> int -> int [@@ocaml.warning "-32"]
+    val set_msbits : int -> int -> int -> int [@@ocaml.warning "-32"]
+    val fold_left : ('a -> bool -> 'a) -> 'a -> int -> 'a
+  end
+
+  val shift_right : t -> int -> t
+  val shift_left : t -> int -> t
+  val write_octets_exn : ?off:int -> t -> bytes -> unit
+  val succ_exn : t -> t
+  val succ : t -> (t, [> `Msg of string ]) result
+  val pred : t -> (t, [> `Msg of string ]) result
+end = struct
+  exception Overflow
+
+  type t = string
+
+  let mk_zero () = Bytes.make 16 '\x00'
+  let zero = Bytes.unsafe_to_string (mk_zero ())
+  let max_int = String.make 16 '\xff'
+  let compare = String.compare
+  let equal = String.equal
+
+  let fold_left f init s =
+    (* With OCaml>=4.13.0:
+       [String.fold_left (fun acc c -> f acc (Char.code c)) init s] *)
+    let a = ref init in
+    for i = 0 to 15 do
+      a := f !a (Char.code (String.get s i))
+    done;
+    !a
+
+  let iteri_right2 f x y =
+    for i = 15 downto 0 do
+      let x' = Char.code (String.get x i) in
+      let y' = Char.code (String.get y i) in
+      f i x' y'
+    done
+
+  let of_octets_exn s =
+    if String.length s <> 16 then invalid_arg "not 16 bytes long";
+    s
+
+  let to_octets = Fun.id
 
   let of_int64 (a, b) =
-    Int64.
-      ( to_int32 (shift_right_logical a 32),
-        to_int32 a,
-        to_int32 (shift_right_logical b 32),
-        to_int32 b )
+    let b' = mk_zero () in
+    Bytes.set_int64_be b' 0 a;
+    Bytes.set_int64_be b' 8 b;
+    Bytes.unsafe_to_string b'
 
-  let to_int64 (a, b, c, d) =
-    Int64.
-      ( logor (shift_left (of_int32 a) 32) (of_int32 b),
-        logor (shift_left (of_int32 c) 32) (of_int32 d) )
+  let to_int64 s =
+    (* with OCaml>=4.13, use String.get_int64_be *)
+    let b = Bytes.unsafe_of_string s in
+    (Bytes.get_int64_be b 0, Bytes.get_int64_be b 8)
 
-  let of_int32 x = x
-  let to_int32 x = x
+  let of_int32 (a, b, c, d) =
+    let b' = mk_zero () in
+    Bytes.set_int32_be b' 0 a;
+    Bytes.set_int32_be b' 4 b;
+    Bytes.set_int32_be b' 8 c;
+    Bytes.set_int32_be b' 12 d;
+    Bytes.unsafe_to_string b'
+
+  let to_int32 s =
+    (* with OCaml>=4.13, use String.get_int32_be *)
+    let b = Bytes.unsafe_of_string s in
+    ( Bytes.get_int32_be b 0,
+      Bytes.get_int32_be b 4,
+      Bytes.get_int32_be b 8,
+      Bytes.get_int32_be b 12 )
 
   let of_int16 (a, b, c, d, e, f, g, h) =
-    ( V4.of_int16 (a, b),
-      V4.of_int16 (c, d),
-      V4.of_int16 (e, f),
-      V4.of_int16 (g, h) )
+    let b' = mk_zero () in
+    Bytes.set_uint16_be b' 0 a;
+    Bytes.set_uint16_be b' 2 b;
+    Bytes.set_uint16_be b' 4 c;
+    Bytes.set_uint16_be b' 6 d;
+    Bytes.set_uint16_be b' 8 e;
+    Bytes.set_uint16_be b' 10 f;
+    Bytes.set_uint16_be b' 12 g;
+    Bytes.set_uint16_be b' 14 h;
+    Bytes.unsafe_to_string b'
 
-  let to_int16 (x, y, z, t) =
-    let a, b = V4.to_int16 x
-    and c, d = V4.to_int16 y
-    and e, f = V4.to_int16 z
-    and g, h = V4.to_int16 t in
-    (a, b, c, d, e, f, g, h)
+  let to_int16 s =
+    (* with OCaml>=4.13, use String.get_uint16_be *)
+    let b = Bytes.unsafe_of_string s in
+    ( Bytes.get_uint16_be b 0,
+      Bytes.get_uint16_be b 2,
+      Bytes.get_uint16_be b 4,
+      Bytes.get_uint16_be b 6,
+      Bytes.get_uint16_be b 8,
+      Bytes.get_uint16_be b 10,
+      Bytes.get_uint16_be b 12,
+      Bytes.get_uint16_be b 14 )
 
-  let write_octets_exn ?(off = 0) (a, b, c, d) byte =
-    V4.write_octets_exn ~off a byte;
-    V4.write_octets_exn ~off:(off + 4) b byte;
-    V4.write_octets_exn ~off:(off + 8) c byte;
-    V4.write_octets_exn ~off:(off + 12) d byte
+  let add_exn x y =
+    let b = mk_zero () in
+    let carry = ref 0 in
+    iteri_right2
+      (fun i x' y' ->
+        let sum = x' + y' + !carry in
+        if sum >= 256 then (
+          carry := 1;
+          Bytes.set_uint8 b i (sum - 256))
+        else (
+          carry := 0;
+          Bytes.set_uint8 b i sum))
+      x y;
+    if !carry <> 0 then raise Overflow else Bytes.unsafe_to_string b
 
-  let compare (a1, b1, c1, d1) (a2, b2, c2, d2) =
-    match V4.compare a1 a2 with
-    | 0 -> (
-        match V4.compare b1 b2 with
-        | 0 -> ( match V4.compare c1 c2 with 0 -> V4.compare d1 d2 | n -> n)
-        | n -> n)
-    | n -> n
+  let add x y = try Some (add_exn x y) with Overflow -> None
 
-  let logand (a1, b1, c1, d1) (a2, b2, c2, d2) =
-    (a1 &&& a2, b1 &&& b2, c1 &&& c2, d1 &&& d2)
-
-  let logor (a1, b1, c1, d1) (a2, b2, c2, d2) =
-    (a1 ||| a2, b1 ||| b2, c1 ||| c2, d1 ||| d2)
-
-  let lognot (a, b, c, d) = Int32.(lognot a, lognot b, lognot c, lognot d)
-
-  let succ (a, b, c, d) =
-    let cb (n, tl) v =
-      match n with
-      | 0l -> (0l, v :: tl)
-      | n ->
-          let n = if Int32.equal v 0xFF_FF_FF_FFl then n else 0l in
-          (n, Int32.succ v :: tl)
+  let pred_exn x =
+    if equal x zero then raise Overflow;
+    let b = Bytes.of_string x in
+    let rec go i =
+      Bytes.set_uint8 b i (Char.code (String.get x i) - 1);
+      if Char.code (String.get x i) = 0 then go (Stdlib.pred i)
     in
-    match List.fold_left cb (1l, []) [ d; c; b; a ] with
-    | 0l, [ a; b; c; d ] -> Ok (of_int32 (a, b, c, d))
-    | n, [ _; _; _; _ ] when n > 0l ->
-        Error (`Msg "Ipaddr: highest address has been reached")
-    | _ -> Error (`Msg "Ipaddr: unexpected error with B128")
+    go 15;
+    Bytes.unsafe_to_string b
 
-  let pred (a, b, c, d) =
-    let cb (n, tl) v =
-      match n with
-      | 0l -> (0l, v :: tl)
-      | n ->
-          let n = if v = 0x00_00_00_00l then n else 0l in
-          (n, Int32.pred v :: tl)
-    in
-    match List.fold_left cb (-1l, []) [ d; c; b; a ] with
-    | 0l, [ a; b; c; d ] -> Ok (of_int32 (a, b, c, d))
-    | n, [ _; _; _; _ ] when n < 0l ->
-        Error (`Msg "Ipaddr: lowest address has been reached")
-    | _ -> Error (`Msg "Ipaddr: unexpected error with B128")
+  let logand x y =
+    let b = mk_zero () in
+    iteri_right2 (fun i x y -> Bytes.set_uint8 b i (x land y)) x y;
+    Bytes.unsafe_to_string b
 
-  (* result is unspecified if sz < 0 *)
-  let shift_right (a, b, c, d) sz =
-    if sz < 0 || sz > 128 then
-      Error (`Msg "Ipaddr: unexpected argument sz (must be >= 0 and < 128)")
-    else
-      let rec loop (a, b, c, d) sz =
-        if sz < 32 then (sz, (a, b, c, d)) else loop (0l, a, b, c) (sz - 32)
-      in
-      let sz, (a, b, c, d) = loop (a, b, c, d) sz in
-      let fn (saved, tl) part =
-        let new_saved = Int32.logand part (0xFF_FF_FF_FFl >|> sz) in
-        let new_part = part >|> sz ||| (saved <|< 32 - sz) in
-        (new_saved, new_part :: tl)
-      in
-      match List.fold_left fn (0l, []) [ a; b; c; d ] with
-      | _, [ d; c; b; a ] -> Ok (of_int32 (a, b, c, d))
-      | _ -> Error (`Msg "Ipaddr: unexpected error with B128.shift_right")
+  let logor x y =
+    let b = mk_zero () in
+    iteri_right2 (fun i x y -> Bytes.set_uint8 b i (x lor y)) x y;
+    Bytes.unsafe_to_string b
+
+  let logxor x y =
+    let b = mk_zero () in
+    iteri_right2 (fun i x y -> Bytes.set_uint8 b i (x lxor y)) x y;
+    Bytes.unsafe_to_string b
+
+  let lognot x =
+    let b = mk_zero () in
+    String.iteri
+      (fun i _ -> Bytes.set_uint8 b i (lnot (Char.code (String.get x i))))
+      x;
+    Bytes.unsafe_to_string b
+
+  module Byte = struct
+    (* Extract the [n] least significant bits from [i] *)
+    let get_lsbits n i =
+      if n <= 0 || n > 8 then invalid_arg "out of bounds";
+      i land ((1 lsl n) - 1)
+
+    (* Extract the [n] most significant bits from [i] *)
+    let get_msbits n i =
+      if n <= 0 || n > 8 then invalid_arg "out of bounds";
+      (i land (255 lsl (8 - n))) lsr (8 - n)
+
+    (* Set value [x] in [i]'s [n] most significant bits *)
+    let set_msbits n x i =
+      if n < 0 || n > 8 then raise (Invalid_argument "n must be >= 0 && <= 8")
+      else if n = 0 then i
+      else if n = 8 then x
+      else (x lsl (8 - n)) lor i
+
+    (* set bits are represented as true *)
+    let fold_left f a i =
+      let bitmask = ref 0b1000_0000 in
+      let a' = ref a in
+      for _ = 0 to 7 do
+        a' := f !a' (i land !bitmask > 0);
+        bitmask := !bitmask lsr 1
+      done;
+      !a'
+  end
+
+  let shift_right x n =
+    match n with
+    | 0 -> x
+    | 128 -> zero
+    | n when n > 0 && n < 128 ->
+        let b = mk_zero () in
+        let shift_bytes, shift_bits = (n / 8, n mod 8) in
+        (if shift_bits = 0 then
+           Bytes.blit_string x 0 b shift_bytes (16 - shift_bytes)
+         else
+           let carry = ref 0 in
+           for i = 0 to 15 - shift_bytes do
+             let x' = Char.code (String.get x i) in
+             let new_carry = Byte.get_lsbits shift_bits x' in
+             let shifted_value = x' lsr shift_bits in
+             let new_value = Byte.set_msbits shift_bits !carry shifted_value in
+             Bytes.set_uint8 b (i + shift_bytes) new_value;
+             carry := new_carry
+           done);
+        Bytes.unsafe_to_string b
+    | _ -> raise (Invalid_argument "n must be >= 0 && <= 128")
+
+  let shift_left x n =
+    match n with
+    | 0 -> x
+    | 128 -> zero
+    | n when n > 0 && n < 128 ->
+        let b = mk_zero () in
+        let shift_bytes, shift_bits = (n / 8, n mod 8) in
+        (if shift_bits = 0 then
+           Bytes.blit_string x shift_bytes b 0 (16 - shift_bytes)
+         else
+           let carry = ref 0 in
+           for i = 15 downto 0 + shift_bytes do
+             let x' = Char.code (String.get x i) in
+             let new_carry = Byte.get_msbits shift_bits x' in
+             let shifted_value = x' lsl shift_bits in
+             let new_value = shifted_value lor !carry in
+             Bytes.set_uint8 b (i - shift_bytes) new_value;
+             carry := new_carry
+           done);
+        Bytes.unsafe_to_string b
+    | _ -> raise (Invalid_argument "n must be >= 0 && <= 128")
+
+  let write_octets_exn ?(off = 0) s dest =
+    if Bytes.length dest - off < 16 then
+      raise (Parse_error ("larger including offset than target bytes", s))
+    else Bytes.blit_string s 0 dest off (String.length s)
+
+  let succ_exn x = add_exn x (of_int64 (0L, 1L))
+
+  let succ x =
+    try Ok (succ_exn x)
+    with Overflow -> Error (`Msg "Ipaddr: highest address has been reached")
+
+  let pred x =
+    try Ok (pred_exn x)
+    with Overflow | Invalid_argument _ ->
+      Error (`Msg "Ipaddr: lowest address has been reached")
 end
 
 module V6 = struct
-  include B128
+  include S128
 
-  (* TODO: Perhaps represent with bytestring? *)
   let make a b c d e f g h = of_int16 (a, b, c, d, e, f, g, h)
 
   (* parsing *)
@@ -716,102 +884,69 @@ module V6 = struct
   (* byte conversion *)
 
   let of_octets_exn ?(off = 0) bs =
-    (* TODO : from cstruct *)
-    let hihi = V4.of_octets_exn ~off bs in
-    let hilo = V4.of_octets_exn ~off:(off + 4) bs in
-    let lohi = V4.of_octets_exn ~off:(off + 8) bs in
-    let lolo = V4.of_octets_exn ~off:(off + 12) bs in
-    of_int32 (hihi, hilo, lohi, lolo)
+    if String.length bs - off < 16 then raise (need_more bs)
+    else S128.of_octets_exn (String.sub bs off 16)
 
   let of_octets ?off bs = try_with_result (of_octets_exn ?off) bs
   let write_octets ?off i bs = try_with_result (write_octets_exn ?off i) bs
-
-  let to_octets i =
-    let b = Bytes.create 16 in
-    write_octets_exn i b;
-    Bytes.to_string b
+  let to_octets = S128.to_octets
 
   (* MAC *)
   (* {{:https://tools.ietf.org/html/rfc2464#section-7}RFC 2464}. *)
-  let multicast_to_mac i =
-    let _, _, _, i = to_int32 i in
-    let macb = Bytes.create 6 in
-    Bytes.set macb 0 (Char.chr 0x33);
-    Bytes.set macb 1 (Char.chr 0x33);
-    Bytes.set macb 2 (Char.chr (( |~ ) (i >! 24)));
-    Bytes.set macb 3 (Char.chr (( |~ ) (i >! 16)));
-    Bytes.set macb 4 (Char.chr (( |~ ) (i >! 8)));
-    Bytes.set macb 5 (Char.chr (( |~ ) (i >! 0)));
+  let multicast_to_mac s =
+    let macb = Bytes.make 6 (Char.chr 0x33) in
+    Bytes.blit_string (S128.to_octets s) 12 macb 2 4;
     Macaddr.of_octets_exn (Bytes.to_string macb)
 
   (* Host *)
-  let to_domain_name (a, b, c, d) =
+  let to_domain_name b =
+    let hexstr_of_int = Printf.sprintf "%x" in
     let name =
-      [
-        hex_string_of_int32 (d >|> 0 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 4 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 8 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 12 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 16 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 20 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 24 &&& 0xF_l);
-        hex_string_of_int32 (d >|> 28 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 0 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 4 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 8 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 12 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 16 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 20 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 24 &&& 0xF_l);
-        hex_string_of_int32 (c >|> 28 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 0 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 4 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 8 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 12 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 16 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 20 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 24 &&& 0xF_l);
-        hex_string_of_int32 (b >|> 28 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 0 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 4 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 8 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 12 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 16 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 20 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 24 &&& 0xF_l);
-        hex_string_of_int32 (a >|> 28 &&& 0xF_l);
-        "ip6";
-        "arpa";
-      ]
+      S128.fold_left
+        (fun acc b ->
+          let x = hexstr_of_int (b land ((1 lsl 4) - 1)) in
+          let y = hexstr_of_int (b lsr 4) in
+          x :: y :: acc)
+        [ "ip6"; "arpa" ] b
     in
     Domain_name.(host_exn (of_strings_exn name))
 
   let of_domain_name n =
-    let open Domain_name in
-    if count_labels n = 34 then
-      let ip6 = get_label_exn n 32 and arpa = get_label_exn n 33 in
-      if equal_label ip6 "ip6" && equal_label arpa "arpa" then
-        let rev = true in
-        let n' = drop_label_exn ~rev ~amount:2 n in
-        let d = drop_label_exn ~rev ~amount:24 n'
-        and c = drop_label_exn ~amount:8 (drop_label_exn ~rev ~amount:16 n')
-        and b = drop_label_exn ~amount:16 (drop_label_exn ~rev ~amount:8 n')
-        and a = drop_label_exn ~amount:24 n' in
-        let t b d =
-          let v = Int32.of_int (parse_hex_int d (ref 0)) in
-          if v > 0xFl then raise (Parse_error ("number in label too big", d))
-          else v <|< b
-        in
-        let f d =
-          List.fold_left
-            (fun (acc, b) d -> (Int32.add acc (t b d), b + 4))
-            (0l, 0) (to_strings d)
-        in
-        try
-          let a', _ = f a and b', _ = f b and c', _ = f c and d', _ = f d in
-          Some (a', b', c', d')
-        with Parse_error _ -> None
-      else None
+    let int_of_char_string = function
+      | "0" -> 0
+      | "1" -> 1
+      | "2" -> 2
+      | "3" -> 3
+      | "4" -> 4
+      | "5" -> 5
+      | "6" -> 6
+      | "7" -> 7
+      | "8" -> 8
+      | "9" -> 9
+      | "a" -> 10
+      | "b" -> 11
+      | "c" -> 12
+      | "d" -> 13
+      | "e" -> 14
+      | "f" -> 15
+      | _ -> failwith "int_of_char_string: invalid hexadecimal string"
+    in
+    let labels = Domain_name.to_array n in
+    if
+      Array.length labels = 34
+      && Domain_name.equal_label labels.(0) "arpa"
+      && Domain_name.equal_label labels.(1) "ip6"
+    then
+      let b = Bytes.create 16 in
+      try
+        for bi = 0 to 15 do
+          let i = 2 * Int.succ bi in
+          let x = int_of_char_string labels.(i) in
+          let y = int_of_char_string labels.(i + 1) in
+          Bytes.set_uint8 b bi (Int.logor (Int.shift_left x 4) y)
+        done;
+        Some (S128.of_octets_exn (Bytes.unsafe_to_string b))
+      with Failure _ -> None
     else None
 
   (* constant *)
@@ -833,14 +968,7 @@ module V6 = struct
       if c = 0 then Stdlib.compare sz sz' else c
 
     let ip = make
-
-    let _full =
-      let f = 0x0_FFFF_FFFF_l in
-      (f, f, f, f)
-
-    let mask sz =
-      V4.Prefix.(mask (sz - 0), mask (sz - 32), mask (sz - 64), mask (sz - 96))
-
+    let mask sz = shift_left max_int (128 - sz)
     let prefix (pre, sz) = (logand pre (mask sz), sz)
     let make sz pre = (pre, sz)
 
@@ -871,19 +999,23 @@ module V6 = struct
     let of_string s = try_with_result of_string_exn s
 
     let _of_netmask_exn ~netmask address =
-      let nm =
-        let bits netmask =
-          V4.Prefix.bits (V4.Prefix.of_netmask_exn ~netmask ~address:V4.any)
-        in
-        match netmask with
-        | 0_l, 0_l, 0_l, 0_l -> 0
-        | lsw, 0_l, 0_l, 0_l -> bits lsw
-        | -1_l, lsw, 0_l, 0_l -> bits lsw + 32
-        | -1_l, -1_l, lsw, 0_l -> bits lsw + 64
-        | -1_l, -1_l, -1_l, lsw -> bits lsw + 96
-        | _ -> raise (Parse_error ("invalid netmask", to_string netmask))
+      let count_bits bits is_last_bit_set i =
+        S128.Byte.fold_left
+          (fun (a, is_last_bit_set) e ->
+            match (is_last_bit_set, e) with
+            | true, false | false, false -> (a, false)
+            | true, true -> (a + 1, true)
+            | false, true ->
+                (* netmask is not contiguous *)
+                raise (Parse_error ("invalid netmask", to_string netmask)))
+          (bits, is_last_bit_set) i
       in
-      make nm address
+      let nm_bits_set, _ =
+        S128.fold_left
+          (fun (a, is_last_bit_set) e -> count_bits a is_last_bit_set e)
+          (0, true) netmask
+      in
+      make nm_bits_set address
 
     let of_netmask_exn ~netmask ~address = _of_netmask_exn ~netmask address
 
@@ -918,13 +1050,48 @@ module V6 = struct
     let address (addr, _) = addr
     let bits (_, sz) = sz
     let netmask subnet = mask (bits subnet)
+    let hostmask cidr = S128.logxor (netmask cidr) S128.max_int
 
     let first ((_, sz) as cidr) =
       if sz > 126 then network cidr else network cidr |> succ |> failwith_msg
 
     let last ((_, sz) as cidr) =
-      let ffff = ip 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff in
-      logor (network cidr) (shift_right ffff sz |> failwith_msg)
+      let ffff = S128.max_int in
+      logor (network cidr) (S128.shift_right ffff sz)
+
+    let hosts ?(usable = true) ((_, sz) as cidr) =
+      let rec iter_seq start stop =
+        if S128.compare start stop > 0 then Seq.Nil
+        else
+          match succ start with
+          | Ok start_succ -> Seq.Cons (start, fun () -> iter_seq start_succ stop)
+          | Error _ -> Seq.Cons (start, fun () -> Seq.Nil)
+      in
+      if usable && sz = 128 then fun () -> Seq.Nil
+      else
+        let start, stop =
+          if usable then (first cidr, last cidr) else (network cidr, last cidr)
+        in
+        fun () -> iter_seq start stop
+
+    let subnets n ((_, sz) as cidr) =
+      let rec iter_seq start stop steps =
+        if S128.compare start stop > 0 then Seq.Nil
+        else
+          let prefix = make n start in
+          if S128.equal start stop then Seq.Cons (prefix, fun () -> Seq.Nil)
+          else
+            match S128.add start steps with
+            | None -> Seq.Cons (prefix, fun () -> Seq.Nil)
+            | Some start_succ ->
+                Seq.Cons (prefix, fun () -> iter_seq start_succ stop steps)
+      in
+      if sz > n || n > 128 then fun () -> Seq.Nil
+      else
+        let start = network cidr in
+        let stop = last cidr in
+        let steps = S128.(succ_exn (shift_right (hostmask cidr) (n - sz))) in
+        fun () -> iter_seq start stop steps
   end
 
   (* TODO: This could be optimized with something trie-like *)
@@ -1055,6 +1222,15 @@ let with_port_of_string ~default s =
       Ok (ipv6, default))
   with Parse_error (msg, _) -> Error (`Msg ("Ipaddr: " ^ msg))
 
+let of_octets_exn bs =
+  match String.length bs with
+  | 4 -> V4 (V4.of_octets_exn bs)
+  | 16 -> V6 (V6.of_octets_exn bs)
+  | _ -> raise (Parse_error ("octets must be of length 4 or 16", bs))
+
+let of_octets bs = try_with_result of_octets_exn bs
+let to_octets i = match i with V4 p -> V4.to_octets p | V6 p -> V6.to_octets p
+
 let v6_of_v4 v4 =
   V6.(Prefix.(network_address ipv4_mapped (of_int32 (0l, 0l, 0l, v4))))
 
@@ -1094,12 +1270,12 @@ let of_domain_name n =
   | _ -> None
 
 let succ = function
-  | V4 addr -> map_result (V4.succ addr) (fun v -> V4 v)
-  | V6 addr -> map_result (V6.succ addr) (fun v -> V6 v)
+  | V4 addr -> Result.map (fun v -> V4 v) (V4.succ addr)
+  | V6 addr -> Result.map (fun v -> V6 v) (V6.succ addr)
 
 let pred = function
-  | V4 addr -> map_result (V4.pred addr) (fun v -> V4 v)
-  | V6 addr -> map_result (V6.pred addr) (fun v -> V6 v)
+  | V4 addr -> Result.map (fun v -> V4 v) (V4.pred addr)
+  | V6 addr -> Result.map (fun v -> V6 v) (V6.pred addr)
 
 module Prefix = struct
   module Addr = struct
@@ -1177,6 +1353,11 @@ module Prefix = struct
     | V4 p -> V4 (V4.Prefix.netmask p)
     | V6 p -> V6 (V6.Prefix.netmask p)
 
+  let address = function
+    | V4 p -> V4 (V4.Prefix.address p)
+    | V6 p -> V6 (V6.Prefix.address p)
+
+  let bits = function V4 p -> V4.Prefix.bits p | V6 p -> V6.Prefix.bits p
   let pp ppf i = Format.fprintf ppf "%s" (to_string i)
 
   let first = function
@@ -1186,4 +1367,12 @@ module Prefix = struct
   let last = function
     | V4 p -> V4 (V4.Prefix.last p)
     | V6 p -> V6 (V6.Prefix.last p)
+
+  let hosts ?(usable = true) = function
+    | V4 p -> V4 (V4.Prefix.hosts ~usable p)
+    | V6 p -> V6 (V6.Prefix.hosts ~usable p)
+
+  let subnets n = function
+    | V4 p -> V4 (V4.Prefix.subnets n p)
+    | V6 p -> V6 (V6.Prefix.subnets n p)
 end

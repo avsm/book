@@ -221,13 +221,13 @@ let make_chapter_page chapters chapter_file
   in
 
   let rec loop html : Html.t Deferred.t =
-    (Deferred.List.map html ~f:(fun item ->
+    (Deferred.List.map html ~how:`Sequential ~f:(fun item ->
       if References.is_reference item then
         return (References.add_reference toc chapter_file item)
       else match item with
       | `Data _ -> return item
       | `Element {Html.name; attrs; childs} -> (
-        Deferred.List.map childs ~f:(fun x -> loop [x])
+        Deferred.List.map childs ~how:`Sequential ~f:(fun x -> loop [x])
         >>| List.concat
         >>| fun childs -> `Element {Html.name; attrs; childs}
       )

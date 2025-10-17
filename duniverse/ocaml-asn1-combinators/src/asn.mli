@@ -11,9 +11,7 @@
     {- ITU-T. {{:http://handle.itu.int/11.1002/1000/12479}Abstract Syntax Notation One (ASN.1): Specification of basic notation}. ITU-T X.680 | ISO/IEC 8824-1, 2015}
     {- ITU-T. {{:http://handle.itu.int/11.1002/1000/12483 }ASN.1 encoding rules: Specification of Basic Encoding Rules (BER), Canonical Encoding Rules (CER) and Distinguished Encoding Rules (DER)}. ITU-T X.690 | ISO/IEC 8825-1, 2015}}
 
-    {e v0.2.6 — {{:https://github.com/mirleft/ocaml-asn1-combinators }homepage}} *)
-
-open Result
+    {e v0.3.2 — {{:https://github.com/mirleft/ocaml-asn1-combinators }homepage}} *)
 
 (** {1 Object identifiers} *)
 
@@ -274,17 +272,21 @@ module S : sig
   val bool : bool t
   (** [bool] is ASN.1 [BOOLEAN]. *)
 
-  val integer : Z.t t
-  (** [integer] is ASN.1 [INTEGER]. *)
+  val integer : string t
+  (** [integer] is ASN.1 [INTEGER]. The representation is a [string]. Be aware
+      these are two's complement signed integers, in order to encode a positive
+      number where the first bit is set (i.e. 128 = [0x80]), you have to prepend
+      a 0 byte: [0x00 0x80]. Otherwise it ([0x80]) will be decoded as -128. See
+      {!unsigned_integer} for automated two's complement transformations. *)
 
   val bit_string : bool array t
   (** [bit_string] is ASN.1 [BIT STRING]. *)
 
-  val bit_string_cs : Cstruct.t t
-  (** [bit_string_cs] is ASN.1 [BIT STRING], represented as {!Cstruct.t}, and
+  val bit_string_octets : string t
+  (** [bit_string_octets] is ASN.1 [BIT STRING], represented as [string], and
       padded with 0-bits up to the next full octet. *)
 
-  val octet_string : Cstruct.t  t
+  val octet_string : string  t
   (** [octet_string] is ASN.1 [OCTET STRING]. *)
 
   val null : unit t
@@ -305,7 +307,7 @@ module S : sig
   val utc_time : Ptime.t t
   (** [utc_time] is ASN.1 [UTCTime].
 
-      Representable years are 1951–2050. *)
+      Representable years are 1950–2049. *)
 
   (** {2 String primitives}
 
@@ -330,6 +332,12 @@ module S : sig
 
   val int : int t
   (** [int] is ASN.1 [INTEGER], projected into an OCaml [int]. *)
+
+  val unsigned_integer : string t
+  (** [unsigned_integer] is ASN.1 [INTEGER], where the necessary two's
+      complement transformations are already applied. That is, it represents
+      unsigned integers encoded as ASN.1 (signed) [INTEGER]s. Negative ASN.1
+      [INTEGER]s are rejected with a parse error. *)
 
   val bit_string_flags : (int * 'a) list -> 'a list t
   (** [bit_string_flags xs] is ASN.1 [BIT STRING], represented as a collection
@@ -377,13 +385,13 @@ val codec : encoding -> 'a t -> 'a codec
     @raise Ambiguous_syntax if [asn] contains [CHOICE] constructs over
     sub-syntaxes with the same tags. *)
 
-val encode : 'a codec -> 'a -> Cstruct.t
+val encode : 'a codec -> 'a -> string
 (** [encode codec x] is the encoding of [x], using [codec]. *)
 
-val encode_into : 'a codec -> 'a -> (int * (Cstruct.t -> unit))
+val encode_into : 'a codec -> 'a -> (int * (bytes -> unit))
 (** [encode_into codec x] is the pair [(n, f)], where [n] is the length of [x]
     encoded with [codec], and [f] is a function that will write the encoded [x]
-    to the first [n] bytes of the provided {!Cstruct.t}. *)
+    to the first [n] bytes of the provided [bytes]. *)
 
 type error = [ `Parse of string ]
 (** Parse errors. *)
@@ -391,7 +399,7 @@ type error = [ `Parse of string ]
 val pp_error : Format.formatter -> error -> unit
 (** [pp_error ppf err] pretty-prints [err] on [ppf]. *)
 
-val decode : 'a codec -> Cstruct.t -> ('a * Cstruct.t, error) result
+val decode : 'a codec -> string -> ('a * string, error) result
 (** [decode codec cs] is the pair [(x, cs')], where [x] is the result of
     decoding the prefix of [cs] with [codec] and [cs'] are the trailing bytes,
     or an {!error}. *)

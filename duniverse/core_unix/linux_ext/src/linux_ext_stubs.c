@@ -43,6 +43,8 @@
 #define Bytes_val String_val
 #endif
 
+
+
 extern int core_unix_close_durably(int fd);
 extern struct in_addr core_unix_get_in_addr_for_interface(value v_interface);
 extern struct ifreq core_build_ifaddr_request(const char *interface);
@@ -90,6 +92,7 @@ CAMLprim value core_linux_sysinfo(value __unused v_unit)
 /**/
 
 static int linux_tcpopt_bool[] = { TCP_CORK, TCP_QUICKACK };
+static int linux_tcpopt_string[] = { TCP_CONGESTION };
 
 enum option_type {
   TYPE_BOOL = 0,
@@ -99,11 +102,20 @@ enum option_type {
   TYPE_UNIX_ERROR = 4
 };
 
-extern value unix_getsockopt_aux(
+#include <caml/version.h>
+#if OCAML_VERSION_MAJOR < 5
+#define caml_unix_getsockopt_aux unix_getsockopt_aux
+#define caml_unix_setsockopt_aux unix_setsockopt_aux
+#endif
+
+/* unix_getsockopt_aux and unix_setsockopt_aux come from C stubs distributed
+   with the OCaml compiler.  At the time of writing they live in
+   otherlibs/unix/sockopt.c. */
+extern value caml_unix_getsockopt_aux(
   char *name,
   enum option_type ty, int level, int option,
   value v_socket);
-extern value unix_setsockopt_aux(
+extern value caml_unix_setsockopt_aux(
   char *name,
   enum option_type ty, int level, int option,
   value v_socket, value v_status);
@@ -112,7 +124,7 @@ CAMLprim value core_linux_gettcpopt_bool_stub(value v_socket, value v_option)
 {
   int option = linux_tcpopt_bool[Int_val(v_option)];
   return
-    unix_getsockopt_aux("getsockopt", TYPE_BOOL, SOL_TCP, option, v_socket);
+    caml_unix_getsockopt_aux("getsockopt", TYPE_BOOL, SOL_TCP, option, v_socket);
 }
 
 CAMLprim value
@@ -120,8 +132,85 @@ core_linux_settcpopt_bool_stub(value v_socket, value v_option, value v_status)
 {
   int option = linux_tcpopt_bool[Int_val(v_option)];
   return
-    unix_setsockopt_aux(
+    caml_unix_setsockopt_aux(
       "setsockopt", TYPE_BOOL, SOL_TCP, option, v_socket, v_status);
+}
+
+CAMLprim value core_linux_gettcpopt_string_stub(value v_socket, value v_optname)
+{
+  CAMLparam2(v_socket, v_optname);
+
+  int optname = linux_tcpopt_string[Int_val(v_optname)];
+
+  /* There are so few sockopts that take string buffers as values that I'm scared of
+     trying to write generic code to handle them right now. It's not obvious that they
+     will have the same semantics as to where they place their null bytes or what the
+     maximum option length will be.
+
+     Python, for example, has a generic implementation, but it leads to slightly strange
+     behaviours like this:
+
+     >>> a.getsockopt(socket.SOL_TCP, socket.TCP_CONGESTION, 100)
+     b'cubic\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+
+     For now, we just handle each option individually, and cite the relevant docs for how
+     they should be treated. */
+
+  switch (optname) {
+    case TCP_CONGESTION:
+      {
+        /* man 7 tcp says: optlen specifies the amount of space available in the buffer
+           pointed to by optval, which should be at least 16 bytes (TCP_CA_NAME_MAX). On
+           return, the buffer pointed to by optval is set to a null-terminated string
+           containing the name of the congestion-control algorithm for this socket, and
+           optlen is set to the minimum of its original value and TCP_CA_NAME_MAX. */
+
+        const unsigned int TCP_CA_NAME_MAX = 16;
+        char optval[TCP_CA_NAME_MAX];
+        socklen_t optlen = sizeof(optval);
+
+        if (getsockopt(Int_val(v_socket), SOL_TCP, optname, optval, &optlen) == -1)
+          uerror("getsockopt", Nothing);
+
+        if (optlen > TCP_CA_NAME_MAX || strnlen(optval, optlen) == TCP_CA_NAME_MAX)
+          caml_failwith("core_linux_gettcpopt_string_stub: result too long");
+
+        /* There must be a null byte, and so caml_copy_string is fine. */
+        CAMLreturn(caml_copy_string(optval));
+      }
+
+    default:
+      caml_failwith("core_linux_gettcpopt_string_stub: unimplemented option");
+  }
+}
+
+CAMLprim value
+core_linux_settcpopt_string_stub(value v_socket, value v_optname, value v_optval)
+{
+  CAMLparam3(v_socket, v_optname, v_optval);
+
+  int optname = linux_tcpopt_string[Int_val(v_optname)];
+
+  /* Similarly to gettcpopt_string, we handle each option individually. */
+  switch (optname) {
+    case TCP_CONGESTION:
+      {
+        /* man 7 tcp says: optlen specifies the length of the congestion-control algorithm
+           name contained in the buffer pointed to by optval; this length need not include
+           any terminating null byte. */
+
+        const char *optval = String_val(v_optval);
+        socklen_t optlen = strlen(optval);
+
+        if (setsockopt(Int_val(v_socket), SOL_TCP, optname, optval, optlen) == -1)
+          uerror("setsockopt", Nothing);
+
+        CAMLreturn(Val_unit);
+      }
+
+    default:
+      caml_failwith("core_linux_settcpopt_string_stub: unimplemented option");
+  }
 }
 
 /**/
@@ -255,39 +344,38 @@ CAMLprim value core_linux_pr_get_name(value __unused v_unit)
   return caml_copy_string(buf);
 }
 
-CAMLprim value core_linux_setpriority(value v_priority)
+CAMLprim value core_linux_setpriority(value v_tid, value v_priority)
 {
-  int tid;
-
+  CAMLparam2(v_tid, v_priority);
   assert(!Is_block(v_priority));
 
-  tid = syscall(SYS_gettid);
-  if (setpriority(PRIO_PROCESS, tid, Long_val(v_priority)) == -1)
+  if (setpriority(PRIO_PROCESS, Long_val(v_tid), Long_val(v_priority)) == -1)
     uerror("setpriority", Nothing);
 
-  return Val_unit;
+  CAMLreturn(Val_unit);
 }
 
-CAMLprim value core_linux_getpriority(value v_unit)
+CAMLprim value core_linux_getpriority(value v_tid)
 {
-  int tid;
-  int old_errno;
-  int priority;
+  CAMLparam1(v_tid);
 
-  assert(v_unit == Val_unit);
+  int old_errno = 0;
+  int this_errno = 0;
+  int priority = 0;
 
-  tid = syscall(SYS_gettid);
-
+  /* As [man getpriority] states, since getpriority() can legitimately return the value
+    -1, it is necessary to clear errno prior to the call, then check it afterwards to
+    determine if [priority == -1] is an error or legitimate value. */
   old_errno = errno;
   errno = 0;
-  priority = getpriority(PRIO_PROCESS, tid);
-  if (errno != 0) {
-    errno = old_errno;
-    uerror("getpriority", Nothing);
-  }
+  priority = getpriority(PRIO_PROCESS, Long_val(v_tid));
+  this_errno = errno;
   errno = old_errno;
 
-  return Val_long(priority);
+  if (this_errno != 0)
+    uerror("getpriority", Nothing);
+
+  CAMLreturn(Val_long(priority));
 }
 
 CAMLprim value core_linux_get_terminal_size(value vfd)
@@ -798,6 +886,6 @@ CAMLprim value core_linux_setxattr(value v_path, value v_name, value v_value, va
 
 #else
 
-typedef int avoid_empty_translation_unit_compilation_error;
+void avoid_empty_translation_unit_compilation_error_in_core_unix_linux_ext(void) {}
 
 #endif /* JSC_LINUX_EXT */

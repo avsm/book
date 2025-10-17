@@ -118,6 +118,16 @@ include Ctypes_types.TYPE
  with type 'a typ = 'a Ctypes_static.typ
   and type ('a, 's) field := ('a, 's) field
 
+(** {3 Qualified types} *)
+
+val const : 'a typ -> 'a typ
+(** [const t] const-qualifies the type [t].  At present the only
+    effect is that the type is marked 'const' in generated code. *)
+
+val volatile : 'a typ -> 'a typ
+(** [volatile t] volatile-qualifies the type [t].  At present the only
+    effect is that the type is marked 'volatile' in generated code. *)
+
 (** {3 Operations on types} *)
 
 val sizeof : 'a typ -> int
@@ -276,8 +286,9 @@ sig
       [n] between [0] and [(CArray.length a - 1)] is not performed. *)
 
   val of_string : string -> char t
-  (** [of_string s] builds an array of the same length as [s], and writes
-      the elements of [s] to the corresponding elements of the array. *)
+  (** [of_string s] builds an array of the same length as [s] plus one, and writes
+      the elements of [s] to the corresponding elements of the array with the
+      null character '\0' as a last element. *)
 
   val of_list : 'a typ -> 'a list -> 'a t
   (** [of_list t l] builds an array of type [t] of the same length as [l], and
@@ -291,6 +302,11 @@ sig
   val iter : ('a -> unit) -> 'a t -> unit
   (** [iter f a] is analogous to [Array.iter f a]: it applies [f] in turn to
       all the elements of [a]. *)
+
+  val iteri : (int -> 'a -> unit) -> 'a t -> unit
+  (** [iter f a] is analogous to [Array.iteri f a]: it applies [f] in turn to
+      all the elements of [a] but the function is applied to the index of the 
+      element as first argument, and the element itself as second argument *)
 
   val map : 'b typ -> ('a -> 'b) -> 'a t -> 'b t
   (** [map t f a] is analogous to [Array.map f a]: it creates a new array with

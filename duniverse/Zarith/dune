@@ -1,7 +1,7 @@
 (env
  (dev
   (flags
-   (:standard -w -6))))
+   (:standard -w -6-32-39))))
 
 (library
  (name zarith)
@@ -24,7 +24,7 @@
 
 (rule
  (target Makefile)
- (deps configure config.guess gmp.env)
+ (deps configure gmp.env)
  (action
   (with-stdout-to
    configure.out

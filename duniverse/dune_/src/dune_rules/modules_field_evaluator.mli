@@ -4,12 +4,12 @@
 open Import
 
 module Virtual : sig
-  type t = { virtual_modules : Ordered_set_lang.t }
+  type t = { virtual_modules : Ordered_set_lang.Unexpanded.t }
 end
 
 module Implementation : sig
   type t =
-    { existing_virtual_modules : Module_name.Set.t
+    { existing_virtual_modules : Module_name.Path.Set.t
     ; allow_new_public_modules : bool
     }
 end
@@ -19,10 +19,13 @@ type kind =
   | Implementation of Implementation.t
   | Exe_or_normal_lib
 
-val eval :
-     modules:Module.Source.t Module_name.Map.t
-  -> buildable:Dune_file.Buildable.t
-  -> private_modules:Ordered_set_lang.t
+val eval
+  :  expander:Expander.t
+  -> modules:Module.Source.t Module_trie.t
+  -> stanza_loc:Loc.t
+  -> private_modules:Ordered_set_lang.Unexpanded.t
   -> kind:kind
   -> src_dir:Path.Build.t
-  -> Module.Name_map.t
+  -> version:Dune_lang.Syntax.Version.t
+  -> Stanza_common.Modules_settings.t
+  -> ((Loc.t * Module.Source.t) Module_trie.t * Module.t Module_trie.t) Memo.t

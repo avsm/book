@@ -10,6 +10,7 @@
 
 let value    = Positions.value
 let unknown  = Positions.unknown_pos
+open Attribute
 open Syntax
 open GroundSort
 
@@ -71,11 +72,33 @@ let mangle_po (po : parameter option) =
   | Some p ->
       Parameters.print false p
 
+let mangle_inst (pos : instantiation) =
+  Misc.separated_list_to_string mangle_po "," pos
+
 let mangle ((nt, pos) : label) : nonterminal =
   if pos = [] then nt else
-    Printf.sprintf "%s(%s)"
-      nt
-      (Misc.separated_list_to_string mangle_po "," pos)
+    Printf.sprintf "%s(%s)" nt (mangle_inst pos)
+
+(* -------------------------------------------------------------------------- *)
+
+(* As a general policy, the attributes associated with a branch (that is, a
+   production) are not affected when this production is specialized; they are
+   just transmitted to every specialized copy. *)
+
+(* As an exception to this general policy, the [@name] attribute (if there is
+   one) is specialized, in the hope of maintaining the property that no two
+   productions have the same name. The name is transformed as follows: to the
+   original name, we append the instantiation, where each actual parameter
+   is preceded with an underscore character. *)
+
+let normalize_mangle_po po =
+  Misc.normalize (mangle_po po)
+
+let subst_name_attribute inst (name : string) : string =
+  name ^ Misc.preceded_list_to_string normalize_mangle_po "_" inst
+
+let subst_attributes inst (attrs : attributes) : attributes =
+  transform_attribute "name" (subst_name_attribute inst) attrs
 
 (* -------------------------------------------------------------------------- *)
 
@@ -95,7 +118,7 @@ let subst_symbol env sym : parameter =
     (* [x] is not a formal parameter. It is a toplevel symbol. *)
     ParameterVar sym
 
-let apply (param : parameter) (params : parameter list) : parameter =
+let apply (param : parameter) (params : parameters) : parameter =
   match param with
   | ParameterVar sym ->
       assert (params <> []);
@@ -295,7 +318,7 @@ let rec recognize (param : parameter) : parameter =
          expanded away, so [sym] cannot be an uninstantiated parameter
          of the current rule. It must be a nonterminal symbol. We can
          therefore look up its sort in the toplevel environment [sorts]. *)
-      let inst, residuals =
+      let (inst : instantiation), (residuals : parameters) =
         match mode with
         | ExpandAll ->
             (* Expansion of all parameters. *)
@@ -319,7 +342,7 @@ let rec recognize (param : parameter) : parameter =
             in
             inst, residuals
       in
-      let label = (x, inst) in
+      let label : label = (x, inst) in
       enqueue label;
       let sym = mangle label in
       Parameters.app (unknown sym) residuals
@@ -328,6 +351,12 @@ let rec recognize (param : parameter) : parameter =
 
 (* The following functions take arguments in the source namespace and produce
    results in the target namespace. *)
+
+(* The environment [env] alone is normally sufficient to determine the
+   substitution that must be performed. However, [subst_attributes]
+   requires the instantiation [inst] in order to transform [@name]
+   attributes. [inst] contains roughly slightly more information than
+   [env], as it retains the order of the formal parameters. *)
 
 let subst_parameter env param =
   (* [param] must have sort [star], in an appropriate sort environment. *)
@@ -340,11 +369,14 @@ let subst_producer env (id, param, attrs) =
 let subst_producers env producers =
   List.map (subst_producer env) producers
 
-let subst_branch env branch =
-  { branch with pr_producers = subst_producers env branch.pr_producers }
+let subst_branch inst env branch =
+  { branch with
+    pb_producers = subst_producers env branch.pb_producers;
+    pb_attributes = subst_attributes inst branch.pb_attributes;
+  }
 
-let subst_branches env branches =
-  List.map (subst_branch env) branches
+let subst_branches inst env branches =
+  List.map (subst_branch inst env) branches
 
 (* -------------------------------------------------------------------------- *)
 
@@ -362,31 +394,28 @@ let freshen : string -> string =
    returns an environment [env] that can be used to perform specialization and
    a list of residual formal parameters (those that are not specialized). *)
 
-let instantiation_env formals inst : env * symbol list =
+let instantiation_env (formals : symbols) (inst : instantiation) : env * symbols =
   assert (List.length formals = List.length inst);
-  let env, residuals =
-    List.fold_right2 (fun formal po (env, residuals) ->
-      let param, residuals =
-        match po with
-        | Some param ->
-            (* This formal parameter is instantiated. *)
-            param, residuals
-        | None ->
-            (* This formal parameter is not instantiated. *)
-            (* We would like to map it to itself. *)
-            (* However, we must in principle be a bit careful: if a toplevel
-               symbol by the same name as [formal] appears free in the codomain
-               of the environment that we are building, then we will run intro
-               trouble. We avoid this problem by systematically renaming every
-               formal parameter to a fresh unlikely name. *)
-            let formal = freshen formal in
-            ParameterVar (unknown formal),
-            formal :: residuals
-      in
-      Env.add formal param env, residuals
-    ) formals inst (Env.empty, [])
-  in
-  env, residuals
+  List.fold_right2 (fun formal po (env, residuals) ->
+    let param, residuals =
+      match po with
+      | Some param ->
+          (* This formal parameter is instantiated. *)
+          param, residuals
+      | None ->
+          (* This formal parameter is not instantiated. *)
+          (* We would like to map it to itself. *)
+          (* However, we must in principle be a bit careful: if a toplevel
+             symbol by the same name as [formal] appears free in the codomain
+             of the environment that we are building, then we will run intro
+             trouble. We avoid this problem by systematically renaming every
+             formal parameter to a fresh unlikely name. *)
+          let formal = freshen formal in
+          ParameterVar (unknown formal),
+          formal :: residuals
+    in
+    Env.add formal param env, residuals
+  ) formals inst (Env.empty, [])
 
 (* -------------------------------------------------------------------------- *)
 
@@ -415,7 +444,7 @@ let visit label =
       rule with
       pr_nt = mangle label;
       pr_parameters = residuals;
-      pr_branches = subst_branches env rule.pr_branches;
+      pr_branches = subst_branches inst env rule.pr_branches;
       pr_attributes =
         (if formals = [] then [] else global_attributes nt) @
         rule.pr_attributes

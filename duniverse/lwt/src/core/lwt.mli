@@ -231,9 +231,9 @@ let () =
     pending), or containers for one value (if resolved).
 
     The interesting function is {!Lwt_main.run}. It's a wrapper around
-    {{: http://man7.org/linux/man-pages/man2/select.2.html} [select(2)]},
-    {{: http://man7.org/linux/man-pages/man7/epoll.7.html} [epoll(7)]},
-    {{: https://www.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2}
+    {{: https://man7.org/linux/man-pages/man2/select.2.html} [select(2)]},
+    {{: https://man7.org/linux/man-pages/man7/epoll.7.html} [epoll(7)]},
+    {{: https://man.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2}
     [kqueue(2)]}, or whatever asynchronous I/O API your system provides. On
     browsers, the work of {!Lwt_main.run} is done by the surrounding JavaScript
     engine, so you don't call {!Lwt_main.run} from inside your program. But the
@@ -458,10 +458,14 @@ val fail : exn -> _ t
     captures a backtrace, while [Lwt.fail] does not. If you call [raise exn] in
     a callback that is expected by Lwt to return a promise, Lwt will
     automatically wrap [exn] in a rejected promise, but the backtrace will have
-    been recorded by the OCaml runtime. Use [Lwt.fail] only when you
-    specifically want to create a rejected promise, to pass to another function,
-    or store in a data structure. *)
+    been recorded by the OCaml runtime.
 
+    For example, [bind]'s second argument is a callback which returns a promise.
+    And so it is recommended to use [raise] in the body of that callback. This
+    applies to the aliases of [bind] as well: [( >>= )] and [( let* )].
+
+    Use [Lwt.fail] only when you specifically want to create a rejected promise,
+    to pass to another function, or store in a data structure. *)
 
 
 (** {3 Callbacks} *)
@@ -574,6 +578,16 @@ let () =
 
 (** {2:2_Rejection Rejection} *)
 
+external reraise : exn -> 'a = "%reraise"
+(** [reraise e] raises the exception [e]. Unlike [raise e], [reraise e]
+    preserves the existing exception backtrace and even adds a "Re-raised at"
+    entry with the call location.
+
+    This function is intended to be used in the exception handlers of
+    [Lwt.catch] and [Lwt.try_bind].
+
+    It is also used in the code produced by Lwt_ppx. *)
+
 val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
 (** [Lwt.catch f h] applies [f ()], which returns a promise, and then makes it
     so that [h] (“handler”) will run when that promise is {{!t} {e rejected}}.
@@ -582,10 +596,10 @@ val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
 let () =
   Lwt_main.run begin
     Lwt.catch
-      (fun () -> Lwt.fail Exit)
+      (fun () -> raise Exit)
       (function
       | Exit -> Lwt_io.printl "Got Stdlib.Exit"
-      | exn -> Lwt.fail exn)
+      | exn -> Lwt.reraise exn)
   end
 
 (* ocamlfind opt -linkpkg -thread -package lwt.unix code.ml && ./a.out *)
@@ -598,7 +612,7 @@ let () =
 {[
 let () =
   Lwt_main.run begin
-    try%lwt Lwt.fail Exit
+    try%lwt raise Exit
     with Exit -> Lwt_io.printl "Got Stdlb.Exit"
   end
 
@@ -606,7 +620,7 @@ let () =
 ]}
 
     A particular advantage of the PPX syntax is that it is not necessary to
-    artificially insert a catch-all [exn -> Lwt.fail exn] case. Like in the core
+    artificially insert a catch-all [exn -> reraise exn] case. Like in the core
     language's [try] expression, the catch-all case is implied in [try%lwt].
 
     [Lwt.catch] is a counterpart to {!Lwt.bind} – {!Lwt.bind} is for
@@ -640,33 +654,7 @@ let () =
     - If [h exn] instead returns the promise [p_2], [p_3] is effectively made
       into a reference to [p_2]. This means [p_3] and [p_2] have the same state,
       undergo the same state changes, and performing any operation one is
-      equivalent to performing it on the other.
-
-    {b (2)} {b Warning}: it may be tempting to write this code, which differs
-    from the second example above only in that [try] is used instead of
-    [try%lwt]:
-
-{[
-let () =
-  Lwt_main.run begin
-    try Lwt.fail Exit
-    with Exit -> Lwt_io.printl "Got Stdlib.Exit"
-  end
-
-(* ocamlfind opt -linkpkg -thread -package lwt.unix code.ml && ./a.out *)
-]}
-
-    This does {e not} handle the exception and does not print the message.
-    Instead, it terminates the program with an unhandled [Stdlib.Exit].
-
-    This is because the call to {!Lwt.fail} creates a rejected promise. The
-    promise is still an ordinary OCaml value, though, and not a {e raised}
-    exception. So, [try] considers that code to have succeeded, and doesn't run
-    the handler. When that rejected promise reaches {!Lwt_main.run},
-    it is {!Lwt_main.run} that raises the exception.
-
-    Basically, the rule is: if the code inside [try] evaluates to a promise
-    (has type [_ Lwt.t]), replace [try] by [try%lwt]. *)
+      equivalent to performing it on the other. *)
 
 val finalize : (unit -> 'a t) -> (unit -> unit t) -> 'a t
 (** [Lwt.finalize f c] applies [f ()], which returns a promise, and then makes
@@ -754,6 +742,23 @@ val try_bind : (unit -> 'a t) -> ('a -> 'b t) -> (exn -> 'b t) -> 'b t
     - The cleanup functions [g] and [h] are passed the value [f ()] was
       fulfilled with, and, respectively, the exception [f ()] was rejected
       with.
+
+    As with {!Lwt.catch}, it is recommended to use {!reraise} in the catch-all
+    case of the exception handler:
+
+{[
+let () =
+  Lwt_main.run begin
+    Lwt.try_bind
+      (fun () -> raise Exit)
+      (fun () -> Lwt_io.printl "Got Success")
+      (function
+      | Exit -> Lwt_io.printl "Got Stdlib.Exit"
+      | exn -> Lwt.reraise exn)
+  end
+
+(* ocamlfind opt -linkpkg -thread -package lwt.unix code.ml && ./a.out *)
+]}
 
     The rest is a detailed description of the promises involved.
 
@@ -892,7 +897,7 @@ val async_exception_hook : (exn -> unit) ref
     top level of the program:
 
 {[
-let () = Lwt.async (fun () -> Lwt.fail Exit)
+let () = Lwt.async (fun () -> raise Exit)
 
 (* ocamlfind opt -linkpkg -package lwt code.ml && ./a.out *)
 ]}
@@ -1595,18 +1600,7 @@ Lwt.fail (Stdlib.Invalid_argument s)
 
 (** {3 Result type} *)
 
-type nonrec +'a result = ('a, exn) result
-(** Representation of the content of a resolved promise of type
-    ['a ]{!Lwt.t}.
-
-    This type is effectively
-
-{[
-type +'a Lwt.result =
-  | Ok of 'a
-  | Error of exn
-]}
-
+(**
     A resolved promise of type ['a ]{!Lwt.t} is either fulfilled with a value of
     type ['a], or rejected with an exception.
 
@@ -1614,18 +1608,10 @@ type +'a Lwt.result =
     fulfilled corresponds to [Ok of 'a], and rejected corresponds to
     [Error of exn].
 
-    It's important to note that this type constructor, [Lwt.result], is
-    different from [Stdlib.result]. It is a specialization of [Stdlib.result] so
-    that the [Error] constructor always carries [exn].
-
     For Lwt programming with [result] where the [Error] constructor can carry
-    arbitrary error types, see module {!Lwt_result}.
+    arbitrary error types, see module {!Lwt_result}. *)
 
-    The naming conflict between [Lwt.result] and [Stdlib.result] is an
-    unfortunate historical accident. [Stdlib.result] did not exist when
-    [Lwt.result] was created. *)
-
-val of_result : 'a result -> 'a t
+val of_result : ('a, exn) result -> 'a t
 (** [Lwt.of_result r] converts an r to a resolved promise.
 
     - If [r] is [Ok v], [Lwt.of_result r] is [Lwt.return v], i.e. a promise
@@ -1633,7 +1619,7 @@ val of_result : 'a result -> 'a t
     - If [r] is [Error exn], [Lwt.of_result r] is [Lwt.fail exn], i.e. a promise
       rejected with [exn]. *)
 
-val wakeup_later_result : 'a u -> 'a result -> unit
+val wakeup_later_result : 'a u -> ('a, exn) result -> unit
 (** [Lwt.wakeup_later_result r result] resolves the pending promise [p]
     associated to resolver [r], according to [result]:
 
@@ -1797,41 +1783,10 @@ val wakeup_exn : _ u -> exn -> unit
 (** [Lwt.wakeup_exn r exn] is like {!Lwt.wakeup_later_exn}[ r exn], but has
     the same problems as {!Lwt.wakeup}. *)
 
-val wakeup_result : 'a u -> 'a result -> unit
+val wakeup_result : 'a u -> ('a, exn) result -> unit
 (** [Lwt.wakeup_result r result] is like {!Lwt.wakeup_later_result}[ r result],
     but has the same problems as {!Lwt.wakeup}. *)
 
-
-
-(** {3 Helpers for resolving} *)
-
-val make_value : 'a -> 'a result
-  [@@ocaml.deprecated
-    " Use Ok (from Stdlib) instead."]
-(** [Lwt.make_value v] is equivalent to
-    {{: https://ocaml.org/api/Stdlib.html#TYPEresult}
-    [Ok v]}.
-
-    @deprecated Use [Ok] instead *)
-
-val make_error : exn -> _ result
-  [@@ocaml.deprecated
-    " Use Error (from Stdlib) instead."]
-(** [Lwt.make_error exn] is equivalent to
-    {{: https://ocaml.org/api/Stdlib.html#TYPEresult}
-    [Error exn]}.
-
-    @deprecated Use [Error] (from Stdlib) instead. *)
-
-val waiter_of_wakener : 'a u -> 'a t
-  [@@ocaml.deprecated
-" This function should be avoided, because it makes subtyping of resolvers
- unsound. See
-  https://github.com/ocsigen/lwt/issues/458"]
-(** [Lwt.waiter_of_wakener r] evaluates to the promise associated with resolver
-    [r].
-
-    @deprecated Keep the reference to the promise instead. *)
 
 
 
@@ -2044,6 +1999,49 @@ val ignore_result : _ t -> unit
       resolved, completing any associated side effects along the way. In fact,
       the function that does {e that} is ordinary {!Lwt.bind}. *)
 
+(** {4 Runtime exception filters}
+
+    Depending on the kind of programs that you write, you may need to treat
+    exceptions thrown by the OCaml runtime (namely [Out_of_memory] and
+    [Stack_overflow]) differently than all the other exceptions. This is because
+    (a) these exceptions are not reproducible (in that they are thrown at
+    different points of your program depending on the machine that your program
+    runs on) and (b) recovering from these errors may be impossible.
+
+    The helpers below allow you to change the way that Lwt handles the two OCaml
+    runtime exceptions [Out_of_memory] and [Stack_overflow]. *)
+
+module Exception_filter: sig
+
+  (** An [Exception_filter.t] is a value which indicates to Lwt what exceptions to
+      catch and what exceptions to let bubble up all the way out of the main loop
+      immediately. *)
+  type t
+
+  (** [handle_all] is the default filter. With it the all the exceptions
+      (including [Out_of_memory] and [Stack_overflow]) can be handled: caught
+      and transformed into rejected promises. *)
+  val handle_all : t
+
+  (** [handle_all_except_runtime] is a filter which lets the OCaml runtime
+      exceptions ([Out_of_memory] and [Stack_overflow]) go through all the Lwt
+      abstractions and bubble all the way out of the call to [Lwt_main.run].
+
+      Note that if you set this handler, then the runtime exceptions leave the
+      Lwt internal state inconsistent. For this reason, you will not be able to
+      call [Lwt_main.run] again after such an exception has escaped
+      [Lwt_main.run]. *)
+  val handle_all_except_runtime : t
+
+  (** [set] sets the given exception filter globally. You should call this
+      function at most once during the start of your program, before the
+      first call to [Lwt_main.run]. *)
+  val set : t -> unit
+
+  (**/**)
+  val run : exn -> bool
+
+end
 
 
 (**/**)

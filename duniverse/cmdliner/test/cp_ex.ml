@@ -45,7 +45,7 @@ let cmd =
     [ `S Manpage.s_bugs;
       `P "Email them to <bugs@example.org>."; ]
   in
-  let info = Cmd.info "cp" ~version:"v1.1.1" ~doc ~man ~man_xrefs in
+  let info = Cmd.info "cp" ~version:"v1.3.0+dune" ~doc ~man ~man_xrefs in
   Cmd.v info Term.(ret (const cp $ verbose $ recurse $ force $ srcs $ dest))
 
 

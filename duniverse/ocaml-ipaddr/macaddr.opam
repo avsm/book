@@ -1,4 +1,4 @@
-version: "5.3.1"
+version: "5.6.1"
 opam-version: "2.0"
 maintainer: "anil@recoil.org"
 authors: ["David Sheets" "Anil Madhavapeddy" "Hugo Heuzard"]
@@ -31,3 +31,4 @@ Features:
  * `Macaddr` is a `Map.OrderedType`
  * All types have sexplib serializers/deserializers optionally via the `Macaddr_sexp` library.
  """
+x-maintenance-intent: [ "(latest)" ]

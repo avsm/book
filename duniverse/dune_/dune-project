@@ -1,16 +1,22 @@
-(lang dune 3.3)
-;          ^^^
+(lang dune 3.20)
+;          ^^^^
 ; When changing the version, don't forget to regenerate *.opam files
 ; by running [dune build].
 (name dune)
-(version 3.4.1)
+(version 3.20.2)
 
 (generate_opam_files true)
+
+(accept_alternative_dune_file_name)
 
 (strict_package_deps false)
 
 ; Reserved for Dune itself. This is to help with the bootstrap
 (using dune-bootstrap-info 0.1)
+
+;; This is required to allow Dune to access OxCaml variable. It
+;; won't affect the behaviour of Dune if OxCaml is not available.
+(using oxcaml 0.1)
 
 (license MIT)
 (maintainers "Jane Street Group, LLC <opensource@janestreet.com>")
@@ -29,23 +35,23 @@
   (ocaml-lsp-server (< 1.3.0))
   (dune-configurator (< 2.3.0))
   (odoc (< 2.0.1))
-  (dune-release (< 1.3.0))
+  (dune-release (< 2.0.0))
   (js_of_ocaml-compiler (< 3.6.0))
   (jbuilder (= transition)))
  (description "
-dune is a build system that was designed to simplify the release of
+Dune is a build system that was designed to simplify the release of
 Jane Street packages. It reads metadata from \"dune\" files following a
 very simple s-expression syntax.
 
-dune is fast, has very low-overhead, and supports parallel builds on
+Dune is fast, has very low-overhead, and supports parallel builds on
 all platforms. It has no system dependencies; all you need to build
 dune or packages using dune is OCaml. You don't need make or bash
 as long as the packages themselves don't use bash explicitly.
 
-dune supports multi-package development by simply dropping multiple
-repositories into the same directory.
+Dune is composable; supporting multi-package development by simply
+dropping multiple repositories into the same directory.
 
-It also supports multi-context builds, such as building against
+Dune also supports multi-context builds, such as building against
 several opam roots/switches simultaneously. This helps maintaining
 packages across several versions of OCaml and gives cross-compilation
 for free.
@@ -53,7 +59,7 @@ for free.
 
 (package
  (name dune-build-info)
- (synopsis "Embed build informations inside executable")
+ (synopsis "Embed build information inside executable")
  (depends
   (ocaml (>= 4.08)))
  (description "\
@@ -88,7 +94,7 @@ no stability guarantee.
  (name dune-configurator)
  (synopsis "Helper library for gathering system configuration")
  (depends
-  (ocaml (>= 4.04.0))
+  (ocaml (>= 4.08.0))
   base-unix
   (csexp (>= 1.5.0)))
  (description "\
@@ -111,6 +117,7 @@ Among other things, dune-configurator allows one to:
   (ppx_expect :with-test)
   (stdune (= :version))
   (dune-private-libs (= :version))
+  (dune-rpc (= :version))
   base-unix)
  (description "\
 
@@ -127,6 +134,8 @@ execution of the action.
  (synopsis "Glob string matching language supported by dune")
  (depends
   (stdune (= :version))
+  dyn
+  ordering
   (dune-private-libs (= :version)))
  (description "\
 dune-glob provides a parser and interpreter for globs as \
@@ -134,14 +143,14 @@ understood by dune language."))
 
 (package
  (name dune-site)
- (synopsis "Embed locations informations inside executable and libraries")
+ (synopsis "Embed locations information inside executable and libraries")
  (depends (dune-private-libs (= :version)))
  (description ""))
 
 (package
  (name dune-rpc)
  (synopsis "Communicate with dune using rpc")
- (depends csexp ordering dyn xdg (stdune (= :version)) (pp (>= 1.1.0)))
+ (depends ocamlc-loc csexp ordering dyn xdg (stdune (= :version)) (pp (>= 1.1.0)))
  (description "Library to connect and control a running dune instance"))
 
 (package
@@ -149,9 +158,8 @@ understood by dune language."))
  (synopsis "Communicate with dune using rpc and Lwt")
  (depends
   (dune-rpc (= :version))
-  (result (>= 1.5))
   (csexp (>= 1.5.0))
-  (lwt (>= 5.3.0))
+  (lwt (>= 5.6.0))
   base-unix)
  (description "Specialization of dune-rpc to Lwt"))
 
@@ -186,24 +194,17 @@ understood by dune language."))
   base-unix
   (dyn (= :version))
   (ordering (= :version))
-  (pp (>= 1.1.0))
+  (pp (>= 2.0.0))
   (csexp (>= 1.5.0)))
  (description "This library offers no backwards compatibility guarantees. Use at your own risk."))
 
 (package
  (name ocamlc-loc)
  (synopsis "Parse ocaml compiler output into structured form")
+ (conflicts
+  (ocaml-lsp-server (< 1.15.0)))
  (depends
   (ocaml (>= 4.08.0))
-  (dyn (= :version)))
- (description "This library offers no backwards compatibility guarantees. Use at your own risk."))
-
-(package
- (name fiber)
- (synopsis "Structured concurrency library")
- (depends
-  (ocaml (>= 4.08.0))
-  (stdune (= :version))
   (dyn (= :version)))
  (description "This library offers no backwards compatibility guarantees. Use at your own risk."))
 

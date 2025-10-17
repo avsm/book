@@ -1,11 +1,11 @@
-let def  x = function None -> x | Some y -> y
-let def' x = fun y -> if y = x then None else Some y
+let src = Logs.Src.create "x509.decoding" ~doc:"X509 decoding"
+module Log = (val Logs.src_log src : Logs.LOG)
 
 let ( let* ) = Result.bind
 
 let decode codec cs =
   let* a, cs = Asn.decode codec cs in
-  if Cstruct.length cs = 0 then Ok a else Error (`Parse "Leftover")
+  if String.length cs = 0 then Ok a else Error (`Parse "Leftover")
 
 let projections_of encoding asn =
   let c = Asn.codec encoding asn in (decode c, Asn.encode c)
@@ -53,3 +53,22 @@ let generalized_time_no_frac_s =
                 parse_error "generalized time has fractional seconds")
            (fun y -> Ptime.truncate ~frac_s:0 y)
            generalized_time)
+
+(* serial number, as defined in RFC 5280 4.1.2.2: must be > 0 and not be longer
+   than 20 octets. we accept 0.
+   we also accept < 0, but when encoding mandate >= 0!
+*)
+let serial =
+  Asn.S.(map
+           (fun x ->
+              if String.length x > 20 then parse_error "serial exceeds 20 octets";
+              if String.length x > 0 && String.get_uint8 x 0 > 0x7F then
+                Log.warn (fun m -> m "negative serial number %a" Ohex.pp x);
+              x)
+           (fun y ->
+              if String.length y > 20 then failwith "serial exceeds 20 octets";
+              if String.length y > 0 && String.get_uint8 y 0 > 0x7F then
+                "\x00" ^ y
+              else
+                y)
+           integer)

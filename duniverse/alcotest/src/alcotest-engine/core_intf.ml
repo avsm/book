@@ -46,6 +46,8 @@ module V1_types = struct
         used for filtering which tests to run on the CLI. *)
 
     type 'a with_options =
+      ?stdout:Formatters.stdout ->
+      ?stderr:Formatters.stderr ->
       ?and_exit:bool ->
       ?verbose:bool ->
       ?compact:bool ->
@@ -57,10 +59,15 @@ module V1_types = struct
       ?log_dir:string ->
       ?bail:bool ->
       ?record_backtrace:bool ->
+      ?ci:Config.ci ->
       'a
     (** The various options taken by the tests runners {!run} and
         {!run_with_args}:
 
+        - [stdout] (default to [Fmt.stdout]). The formatter used to print on the
+          standard output.
+        - [stderr] (default to [Fmt.stderr]). The formatter used to print ont
+          the standard error output.
         - [and_exit] (default [true]). Once the tests have completed, exit with
           return code [0] if all tests passed, otherwise [1].
         - [verbose] (default [false]). Display the test std.out and std.err
@@ -80,13 +87,15 @@ module V1_types = struct
         - [bail] (default [false]). If true, stop running the tests after the
           first failure.
         - [record_backtrace] (default [true]). Enable backtrace recording before
-          beginning testing. *)
+          beginning testing.
+        - [ci] (default auto-detected). Whether to enable specific logging for a
+          CI system. *)
 
     val run : (string -> unit test list -> return) with_options
     val run_with_args : (string -> 'a -> 'a test list -> return) with_options
   end
 
-  module type MAKER = functor (P : Platform.MAKER) (M : Monad.S) -> sig
+  module type MAKER = functor (_ : Platform.MAKER) (M : Monad.S) -> sig
     include S with type return = unit M.t
 
     val list_tests : 'a test list -> return
@@ -112,5 +121,7 @@ module type Core = sig
         [('a -> unit M.t)] within a given concurrency monad [M.t]. The [run] and
         [run_with_args] functions must be scheduled in a global event loop.
         Intended for use by the {!Alcotest_lwt} and {!Alcotest_async} backends. *)
+
+    exception Skip
   end
 end

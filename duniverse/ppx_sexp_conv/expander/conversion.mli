@@ -19,7 +19,12 @@ val to_expression : t -> loc:location -> expression
 (** Convert [t] to an expression that is a syntactic value, i.e. a constant, identifier,
     or lambda expression that does no "work", can can be preallocated, and works in the
     context of a [let rec]. *)
-val to_value_expression : t -> loc:location -> expression
+val to_value_expression
+  :  t
+  -> loc:location
+  -> rec_flag:rec_flag
+  -> values_being_defined:Set.M(String).t
+  -> expression
 
 (** Apply [t] to an argument. *)
 val apply
@@ -30,6 +35,9 @@ val apply
 
 (** Wrap [t] in [let]-bindings. *)
 val bind : t -> value_binding list -> t
+
+(** Wrap [t] in [let open .. in] with type declarations. *)
+val bind_types : t -> type_declaration list -> t
 
 module Apply_all : sig
   type t =

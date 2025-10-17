@@ -1,11 +1,11 @@
-version: "0.10.6"
+version: "2.0.2"
 opam-version: "2.0"
 synopsis: "Elliptic Curve Cryptography with primitives taken from Fiat"
 description: """
 An implementation of key exchange (ECDH) and digital signature (ECDSA/EdDSA)
 algorithms using code from Fiat (<https://github.com/mit-plv/fiat-crypto>).
 
-The curves P224 (SECP224R1), P256 (SECP256R1), P384 (SECP384R1),
+The curves P256 (SECP256R1), P384 (SECP384R1),
 P521 (SECP521R1), and 25519 (X25519, Ed25519) are implemented by this package.
 """
 maintainer: "Hannes Mehnert <hannes@mehnert.org>"
@@ -14,6 +14,7 @@ authors: [
   "Nathan Rebours <nathan.p.rebours@gmail.com>"
   "Clément Pascutto <clement@tarides.com>"
   "Etienne Millon <me@emillon.org>"
+  "Virgile Robles <virgile.robles@protonmail.ch>"
 # and from the fiat-crypto AUTHORS file
   "Andres Erbsen <andreser@mit.edu>"
   "Google Inc."
@@ -26,26 +27,22 @@ homepage: "https://github.com/mirage/mirage-crypto"
 doc: "https://mirage.github.io/mirage-crypto/doc"
 bug-reports: "https://github.com/mirage/mirage-crypto/issues"
 depends: [
-  "conf-pkg-config" {build}
-  "dune" {>= "2.6"}
-  "ocaml" {>= "4.08.0"}
-  "cstruct" {>= "6.0.0"}
+  "dune" {>= "2.7"}
+  "ocaml" {>= "4.13.0"}
   "dune-configurator"
   "eqaf" {>= "0.7"}
-  "mirage-crypto" {=version}
   "mirage-crypto-rng" {=version}
-  "mirage-crypto-pk" {with-test & =version}
-  "hex" {with-test}
-  "alcotest" {with-test}
-  "asn1-combinators" {with-test & >= "0.2.5"}
+  "digestif" {>= "1.2.0"}
+  "alcotest" {with-test & >= "0.8.1"}
   "ppx_deriving_yojson" {with-test}
   "ppx_deriving" {with-test}
   "yojson" {with-test & >= "1.6.0"}
+  "asn1-combinators" {with-test & >= "0.3.1"}
+  "ohex" {with-test & >= "0.2.0"}
+  "ounit2" {with-test}
 ]
-depopts: ["ocaml-freestanding"]
 conflicts: [
-  "mirage-xen" {< "6.0.0"}
-  "ocaml-freestanding" {< "0.4.1"}
+  "ocaml-freestanding"
 ]
 build: [
   ["dune" "subst"] {dev}
@@ -54,3 +51,4 @@ build: [
 ]
 dev-repo: "git+https://github.com/mirage/mirage-crypto.git"
 tags: ["org:mirage"]
+x-maintenance-intent: [ "(latest)" ]

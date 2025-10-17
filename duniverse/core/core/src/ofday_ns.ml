@@ -2,9 +2,7 @@ open! Import
 module Span = Span_ns
 
 type underlying = Int63.t
-
-type t = Span.t (* since wall-clock midnight *)
-[@@deriving bin_io, compare, hash, typerep]
+type t = Span.t (* since wall-clock midnight *) [@@deriving typerep]
 
 include (Span : Robustly_comparable.S with type t := t)
 
@@ -64,13 +62,13 @@ module Stable = struct
   module Zoned = struct end
 
   module V1 = struct
+    type t = Span.Stable.V2.t [@@deriving bin_io, compare, equal, hash, stable_witness]
+
     include (
       Span.Stable.V2 :
         Comparator.S
-      with type t = t
+      with type t := t
        and type comparator_witness = Span.Stable.V2.comparator_witness)
-
-    type nonrec t = t [@@deriving compare, bin_io]
 
     let to_string_with_unit =
       let ( / ) = Int63.( / ) in
@@ -187,7 +185,14 @@ module Stable = struct
          | exn -> of_sexp_error_exn exn sexp)
     ;;
 
-    let t_sexp_grammar = String.t_sexp_grammar
+    let t_sexp_grammar =
+      let open Sexplib in
+      Sexp_grammar.tag
+        (Sexp_grammar.coerce String.t_sexp_grammar : t Sexp_grammar.t)
+        ~key:Sexp_grammar.type_name_tag
+        ~value:(Atom "Core.Time_ns.Ofday.t")
+    ;;
+
     let to_string (t : t) = to_string_with_unit t ~unit:`Nanosecond
     let sexp_of_t (t : t) = Sexp.Atom (to_string t)
     let to_int63 t = Span_ns.Stable.V2.to_int63 t
@@ -202,7 +207,7 @@ include (
    and type comparator_witness = Stable.V1.comparator_witness)
 
 include Identifiable.Make_using_comparator (struct
-    type t = Stable.V1.t [@@deriving bin_io, compare, sexp]
+    type t = Stable.V1.t [@@deriving bin_io, compare, hash, sexp]
 
     include (
       Stable.V1 :
@@ -213,8 +218,6 @@ include Identifiable.Make_using_comparator (struct
     include (Stable.V1 : Stringable.S with type t := t)
 
     let module_name = "Core.Time_ns.Ofday"
-    let hash = Span.hash
-    let hash_fold_t = Span.hash_fold_t
   end)
 
 let t_sexp_grammar = Sexplib.Sexp_grammar.coerce Stable.V1.t_sexp_grammar

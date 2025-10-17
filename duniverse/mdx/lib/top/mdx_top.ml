@@ -20,14 +20,14 @@ open Compat_top
 type directive = Directory of string | Load of string
 
 let redirect ~f =
-  let stdout_backup = Unix.dup Unix.stdout in
-  let stderr_backup = Unix.dup Unix.stderr in
-  let filename = Filename.temp_file "ocaml-mdx" "stdout" in
+  let stdout_backup = Unix.dup ~cloexec:true Unix.stdout in
+  let stderr_backup = Unix.dup ~cloexec:true Unix.stderr in
+  let filename = Filename.temp_file "ocaml-mdx-" ".stdout" in
   let fd_out =
-    Unix.openfile filename Unix.[ O_WRONLY; O_CREAT; O_TRUNC ] 0o600
+    Unix.openfile filename Unix.[ O_WRONLY; O_CREAT; O_TRUNC; O_CLOEXEC ] 0o600
   in
-  Unix.dup2 fd_out Unix.stdout;
-  Unix.dup2 fd_out Unix.stderr;
+  Unix.dup2 ~cloexec:false fd_out Unix.stdout;
+  Unix.dup2 ~cloexec:false fd_out Unix.stderr;
   let ic = open_in filename in
   let read_up_to = ref 0 in
   let capture buf =
@@ -43,16 +43,14 @@ let redirect ~f =
     ~finally:(fun () ->
       close_in_noerr ic;
       Unix.close fd_out;
-      Unix.dup2 stdout_backup Unix.stdout;
-      Unix.dup2 stderr_backup Unix.stderr;
+      Unix.dup2 ~cloexec:false stdout_backup Unix.stdout;
+      Unix.dup2 ~cloexec:false stderr_backup Unix.stderr;
       Unix.close stdout_backup;
       Unix.close stderr_backup;
       Sys.remove filename)
 
 module Lexbuf = struct
   open Lexing
-
-  type t = { contents : string; lexbuf : lexbuf }
 
   let toplevel_fname = "//toplevel//"
 
@@ -98,12 +96,7 @@ module Phrase = struct
   open Lexing
   open Parsetree
 
-  type t = {
-    doc : Lexbuf.t;
-    startpos : position;
-    endpos : position;
-    parsed : (toplevel_phrase, exn) Result.result;
-  }
+  type t = { startpos : position; parsed : (toplevel_phrase, exn) result }
 
   let result t = t.parsed
   let start t = t.startpos
@@ -119,8 +112,8 @@ module Phrase = struct
     let lexbuf = Lexing.from_string contents in
     let startpos = lexbuf.Lexing.lex_start_p in
     let parsed =
-      match Parse.toplevel_phrase lexbuf with
-      | phrase -> Result.Ok phrase
+      match !Toploop.parse_toplevel_phrase lexbuf with
+      | phrase -> Ok phrase
       | exception exn ->
           let exn =
             match error_of_exn exn with
@@ -129,31 +122,25 @@ module Phrase = struct
                 Location.Error (Lexbuf.shift_location_error startpos error)
           in
           (if lexbuf.Lexing.lex_last_action <> Lexbuf.semisemi_action then
-           let rec aux () =
-             match Lexer.token lexbuf with
-             | Parser.SEMISEMI | Parser.EOF -> ()
-             | exception Lexer.Error (_, _) -> ()
-             | _ -> aux ()
-           in
-           aux ());
+             let rec aux () =
+               match Lexer.token lexbuf with
+               | Parser.SEMISEMI | Parser.EOF -> ()
+               | exception Lexer.Error (_, _) -> ()
+               | _ -> aux ()
+             in
+             aux ());
           Error exn
     in
-    let endpos = lexbuf.Lexing.lex_curr_p in
-    { doc = { lexbuf; contents }; startpos; endpos; parsed }
-
-  let ends_by_semi_semi c =
-    match List.rev c with
-    | h :: _ ->
-        let len = String.length h in
-        len > 2 && h.[len - 1] = ';' && h.[len - 2] = ';'
-    | _ -> false
+    { startpos; parsed }
 
   let parse lines =
-    let lines = if ends_by_semi_semi lines then lines else lines @ [ ";;" ] in
+    let lines =
+      if Mdx.Block.ends_by_semi_semi lines then lines else lines @ [ ";;" ]
+    in
     match parse lines with exception End_of_file -> None | t -> Some t
 
   (** Returns the name of the toplevel directive or [None] if the given phrase
-    is not a directive *)
+      is not a directive *)
   let top_directive_name (toplevel_phrase : Parsetree.toplevel_phrase) =
     match toplevel_phrase with
     | Ptop_def _ -> None
@@ -161,7 +148,7 @@ module Phrase = struct
 
   let is_findlib_directive =
     let findlib_directive = function
-      | "require" | "use" | "camlp4o" | "camlp4r" | "thread" -> true
+      | "require" | "camlp4o" | "camlp4r" | "thread" -> true
       | _ -> false
     in
     function
@@ -178,7 +165,6 @@ module Rewrite = struct
   type t = {
     typ : Longident.t;
     witness : Longident.t;
-    runner : Longident.t;
     rewrite : Location.t -> expression -> expression;
     mutable preload : string option;
   }
@@ -196,7 +182,7 @@ module Rewrite = struct
             (Exp.ident (Location.mkloc runner loc))
             [ (Asttypes.Nolabel, e) ])
     in
-    { typ; runner; rewrite; witness; preload }
+    { typ; rewrite; witness; preload }
 
   (* Rewrite Async.Defered.t expressions to
      Async.Thread_safe.block_on_async_exn (fun () -> <expr>). *)
@@ -210,15 +196,12 @@ module Rewrite = struct
     let preload = None in
     let open Ast_helper in
     let rewrite loc e =
-      let punit =
-        Pat.construct (Location.mkloc (Longident.Lident "()") loc) None
-      in
       with_default_loc loc @@ fun () ->
       Exp.apply
         (Exp.ident (Location.mkloc runner loc))
-        [ (Asttypes.Nolabel, Exp.fun_ Asttypes.Nolabel None punit e) ]
+        [ (Asttypes.Nolabel, Compat_top.mk_fun loc e) ]
     in
-    { typ; runner; rewrite; witness; preload }
+    { typ; rewrite; witness; preload }
 
   let normalize_type_path env path =
     match Env.find_type path env with
@@ -227,11 +210,6 @@ module Rewrite = struct
         | Types.Tconstr (path, _, _) -> path
         | _ -> path)
     | _ -> path
-
-  let rec get_id_in_path = function
-    | Path.Pident id -> id
-    | Path.Pdot (p, _) -> get_id_in_path p
-    | Path.Papply (_, p) -> get_id_in_path p
 
   let is_persistent_value env longident =
     let is_persistent_path p = Ident.persistent (get_id_in_path p) in
@@ -290,6 +268,12 @@ module Rewrite = struct
           in
           Btype.backtrack snap;
           Ptop_def pstr)
+    | Ptop_dir pdir ->
+        let pdir_name = pdir.pdir_name in
+        let pdir_name =
+          { pdir_name with txt = Compat_top.redirect_directive pdir_name.txt }
+        in
+        Ptop_dir { pdir with pdir_name }
     | _ -> phrase
 
   (** [top_directive require "pkg"] builds the AST for [#require "pkg"] *)
@@ -305,7 +289,7 @@ module Rewrite = struct
   let preload verbose ppf =
     let require pkg =
       let p = top_directive_require pkg in
-      let _ = Toploop.execute_phrase verbose ppf p in
+      let _ = execute_phrase verbose ppf p in
       ()
     in
     match active_rewriters () with
@@ -337,7 +321,7 @@ type t = {
 let toplevel_exec_phrase t ppf p =
   match Phrase.result p with
   | Error exn -> raise exn
-  | Ok phrase ->
+  | Ok phrase -> (
       Warnings.reset_fatal ();
       let mapper = Lexbuf.position_mapper (Phrase.start p) in
       let phrase =
@@ -356,7 +340,10 @@ let toplevel_exec_phrase t ppf p =
       if !Clflags.dump_parsetree then Printast.top_phrase ppf phrase;
       if !Clflags.dump_source then Pprintast.top_phrase ppf phrase;
       Env.reset_cache_toplevel ();
-      Toploop.execute_phrase t.verbose ppf phrase
+      try execute_phrase t.verbose ppf phrase
+      with Exit_with_status code ->
+        Format.fprintf ppf "[%d]@." code;
+        false)
 
 type var_and_value = V : 'a ref * 'a -> var_and_value
 
@@ -385,13 +372,9 @@ let rtrim l = List.rev (ltrim (List.rev l))
 let trim l = ltrim (rtrim (List.map trim_line l))
 
 let cut_into_sentences l =
-  let ends_by_semi_semi h =
-    let len = String.length h in
-    len > 2 && h.[len - 1] = ';' && h.[len - 2] = ';'
-  in
   let rec aux acc sentence = function
     | [] -> List.rev (List.rev sentence :: acc)
-    | h :: t when ends_by_semi_semi h ->
+    | h :: t when Mdx.Block.ends_by_semi_semi [ h ] ->
         aux (List.rev (h :: sentence) :: acc) [] t
     | h :: t -> aux acc (h :: sentence) t
   in
@@ -456,7 +439,7 @@ let eval t cmd =
               | None -> [])
             phrases
           |> List.concat
-          |> fun x -> if !errors then Result.Error x else Result.Ok x))
+          |> fun x -> if !errors then Error x else Ok x))
 
 let add_directive ~name ~doc kind =
   let directive =
@@ -710,9 +693,9 @@ let rec save_summary acc s =
     ~module_:(fun summary id ~present ->
       match present with true -> add summary id | false -> acc)
     ~open_:(fun summary x ->
-      match x with
-      | Pident id -> add summary id
-      | Pdot _ | Papply _ -> default_case summary)
+      match get_id_opt x with
+      | Some id -> add summary id
+      | None -> default_case summary)
     ~class_:add ~functor_arg:add ~extension:add
     ~empty:(fun () -> acc)
     ~constraints:default_case ~cltype:default_case ~modtype:default_case

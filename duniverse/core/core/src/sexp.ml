@@ -5,8 +5,9 @@ module Stable = struct
     type t = Base.Sexp.t =
       | Atom of string
       | List of t list
-    [@@deriving bin_io, compare, hash]
+    [@@deriving bin_io, compare, equal, hash, stable_witness]
 
+    let t_sexp_grammar = Sexplib.Sexp.t_sexp_grammar
     let t_of_sexp = Sexplib.Sexp.t_of_sexp
     let sexp_of_t = Sexplib.Sexp.sexp_of_t
   end

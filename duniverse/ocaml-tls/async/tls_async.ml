@@ -10,14 +10,14 @@ let try_to_close t =
 ;;
 
 let pipe t =
-  let b_reader = Cstruct.create 0x8000 in
+  let b_reader = Bytes.create 0x8000 in
   let rec f_reader writer =
     match%bind Session.read t b_reader with
     | Ok 0 ->
       Pipe.close writer;
       return ()
     | Ok len ->
-      let%bind () = Pipe.write writer (Cstruct.to_string (Cstruct.sub b_reader 0 len)) in
+      let%bind () = Pipe.write writer (Stdlib.Bytes.sub_string b_reader 0 len) in
       f_reader writer
     | Error read_error ->
       Log.Global.error_s [%sexp (read_error : Error.t)];
@@ -28,7 +28,7 @@ let pipe t =
     let%bind pipe_read = Pipe.read reader in
     match pipe_read with
     | `Ok s ->
-      (match%bind Session.writev t [ Cstruct.of_string s ] with
+      (match%bind Session.writev t [ s ] with
        | Ok () -> f_writer reader
        | Error (_ : Error.t) -> try_to_close t)
     | `Eof -> try_to_close t
@@ -65,6 +65,25 @@ let upgrade_client_reader_writer_to_tls ?host config rw =
   upgrade_connection tls_session rw |> Deferred.ok
 ;;
 
+type 'a io_handler = Reader.t -> Writer.t -> 'a Deferred.t
+type 'a tls_handler = Session.t -> 'a io_handler
+
+let upgrade_server_handler ~config handle_client outer_reader outer_writer =
+  let%bind ( tls_session
+           , inner_reader
+           , inner_writer
+           , `Tls_closed_and_flushed_downstream inner_cafd )
+    =
+     upgrade_server_reader_writer_to_tls config (outer_reader, outer_writer)
+     |> Deferred.Or_error.ok_exn
+  in
+  Monitor.protect
+    (fun () -> handle_client tls_session inner_reader inner_writer)
+    ~finally:(fun () ->
+      Deferred.all_unit
+        [ Reader.close inner_reader; Writer.close inner_writer; inner_cafd ])
+;;
+
 let listen
       ?buffer_age_limit
       ?max_connections
@@ -76,21 +95,6 @@ let listen
       where_to_listen
       handle_client
   =
-  let tls_handler sock outer_reader outer_writer =
-    let%bind ( tls_session
-             , inner_reader
-             , inner_writer
-             , `Tls_closed_and_flushed_downstream inner_cafd )
-      =
-      upgrade_server_reader_writer_to_tls config (outer_reader, outer_writer)
-      |> Deferred.Or_error.ok_exn
-    in
-    Monitor.protect
-      (fun () -> handle_client sock tls_session inner_reader inner_writer)
-      ~finally:(fun () ->
-        Deferred.all_unit
-          [ Reader.close inner_reader; Writer.close inner_writer; inner_cafd ])
-  in
   Tcp.Server.create
     ?buffer_age_limit
     ?max_connections
@@ -99,7 +103,23 @@ let listen
     ?socket
     ~on_handler_error
     where_to_listen
-    tls_handler
+    (fun sock ->
+      upgrade_server_handler ~config (handle_client sock))
+;;
+
+let upgrade_client_to_tls config ~host outer_reader outer_writer =
+  let open Deferred.Or_error.Let_syntax in
+  let%bind ( tls_session
+           , inner_reader
+           , inner_writer
+           , `Tls_closed_and_flushed_downstream inner_cafd )
+    =
+    upgrade_client_reader_writer_to_tls ?host config (outer_reader, outer_writer)
+  in
+  don't_wait_for
+    (let%bind.Deferred () = inner_cafd in
+     Deferred.all_unit [ Writer.close outer_writer; Reader.close outer_reader ]);
+  return (tls_session, inner_reader, inner_writer)
 ;;
 
 let connect
@@ -127,18 +147,8 @@ let connect
       where_to_connect
     |> Deferred.ok
   in
-  let%bind ( tls_session
-           , inner_reader
-           , inner_writer
-           , `Tls_closed_and_flushed_downstream inner_cafd )
-    =
-    upgrade_client_reader_writer_to_tls ?host config (outer_reader, outer_writer)
-  in
-  don't_wait_for
-    (let%bind.Deferred () = inner_cafd in
-     Deferred.all_unit [ Writer.close outer_writer; Reader.close outer_reader ]);
-  return (tls_session, inner_reader, inner_writer)
+  upgrade_client_to_tls ~host config outer_reader outer_writer
 ;;
 
 (* initialized RNG early to maximise available entropy. *)
-let () = Mirage_crypto_rng_async.initialize (module Mirage_crypto_rng.Fortuna)
+let () = Mirage_crypto_rng_unix.use_default ()

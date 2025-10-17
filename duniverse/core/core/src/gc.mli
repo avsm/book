@@ -107,6 +107,10 @@ module Stat : sig
 
   include Comparable.S_plain with type t := t
 
+  (** [add first second] computes [first+second] pointwise across each field; this helps
+      in aggregating statistics across processes. *)
+  val add : t -> t -> t
+
   (** [diff after before] computes [after-before] pointwise across each field; this helps
       show the effect (on all stats) of some code block. *)
   val diff : t -> t -> t
@@ -123,6 +127,8 @@ type stat = Stat.t
 *)
 
 module Control : sig
+  [%%if ocaml_version < (5, 0, 0)]
+
   type t =
     { mutable minor_heap_size : int
     (** The size (in words) of the minor heap.  Changing this parameter will
@@ -227,6 +233,106 @@ module Control : sig
     }
   [@@deriving sexp_of, fields]
 
+  [%%else]
+
+  type t =
+    { minor_heap_size : int
+    (** The size (in words) of the minor heap.  Changing this parameter will
+        trigger a minor collection.
+        Default: 262144 words / 1MB (32bit) / 2MB (64bit).
+    *)
+    ; major_heap_increment : int
+    (** How much to add to the major heap when increasing it. If this
+        number is less than or equal to 1000, it is a percentage of
+        the current heap size (i.e. setting it to 100 will double the heap
+        size at each increase). If it is more than 1000, it is a fixed
+        number of words that will be added to the heap.
+        Default: 15%.
+    *)
+    ; space_overhead : int
+    (** The major GC speed is computed from this parameter.
+        This is the memory that will be "wasted" because the GC does not
+        immediately collect unreachable blocks.  It is expressed as a
+        percentage of the memory used for live data.
+        The GC will work more (use more CPU time and collect
+        blocks more eagerly) if [space_overhead] is smaller.
+        Default: 80. *)
+    ; verbose : int
+    (** This value controls the GC messages on standard error output.
+        It is a sum of some of the following flags, to print messages
+        on the corresponding events:
+        - [0x001] Start of major GC cycle.
+        - [0x002] Minor collection and major GC slice.
+        - [0x004] Growing and shrinking of the heap.
+        - [0x008] Resizing of stacks and memory manager tables.
+        - [0x010] Heap compaction.
+        - [0x020] Change of GC parameters.
+        - [0x040] Computation of major GC slice size.
+        - [0x080] Calling of finalisation functions.
+        - [0x100] Bytecode executable search at start-up.
+        - [0x200] Computation of compaction triggering condition.
+          Default: 0. *)
+    ; max_overhead : int
+    (** Heap compaction is triggered when the estimated amount
+        of "wasted" memory is more than [max_overhead] percent of the
+        amount of live data.  If [max_overhead] is set to 0, heap
+        compaction is triggered at the end of each major GC cycle
+        (this setting is intended for testing purposes only).
+        If [max_overhead >= 1000000], compaction is never triggered.
+        Default: 500. *)
+    ; stack_limit : int
+    (** The maximum size of the stack (in words).  This is only
+        relevant to the byte-code runtime, as the native code runtime
+        uses the operating system's stack.
+        Default: 1048576 words / 4MB (32bit) / 8MB (64bit). *)
+    ; allocation_policy : int
+    (** The policy used for allocating in the heap.  Possible
+        values are 0 and 1.  0 is the next-fit policy, which is
+        quite fast but can result in fragmentation.  1 is the
+        first-fit policy, which can be slower in some cases but
+        can be better for programs with fragmentation problems.
+        Default: 0. *)
+    ; window_size : int
+    (** The size of the window used by the major GC for smoothing
+        out variations in its workload. This is an integer between
+        1 and 50.
+        Default: 1. @since 4.03.0 *)
+    ; custom_major_ratio : int
+    (** Target ratio of floating garbage to major heap size for
+        out-of-heap memory held by custom values located in the major
+        heap. The GC speed is adjusted to try to use this much memory
+        for dead values that are not yet collected. Expressed as a
+        percentage of major heap size. The default value keeps the
+        out-of-heap floating garbage about the same size as the
+        in-heap overhead.
+        Note: this only applies to values allocated with
+        [caml_alloc_custom_mem] (e.g. bigarrays).
+        Default: 44.
+        @since 4.08.0 *)
+    ; custom_minor_ratio : int
+    (** Bound on floating garbage for out-of-heap memory held by
+        custom values in the minor heap. A minor GC is triggered when
+        this much memory is held by custom values located in the minor
+        heap. Expressed as a percentage of minor heap size.
+        Note: this only applies to values allocated with
+        [caml_alloc_custom_mem] (e.g. bigarrays).
+        Default: 100.
+        @since 4.08.0 *)
+    ; custom_minor_max_size : int
+    (** Maximum amount of out-of-heap memory for each custom value
+        allocated in the minor heap. When a custom value is allocated
+        on the minor heap and holds more than this many bytes, only
+        this value is counted against [custom_minor_ratio] and the
+        rest is directly counted against [custom_major_ratio].
+        Note: this only applies to values allocated with
+        [caml_alloc_custom_mem] (e.g. bigarrays).
+        Default: 8192 bytes.
+        @since 4.08.0 *)
+    }
+  [@@deriving sexp_of, fields]
+
+  [%%endif]
+
   include Comparable.S_plain with type t := t
 end
 
@@ -241,6 +347,10 @@ type control = Control.t
     [stat] record.  This function examines every heap block to get the
     statistics. *)
 external stat : unit -> stat = "caml_gc_stat"
+
+(** Creating a [Stat.t] can allocate on the minor heap. Return the expected number of
+    words allocated. **)
+val stat_size : unit -> int
 
 (** Same as [stat] except that [live_words], [live_blocks], [free_words],
     [free_blocks], [largest_free], and [fragments] are set to 0.  This
@@ -267,10 +377,15 @@ external major_words : unit -> int = "core_gc_major_words" [@@noalloc]
 external promoted_words : unit -> int = "core_gc_promoted_words" [@@noalloc]
 external minor_collections : unit -> int = "core_gc_minor_collections" [@@noalloc]
 external major_collections : unit -> int = "core_gc_major_collections" [@@noalloc]
+external compactions : unit -> int = "core_gc_compactions" [@@noalloc]
+
+[%%if ocaml_version < (5, 0, 0)]
+
 external heap_words : unit -> int = "core_gc_heap_words" [@@noalloc]
 external heap_chunks : unit -> int = "core_gc_heap_chunks" [@@noalloc]
-external compactions : unit -> int = "core_gc_compactions" [@@noalloc]
 external top_heap_words : unit -> int = "core_gc_top_heap_words" [@@noalloc]
+
+[%%endif]
 
 (** This function returns [major_words () + minor_words ()].  It exists purely for speed
     (one call into C rather than two).  Like [major_words] and [minor_words],
@@ -401,26 +516,12 @@ module For_testing : sig
       This function is only supported since OCaml 4.11. On prior versions, the function
       always returns an empty log. *)
   val measure_and_log_allocation
-    :  (unit -> 'a)
+    :  ((unit -> 'a)[@local])
     -> 'a * Allocation_report.t * Allocation_log.t list
 
   (** [is_zero_alloc f] runs [f ()] and returns [true] if it does not allocate, or [false]
       otherwise. [is_zero_alloc] does not allocate. *)
   val is_zero_alloc : (unit -> _) -> bool
-
-  (** [prepare_heap_to_count_minor_allocation] sets up the heap so that one can
-      subsequently measure minor allocation via:
-
-      {[
-        let minor_words_before = Gc.minor_words () in
-        (* ... do stuff ... *)
-        let minor_words_after = Gc.minor_words () in
-        let minor_words_allocated = minor_words_after - minor_words_before in
-      ]}
-
-      Without calling [prepare_heap_to_count_minor_allocation], the resulting count may be
-      inaccurate. *)
-  val prepare_heap_to_count_minor_allocation : unit -> unit
 end
 
 (** The [Expert] module contains functions that novice users should not use, due to their
@@ -530,21 +631,23 @@ module Stable : sig
     [%%if ocaml_version < (4, 12, 0)]
 
     module V1 : sig
-      type nonrec t = Stat.t [@@deriving bin_io, compare, equal, hash, sexp]
+      type nonrec t = Stat.t
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     module V2 : sig
-      type nonrec t [@@deriving bin_io, compare, equal, hash, sexp]
+      type nonrec t [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     [%%else]
 
     module V1 : sig
-      type nonrec t [@@deriving bin_io, compare, equal, hash, sexp]
+      type nonrec t [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     module V2 : sig
-      type nonrec t = Stat.t [@@deriving bin_io, compare, equal, hash, sexp]
+      type nonrec t = Stat.t
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     [%%endif]
@@ -552,13 +655,14 @@ module Stable : sig
 
   module Allocation_policy : sig
     module V1 : sig
-      type nonrec t = Allocation_policy.t [@@deriving bin_io, compare, equal, hash, sexp]
+      type nonrec t = Allocation_policy.t
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
   end
 
   module Control : sig
     module V1 : sig
-      type nonrec t = Control.t [@@deriving bin_io, compare, equal, sexp]
+      type nonrec t = Control.t [@@deriving bin_io, compare, equal, sexp, stable_witness]
     end
   end
 end

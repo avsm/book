@@ -144,14 +144,15 @@ module Polymorphic_variant = struct
       ppat_variant ~loc label.txt (Some (ppat_tuple ~loc pat_list))
     | Rinherit { ptyp_desc; _ }, [ { ppat_desc; _ } ] ->
       (match ptyp_desc with
-       | Ptyp_constr (id, []) ->
+       | Ptyp_constr (id, _) ->
          (match ppat_desc with
           | Ppat_var var -> ppat_alias ~loc (ppat_type ~loc id) var
           | _ ->
             internal_error
               ~loc
               "cannot bind a #<type> pattern to anything other than a variable")
-       | _ -> unsupported ~loc "inherited polymorphic variant type that is not a type name")
+       | _ ->
+         unsupported ~loc "inherited polymorphic variant type that is not a type name")
     | Rtag (_, true, _ :: _), _ | Rtag (_, false, ([] | _ :: _ :: _)), _ ->
       unsupported ~loc "intersection type"
     | Rtag (_, true, []), _ :: _

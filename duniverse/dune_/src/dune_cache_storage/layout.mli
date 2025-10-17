@@ -6,13 +6,17 @@
    decision in 6 months. *)
 
 open Stdune
+open Import
 
 (** The path to the root directory of the cache. *)
 val root_dir : Path.t
 
 (** Create a few subdirectories in [root_dir]. We expose this function because
-    we don't want to modify the file system when the cache is disabled. *)
-val create_cache_directories : unit -> unit
+    we don't want to modify the file system when the cache is disabled.
+
+    Returns whether creation has succeeded or in the case of error which directory
+    could not be created. *)
+val create_cache_directories : unit -> (unit, Path.t * Unix.error) result
 
 (** This directory stores metadata files, one per each historically executed
     build rule or output-producing action. (While this is a convenient mental
@@ -60,16 +64,10 @@ val temp_dir : Path.t
     of the corresponding function defined here to a suitable current version. *)
 module Versioned : sig
   val metadata_storage_dir : Version.Metadata.t -> Path.t
-
-  val metadata_path :
-    Version.Metadata.t -> rule_or_action_digest:Digest.t -> Path.t
-
+  val metadata_path : Version.Metadata.t -> rule_or_action_digest:Digest.t -> Path.t
   val file_storage_dir : Version.File.t -> Path.t
-
   val file_path : Version.File.t -> file_digest:Digest.t -> Path.t
-
   val value_storage_dir : Version.Value.t -> Path.t
-
   val value_path : Version.Value.t -> value_digest:Digest.t -> Path.t
 
   (** List all metadata entries currently stored in the cache. Note that there

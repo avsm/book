@@ -5,7 +5,7 @@ open! Import
 type ('a, 'b) t = ('a, 'b) Base.Result.t =
   | Ok of 'a
   | Error of 'b
-[@@deriving bin_io, compare, equal, hash, sexp]
+[@@deriving bin_io, compare, equal, globalize, hash, sexp]
 
 include module type of Base.Result with type ('a, 'b) t := ('a, 'b) t (** @inline *)
 
@@ -15,7 +15,8 @@ module Stable : sig
       | Ok of 'ok
       | Error of 'err
 
-    include Stable_module_types.S2 with type ('ok, 'err) t := ('ok, 'err) t
+    include
+      Stable_module_types.With_stable_witness.S2 with type ('ok, 'err) t := ('ok, 'err) t
   end
 
   (** We export the unit test arg rather than instantiate the functor inside result.ml in

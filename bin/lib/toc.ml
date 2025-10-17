@@ -175,7 +175,7 @@ let of_toc book_dir toc =
   in
   let part ~parts ~chapters title chapter_list =
     let part_info = Some { title; number = parts } in
-    Deferred.List.mapi ~f:(fun i f -> chapter part_info (i+chapters) f) chapter_list
+    Deferred.List.mapi ~how:`Sequential ~f:(fun i f -> chapter part_info (i+chapters) f) chapter_list
     >>| fun chapters ->
     { info = part_info; chapters }
   in

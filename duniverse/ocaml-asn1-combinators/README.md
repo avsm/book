@@ -1,6 +1,6 @@
 # asn1-combinators — Embed typed ASN.1 grammars in OCaml
 
-v0.2.6
+v0.3.2
 
 asn1-combinators is a library for expressing ASN.1 in OCaml. Skip the notation
 part of ASN.1, and embed the abstract syntax directly in the language. These

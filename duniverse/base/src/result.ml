@@ -1,7 +1,7 @@
 open! Import
 module Either = Either0
 
-type ('a, 'b) t = ('a, 'b) Caml.result =
+type ('a, 'b) t = ('a, 'b) Stdlib.result =
   | Ok of 'a
   | Error of 'b
 [@@deriving_inline sexp, sexp_grammar, compare, equal, hash]
@@ -47,8 +47,7 @@ let t_of_sexp :
         Sexplib0.Sexp_conv_error.nested_list_invalid_sum error_source__005_ sexp__004_
       | Sexplib0.Sexp.List [] as sexp__004_ ->
         Sexplib0.Sexp_conv_error.empty_list_invalid_sum error_source__005_ sexp__004_
-      | sexp__004_ ->
-        Sexplib0.Sexp_conv_error.unexpected_stag error_source__005_ sexp__004_
+      | sexp__004_ -> Sexplib0.Sexp_conv_error.unexpected_stag error_source__005_ sexp__004_
 ;;
 
 let sexp_of_t :
@@ -67,10 +66,11 @@ let sexp_of_t :
         Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Error"; res0__024_ ]
 ;;
 
-let (t_sexp_grammar :
-       'a Sexplib0.Sexp_grammar.t
-     -> 'b Sexplib0.Sexp_grammar.t
-     -> ('a, 'b) t Sexplib0.Sexp_grammar.t)
+let t_sexp_grammar :
+  'a 'b.
+  'a Sexplib0.Sexp_grammar.t
+  -> 'b Sexplib0.Sexp_grammar.t
+  -> ('a, 'b) t Sexplib0.Sexp_grammar.t
   =
   fun _'a_sexp_grammar _'b_sexp_grammar ->
   { untyped =
@@ -96,7 +96,7 @@ let compare :
   'a 'b. ('a -> 'a -> int) -> ('b -> 'b -> int) -> ('a, 'b) t -> ('a, 'b) t -> int
   =
   fun _cmp__a _cmp__b a__027_ b__028_ ->
-  if Ppx_compare_lib.phys_equal a__027_ b__028_
+  if Stdlib.( == ) a__027_ b__028_
   then 0
   else (
     match a__027_, b__028_ with
@@ -110,7 +110,7 @@ let equal :
   'a 'b. ('a -> 'a -> bool) -> ('b -> 'b -> bool) -> ('a, 'b) t -> ('a, 'b) t -> bool
   =
   fun _cmp__a _cmp__b a__033_ b__034_ ->
-  if Ppx_compare_lib.phys_equal a__033_ b__034_
+  if Stdlib.( == ) a__033_ b__034_
   then true
   else (
     match a__033_, b__034_ with
@@ -142,7 +142,9 @@ let hash_fold_t
 
 [@@@end]
 
-include Monad.Make2 (struct
+let globalize = globalize_result
+
+include Monad.Make2_local (struct
     type nonrec ('a, 'b) t = ('a, 'b) t
 
     let bind x ~f =
@@ -176,7 +178,7 @@ let map_error t ~f =
   | Error x -> Error (f x)
 ;;
 
-module Error = Monad.Make2 (struct
+module Error = Monad.Make2_local (struct
     type nonrec ('a, 'b) t = ('b, 'a) t
 
     let bind x ~f =

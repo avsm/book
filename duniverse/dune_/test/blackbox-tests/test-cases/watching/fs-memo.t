@@ -28,11 +28,11 @@ when necessary.
   > (rule
   >  (alias default)
   >  (deps dep
-  >        (glob_files file-?)
-  >        (glob_files dir/file-?)
-  >        (glob_files dir/subdir/file-?))
+  >   (glob_files file-?)
+  >   (glob_files dir/file-?)
+  >   (glob_files dir/subdir/file-?))
   >  (target result)
-  >  (action (bash "\| echo Executing rule...
+  >  (action (system "\| echo Executing rule...
   >                "\| echo %{deps}       |
   >                "\|   tr ' ' '\n'      |
   >                "\|   xargs -n 1       |
@@ -240,9 +240,9 @@ If we repeat the test, we finally see the failure.
   How about now?
   Failure
   Error: inotify_add_watch(subdir): Permission denied
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   Error: inotify_add_watch(subdir): Permission denied
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   ------------------------------------------
   result = '13' -> '13' -> '13'
   ------------------------------------------
@@ -254,9 +254,9 @@ Same problem in the other direction.
   Failure
   Failure
   Error: inotify_add_watch(subdir): Permission denied
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   Error: inotify_add_watch(subdir): Permission denied
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   ------------------------------------------
   result = '13' -> '13' -> '13'
   ------------------------------------------
@@ -288,12 +288,12 @@ Same problem for files.
   -> required by _build/default/file-1
   -> required by _build/default/result
   -> required by alias default
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   Error: file-1: Permission denied
   -> required by _build/default/file-1
   -> required by _build/default/result
   -> required by alias default
-  Had errors, waiting for filesystem changes...
+  Had 1 error, waiting for filesystem changes...
   ------------------------------------------
   result = '13' -> '13' -> '13'
   ------------------------------------------
@@ -432,22 +432,23 @@ However, deleting [another-dir] isn't handled correctly.
   $ test "rm another-dir/file-7; sleep 0.001; rmdir another-dir"
   ------------------------------------------
   Success, waiting for filesystem changes...
+  Executing rule...
   Success, waiting for filesystem changes...
   ------------------------------------------
-  result = '357' -> '357' -> '357'
+  result = '357' -> '357' -> '35'
   ------------------------------------------
   Updating dir_contents cache for ".": Updated { changed = true }
   Updating dir_contents cache for "another-dir": Updated { changed = true }
-  Updating dir_contents cache for "another-dir": Updated { changed = true }
-  Updating dir_contents cache for "another-dir/file-7": Skipped
+  Updating dir_contents cache for "dir": Updated { changed = true }
+  Updating dir_contents cache for "dir/file-7": Skipped
   Updating file_digest cache for ".": Skipped
   Updating file_digest cache for "another-dir": Skipped
-  Updating file_digest cache for "another-dir": Skipped
-  Updating file_digest cache for "another-dir/file-7": Updated { changed = true }
+  Updating file_digest cache for "dir": Skipped
+  Updating file_digest cache for "dir/file-7": Updated { changed = true }
   Updating path_stat cache for ".": Updated { changed = false }
-  Updating path_stat cache for "another-dir": Updated { changed = false }
   Updating path_stat cache for "another-dir": Updated { changed = true }
-  Updating path_stat cache for "another-dir/file-7": Skipped
+  Updating path_stat cache for "dir": Updated { changed = false }
+  Updating path_stat cache for "dir/file-7": Skipped
 
 If we force a rebuild, Dune belatedly notices that [another-dir/file-7] is now
 unreachable but doesn't complain about the symlink [dir] now being broken. We
@@ -455,12 +456,11 @@ should fix this too.
 
   $ test "echo force > dep"
   ------------------------------------------
-  Executing rule...
   Success, waiting for filesystem changes...
   Executing rule...
   Success, waiting for filesystem changes...
   ------------------------------------------
-  result = '357' -> '35' -> '35'
+  result = '35' -> '35' -> '35'
   ------------------------------------------
   Updating dir_contents cache for "dep": Skipped
   Updating file_digest cache for "dep": Updated { changed = true }

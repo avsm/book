@@ -141,7 +141,7 @@ let help_cmd =
 let main_cmd =
   let doc = "a revision control system" in
   let man = help_secs in
-  let info = Cmd.info "darcs" ~version:"v1.1.1" ~doc ~sdocs ~man in
+  let info = Cmd.info "darcs" ~version:"v1.3.0+dune" ~doc ~sdocs ~man in
   let default = Term.(ret (const (fun _ -> `Help (`Pager, None)) $ copts_t)) in
   Cmd.group info ~default [initialize_cmd; record_cmd; help_cmd]
 

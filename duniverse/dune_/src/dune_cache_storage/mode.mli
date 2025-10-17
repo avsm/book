@@ -24,12 +24,10 @@ type t =
   | Hardlink
   | Copy
 
+val equal : t -> t -> bool
 val all : (string * t) list
-
 val to_string : t -> string
-
 val of_string : string -> (t, string) result
-
 val to_dyn : t -> Dyn.t
 
 (** Right now, this is hardcoded to be [Hardlink]. In future we plan to choose

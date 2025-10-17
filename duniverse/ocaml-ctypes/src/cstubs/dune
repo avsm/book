@@ -4,4 +4,6 @@
  (instrumentation
   (backend bisect_ppx))
  (wrapped false)
- (libraries ctypes str))
+ (libraries
+  (re_export ctypes)
+  str))

@@ -1,4 +1,4 @@
-[![Build status](https://github.com/ocaml-community/cppo/workflows/Build/badge.svg?branch=master)](https://github.com/ocaml-community/cppo/actions?query=workflow:Build)
+[![Build status](https://github.com/ocaml-community/cppo/actions/workflows/build.yml/badge.svg)](https://github.com/ocaml-community/cppo/actions/workflows/build.yml)
 
 Cppo: cpp for OCaml
 ===================
@@ -56,16 +56,22 @@ at the beginning of a line, possibly preceded by some whitespace, and followed
 by a valid directive name or by a number:
 
 ```ocaml
-BLANK* "#" BLANK* ("define"|"undef"
+BLANK* "#" BLANK* ("def"|"enddef"|"define"|"undef"
+                  |"scope"|"endscope"
                   |"if"|"ifdef"|"ifndef"|"else"|"elif"|"endif"
                   |"include"
                   |"warning"|"error"
                   |"ext"|"endext") ...
 ```
 
-Directives can be split into multiple lines by placing a backslash `\` at
+A macro definition that is delimited by `#def` and `#enddef` can span
+several lines. There is no need for protecting line endings with
+backslash characters `\`.
+
+A directive (other than `#def ... #enddef`)
+can be split into multiple lines by placing a backslash character `\` at
 the end of the line to be continued. In general, any special character
-can used as a normal character by preceding it with backslash.
+can be used as a normal character by preceding it with backslash.
 
 
 File inclusion
@@ -113,9 +119,13 @@ An important distinction with cpp is that only previously-defined
 macros are accessible. Defining, undefining or redefining a macro has
 no effect on how previous macros will expand.
 
-Macros can take arguments ("function-like macro" in the cpp
-jargon). Both in the definition (`#define`) and in macro application the
-opening parenthesis must stick to the macro's identifier:
+Macros can take arguments. That is, a macro can be parameterized;
+this is known as a "function-like macro" in `cpp` jargon.
+When a parameterized macro is defined
+and when it is applied,
+the opening parenthesis must stick to the macro's identifier:
+that is, there must be no space in between.
+For example, this text:
 
 ```ocaml
 #define debug(args) if !debugging then Printf.eprintf args else ()
@@ -129,15 +139,22 @@ is expanded into:
 if !debugging then Printf.eprintf "Testing %i" (1 + 1) else ()
 ```
 
-Here is a multiline macro definition. Newlines occurring between
-tokens must be protected by a backslash:
+An ordinary macro, which takes no arguments, can be viewed as
+a parameterized macro that takes zero arguments. However, the
+syntax differs: when there is no argument, no parentheses are
+used; when there is at least one argument, parentheses must be used.
+Here is a summary of the valid syntaxes:
 
 ```ocaml
-#define repeat_until(action,condition) \
-  action; \
-  while not (condition) do \
-    action \
-  done
+#define FOO 42      (* Definition of an ordinary macro *)
+FOO                 (* A use of an ordinary macro *)
+
+#define BAR() 42    (* Invalid! When parentheses are used,
+                       there must be at least one parameter *)
+
+#define BAR(x) 42+x (* Definition of a parameterized macro *)
+BAR(0)              (* A use of this parameterized macro *)
+BAR()               (* Another valid use -- the argument is empty *)
 ```
 
 All user-definable macros are constant. There are however two
@@ -156,6 +173,153 @@ cppo -D 'VERSION 1.0' example.ml
 
 # preprocessing and compiling
 ocamlopt -c -pp "cppo -D 'VERSION 1.0'" example.ml
+```
+
+Multi-line macros and nested macros
+-----------------------------------
+
+A macro definition that begins with `#define` can span several lines.
+In that case, the end of each line must be protected with a backslash
+character, as in this example:
+
+```ocaml
+#define repeat_until(action,condition) \
+  action; \
+  while not (condition) do \
+    action \
+  done
+```
+
+In other words, at the first line ending that is *not* preceded by a `\`
+character, an `#enddefine` token is implicitly generated,
+and the definition ends.
+
+This convention, which is inherited from C, causes two problems. First,
+protecting every line ending with a `\` character is painful. Second, more
+seriously, this convention does not allow macro definitions to be nested.
+Indeed, if one attempts to nest two definitions that begin with `#define`,
+then only one `#enddefine` token is generated; it is generated at the first
+unprotected line ending. So, the beginnings and ends of definitions cannot
+be correctly balanced.
+
+These problems are avoided by using an alternative syntax where the beginning
+and end of a macro definition are explicitly marked by `#def` and `#enddef`.
+Here is an example:
+
+```ocaml
+#def repeat_until(action,condition)
+  action;
+  while not (condition) do
+    action
+  done
+#enddef
+```
+
+With this syntax, a macro can span several lines:
+there is no need to protect line endings with `\` characters.
+Furthermore, this syntax allows macro definitions to be nested:
+inside a macro definition that is delimited by `#def` and `#enddef`,
+both `#def` and `#define` can be used.
+
+Higher-order macros
+-------------------
+
+A parameterized macro can take a parameterized macro as a parameter:
+this is known as a higher-order macro.
+
+To enable this feature, some annotations are required:
+when a macro parameter is itself a parameterized macro,
+it must be annotated with its type.
+
+A macro takes *n* arguments (where *n* can be zero)
+and returns a piece of text.
+So, to describe the type of a macro, it suffices to
+describe the types of its *n* arguments.
+
+Thus, the syntax of types is
+`τ ::= [τ ... τ]`.
+That is, a type is a sequence of *n* types,
+  without separators,
+surrounded with square brackets.
+An ordinary macro,
+which takes zero parameters,
+has type `[]`.
+This is the base type: in other words, it is the type of text.
+For greater readability,
+this type can also be written in the form of a single period, `.`.
+Here are a few examples of types:
+
+```ocaml
+  .       (* An ordinary unparameterized macro: in other words, text    *)
+  []      (* Same as above.                                             *)
+  [.]     (* A parameterized macro that expects one piece of text       *)
+  [..]    (* A parameterized macro that expects two pieces of text      *)
+  [[.].]  (* A parameterized macro
+             whose first parameter is a parameterized macro of type [.]
+             and whose second parameter is a piece of text              *)
+```
+
+In the definition of a parameterized macro `M`,
+each parameter `X` can be annotated with a type
+by writing `X : τ`.
+This is optional: if no annotation is provided,
+the base type `.` is assumed.
+If a parameter `X` is annotated with a type `τ` other than the base type,
+then, when the parameterized macro `M` is applied,
+the actual argument `Y` that is supplied as an instance for `X`
+must be the name of a macro of type `τ`.
+
+This is more easily explained via an example. In the following code,
+
+```ocaml
+#define TWICE(e)          (e + e)
+#define APPLY(F : [.], e) (let x = (e) in F(x))
+let forty_two =
+  APPLY(TWICE,1+2+3+4+5+6)
+```
+
+`TWICE` is a parameterized macro of type `[.]`, and
+`APPLY` is a higher-order macro, whose type is `[[.].]`.
+Thus, the application `APPLY(TWICE, ...)` is valid.
+This code is expanded into:
+
+```ocaml
+let forty_two =
+   (let x = (1+2+3+4+5+6) in (x + x))
+```
+
+Scopes
+------
+When a block of text is delimited by `#scope ... #endscope`,
+all macro definitions (`#define`, `#def ... #enddef`)
+and undefinitions (`#undef`)
+become local:
+they take effect only within this block.
+
+```ocaml
+(* Here, assume that the macro FOO is not defined. *)
+#scope
+#define FOO "FOO is now defined"
+let x = FOO (* FOO expands to "FOO is now defined" *)
+#endscope
+(* Here, the macro FOO is again not defined. *)
+#define FOO 42
+let y = FOO (* FOO expands to 42 *)
+```
+
+Scopes can be nested,
+as illustrated by this example:
+
+```ocaml
+#scope
+  #define HELLO "Hello, "
+  #scope
+    #define MAN "man"
+    let message1 = HELLO ^ MAN
+  #endscope
+  (* Here, MAN is no longer defined, but HELLO still is. *)
+  let message2 = HELLO ^ "world"
+#endscope
 ```
 
 Conditionals
@@ -402,7 +566,7 @@ a valid OCaml identifer with first character.
 
 For example,
 ```ocaml
-#define EVENT(n,ty) external CONCAT(on,CAPITALIZE(n)) : ty = STRINGIFY(n) [@@bs.val] 
+#define EVENT(n,ty) external CONCAT(on,CAPITALIZE(n)) : ty = STRINGIFY(n) [@@bs.val]
 EVENT(exit, unit -> unit)
 ```
 is expanded into:
@@ -477,6 +641,25 @@ and`.mlpack` files.  The following tags are available:
 * `cppo_V(NAME:VERSION)` ≡ `-V NAME:VERSION`
 * `cppo_V_OCAML` ≡ `-V OCAML:VERSION`, where `VERSION`
    is the version of OCaml that ocamlbuild uses.
+
+Balancing delimiters
+--------------------
+
+All delimiters,
+including scope delimiters (`#scope` and `#endscope`),
+delimiters of macro definitions (`#def` and `#enddef`),
+and delimiters of conditional constructs (`#if`, `#endif`, etc.),
+must be used in a well-balanced manner.
+
+This requirement does *not* apply separately to each category of delimiters.
+instead, it applies to all categories of delimiters at once.
+This is a stricter requirement.
+Thus, for example, `#scope` cannot be followed with `#endif`,
+and `#if` cannot be followed with `#endscope`.
+In other words,
+a scope cannot contain a fragment of a conditional construct,
+and a conditional construct cannot contain a fragment of a macro definition.
+
 
 Detailed command-line usage and options
 ---------------------------------------

@@ -12,13 +12,14 @@ Documentation
 -------------
 
 The API is documented 
-[here](https://ocaml.github.io/graphics/graphics/Graphics/index.html)
+[here](https://ocaml.org/p/graphics/latest/doc/Graphics/index.html)
 and as comments in the source file `src/graphics.mli`.
 
-On Unix
--------
+On Linux, macOS, and other Unix systems
+---------------------------------------
 
-On Unix graphics uses the X11 windows system.
+The Graphics library uses the X11 windows system.
+macOS users need to install [XQuartz](https://www.xquartz.org/).
 
 Here are the graphics mode specifications supported by
 `Graphics.open_graph` on the X11 implementation of this library: the
@@ -42,7 +43,7 @@ be omitted, or both. Examples:
 On Windows
 ----------
 
-On Windows graphics uses the native Win32 API.
+On Windows, the Graphics library uses the native Win32 API.
 
 Examples
 --------
@@ -50,6 +51,7 @@ Examples
 The `examples/` directory contains a few examples. You can run them
 with:
 
+- `dune exec examples/sorts.exe`
 - `dune exec examples/graph_example.exe`
 - `dune exec examples/graph_test.exe`
-- `dune exec examples/sorts.exe`
+- `dune exec examples/fonts.exe`

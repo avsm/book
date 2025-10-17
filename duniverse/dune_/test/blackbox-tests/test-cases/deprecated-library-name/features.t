@@ -45,7 +45,7 @@ tests that the "old_public_name" field is evaluated lazily
 
   $ (cd a
   > dune build @install --root .
-  > dune install --prefix $PWD/../_install)
+  > dune install --prefix $PWD/../_install --display short)
   Installing $TESTCASE_ROOT/a/../_install/lib/a/META
   Installing $TESTCASE_ROOT/a/../_install/lib/a/dune-package
 
@@ -53,6 +53,7 @@ tests that the "old_public_name" field is evaluated lazily
 
   $ dune_cmd cat $PWD/_install/lib/a/META
   requires = "b"
+  exports = "b"
 
   $ dune_cmd cat $PWD/_install/lib/a/dune-package | sed "s/(lang dune .*)/(lang dune <version>)/"
   (lang dune <version>)
@@ -68,7 +69,7 @@ deprecated library will be resolved in the installed world only.
 
   $ (cd b
   > dune build @install --root .
-  > dune install --prefix $PWD/../_install 2>&1 | dune_cmd sanitize)
+  > dune install --prefix $PWD/../_install 2>&1 --display short | dune_cmd sanitize)
   Installing $TESTCASE_ROOT/b/../_install/lib/b/META
   Installing $TESTCASE_ROOT/b/../_install/lib/b/b$ext_lib
   Installing $TESTCASE_ROOT/b/../_install/lib/b/b.cma
@@ -95,7 +96,6 @@ that wasn't found:
   1 | (executable (name prog) (libraries a))
                                          ^
   Error: Library "a" not found.
-  -> required by _build/default/c/.prog.eobjs/byte/dune__exe__Prog.cmi
   -> required by _build/default/c/.prog.eobjs/native/dune__exe__Prog.cmx
   -> required by _build/default/c/prog.exe
   [1]
@@ -144,8 +144,10 @@ First the motivating case.
 
   $ dune_cmd cat d/_build/install/default/lib/menhirLib/META
   requires = "menhir.lib"
+  exports = "menhir.lib"
   $ dune_cmd cat d/_build/install/default/lib/menhirSdk/META
   requires = "menhir.sdk"
+  exports = "menhir.sdk"
 
   $ find d/_build/install/default -name 'dune-package' | sort
   d/_build/install/default/lib/dummy/dune-package
@@ -208,6 +210,7 @@ Checks that we can migrate top-level libraries across packages.
 
   $ dune_cmd cat d/_build/install/default/lib/top1/META
   requires = "q.bar"
+  exports = "q.bar"
 
 Check that we can do it when the name of the new library is the same as the
 old public name:
@@ -227,6 +230,7 @@ old public name:
 
   $ dune_cmd cat d/_build/install/default/lib/top2/META
   requires = "q.top2"
+  exports = "q.top2"
 
 We check that there is an error when there is an actual ambiguity:
 
@@ -248,8 +252,8 @@ We check that there is an error when there is an actual ambiguity:
 
   $ (cd d && dune build --root . @all)
   Error: Library top2 is defined twice:
-  - dune:13
   - dune:5
+  - dune:13
   [1]
 
 Another case of ambiguity:
@@ -304,6 +308,7 @@ Qualified, deprecated old_public_name:
   $ dune_cmd cat d/_build/install/default/lib/q/META
   package "foo" (
     requires = "p"
+    exports = "p"
   )
 
   $ find d/_build/install/default -name 'dune-package' | sort
@@ -345,9 +350,11 @@ Two libraries redirecting to the same library:
   $ dune_cmd cat d/_build/install/default/lib/q/META
   package "bar" (
     requires = "p"
+    exports = "p"
   )
   package "foo" (
     requires = "p"
+    exports = "p"
   )
 
   $ find d/_build/install/default -name 'dune-package' | sort

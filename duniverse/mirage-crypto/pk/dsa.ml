@@ -1,18 +1,8 @@
 open Mirage_crypto.Uncommon
-open Sexplib0.Sexp_conv
 
 open Common
 
 type pub = { p : Z.t ; q : Z.t ; gg : Z.t ; y : Z.t }
-
-let sexp_of_pub { p ; q ; gg ; y } =
-  sexp_of_list (sexp_of_pair sexp_of_string sexp_of_z)
-    [ "p", p; "q", q; "gg", gg; "y", y ]
-
-let pub_of_sexp s =
-  match list_of_sexp (pair_of_sexp string_of_sexp z_of_sexp) s with
-  | [ "p", p; "q", q; "gg", gg; "y", y ] -> { p ; q ; gg ; y }
-  | _ -> raise (Of_sexp_error (Failure "expected p, q, gg, and y'", s))
 
 let pub ?(fips = false) ~p ~q ~gg ~y () =
   let* () = guard Z.(one < gg && gg < p) (`Msg "bad generator") in
@@ -31,35 +21,14 @@ let pub ?(fips = false) ~p ~q ~gg ~y () =
   in
   Ok { p ; q ; gg ; y }
 
-let pub_of_sexp s =
-  let p = pub_of_sexp s in
-  match pub ?fips:None ~p:p.p ~q:p.q ~gg:p.gg ~y:p.y () with
-  | Ok p -> p
-  | Error (`Msg m) -> invalid_arg "bad public %s" m
-
 type priv =
   { p : Z.t ; q : Z.t ; gg : Z.t ; x : Z.t ; y : Z.t }
-
-let sexp_of_priv { p ; q ; gg ; x ; y } =
-  sexp_of_list (sexp_of_pair sexp_of_string sexp_of_z)
-    [ "p", p; "q", q; "gg", gg; "x", x; "y", y ]
-
-let priv_of_sexp s =
-  match list_of_sexp (pair_of_sexp string_of_sexp z_of_sexp) s with
-  | [ "p", p; "q", q; "gg", gg; "x", x; "y", y ] -> { p ; q ; gg ; x ; y }
-  | _ -> raise (Of_sexp_error (Failure "expected p, q, gg, x, and y'", s))
 
 let priv ?fips ~p ~q ~gg ~x ~y () =
   let* _ = pub ?fips ~p ~q ~gg ~y () in
   let* () = guard Z.(zero < x && x < q) (`Msg "x not in 1..q-1") in
   let* () = guard Z.(y = powm gg x p) (`Msg "y <> g ^ x mod p") in
   Ok { p ; q ; gg ; x ; y }
-
-let priv_of_sexp s =
-  let p = priv_of_sexp s in
-  match priv ?fips:None ~p:p.p ~q:p.q ~gg:p.gg ~x:p.x ~y:p.y () with
-  | Ok p -> p
-  | Error (`Msg m) -> invalid_arg "bad private %s" m
 
 let pub_of_priv { p; q; gg; y; _ } = { p; q; gg; y }
 
@@ -113,22 +82,22 @@ let generate ?g size =
   { p; q; gg; x; y }
 
 
-module K_gen (H : Mirage_crypto.Hash.S) = struct
+module K_gen (H : Digestif.S) = struct
 
   let drbg : 'a Mirage_crypto_rng.generator =
     let module M = Mirage_crypto_rng.Hmac_drbg (H) in (module M)
 
   let z_gen ~key:{ q; x; _ } z =
-    let repr = Z_extra.to_cstruct_be ~size:(Z.numbits q // 8) in
+    let repr = Z_extra.to_octets_be ~size:(Z.numbits q // 8) in
     let g    = Mirage_crypto_rng.create ~strict:true drbg in
-    Mirage_crypto_rng.reseed ~g Cs.(repr x <+> repr Z.(z mod q));
+    Mirage_crypto_rng.reseed ~g (repr x ^ repr Z.(z mod q));
     Z_extra.gen_r ~g Z.one q
 
-  let generate ~key cs =
-    z_gen ~key (Z_extra.of_cstruct_be ~bits:(Z.numbits key.q) cs)
+  let generate ~key buf =
+    z_gen ~key (Z_extra.of_octets_be ~bits:(Z.numbits key.q) buf)
 end
 
-module K_gen_sha256 = K_gen (Mirage_crypto.Hash.SHA256)
+module K_gen_sha256 = K_gen (Digestif.SHA256)
 
 let sign_z ?(mask = `Yes) ?k:k0 ~key:({ p; q; gg; x; _ } as key) z =
   let k = match k0 with Some k -> k | None -> K_gen_sha256.z_gen ~key z in
@@ -167,16 +136,43 @@ let verify_z ~key:({ p; q; gg; y }: pub ) (r, s) z =
 let sign ?mask ?k ~(key : priv) digest =
   let bits   = Z.numbits key.q in
   let size   = bits // 8 in
-  let (r, s) = sign_z ?mask ?k ~key (Z_extra.of_cstruct_be ~bits digest) in
-  Z_extra.(to_cstruct_be ~size r, to_cstruct_be ~size s)
+  let (r, s) = sign_z ?mask ?k ~key (Z_extra.of_octets_be ~bits digest) in
+  Z_extra.(to_octets_be ~size r, to_octets_be ~size s)
 
 let verify ~(key : pub) (r, s) digest =
-  let z      = Z_extra.of_cstruct_be ~bits:(Z.numbits key.q) digest
-  and (r, s) = Z_extra.(of_cstruct_be r, of_cstruct_be s) in
+  let z      = Z_extra.of_octets_be ~bits:(Z.numbits key.q) digest
+  and (r, s) = Z_extra.(of_octets_be r, of_octets_be s) in
   verify_z ~key (r, s) z
+
+let rec shift_left_inplace buf = function
+  | 0 -> ()
+  | bits when bits mod 8 = 0 ->
+    let off = bits / 8 in
+    let to_blit = Bytes.length buf - off in
+    Bytes.unsafe_blit buf off buf 0 to_blit ;
+    Bytes.unsafe_fill buf to_blit (Bytes.length buf - to_blit) '\x00'
+  | bits when bits < 8 ->
+    let foo = 8 - bits in
+    for i = 0 to Bytes.length buf - 2 do
+      let b1 = Bytes.get_uint8 buf i
+      and b2 = Bytes.get_uint8 buf (i + 1) in
+      Bytes.set_uint8 buf i ((b1 lsl bits) lor (b2 lsr foo))
+    done ;
+    Bytes.set_uint8 buf (Bytes.length buf - 1)
+      (Bytes.get_uint8 buf (Bytes.length buf - 1) lsl bits)
+  | bits ->
+    shift_left_inplace buf (8 * (bits / 8)) ;
+    shift_left_inplace buf (bits mod 8)
+
+let (lsl) buf bits =
+  let buf' = Bytes.of_string buf in
+  shift_left_inplace buf' bits;
+  Bytes.unsafe_to_string buf'
 
 let massage ~key:({ q; _ }: pub) digest =
   let bits = Z.numbits q in
-  if bits >= Cstruct.length digest * 8 then digest else
-    let cs = Z_extra.(to_cstruct_be Z.(of_cstruct_be digest mod q)) in
-    Cs.(cs lsl ((8 - bits mod 8) mod 8))
+  if bits >= String.length digest * 8 then
+    digest
+  else
+    let buf = Z_extra.(to_octets_be Z.(of_octets_be digest mod q)) in
+    buf lsl ((8 - bits mod 8) mod 8)

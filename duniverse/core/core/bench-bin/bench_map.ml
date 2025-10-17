@@ -26,18 +26,18 @@ let iter2_naive () =
 ;;
 
 let add_with_set =
-  assert (not (Int.Map.mem map size));
+  assert (not (Map.mem map size));
   fun () -> ignore (Map.set map ~key:size ~data:size : _ Map.t)
 ;;
 
 let add_with_add =
-  assert (not (Int.Map.mem map size));
+  assert (not (Map.mem map size));
   fun () -> ignore (Map.add map ~key:size ~data:size : _ Base.Map.Or_duplicate.t)
 ;;
 
 let add_duplicate =
   let map = Map.set map ~key:size ~data:size in
-  assert (Int.Map.mem map size);
+  assert (Map.mem map size);
   fun () -> ignore (Map.add map ~key:size ~data:size : _ Base.Map.Or_duplicate.t)
 ;;
 
@@ -58,7 +58,7 @@ let old_map_merge t1 t2 ~f =
     in
     match f ~key z with
     | None -> t
-    | Some data -> Map.set t ~key ~data)
+    | Some data -> Map.set t ~key ~data) [@nontail]
 ;;
 
 let merge_test do_merge =

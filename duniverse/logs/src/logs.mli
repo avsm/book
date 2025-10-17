@@ -1,7 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2015 The logs programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
-   logs v0.7.0+dune2
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (** Logging.
@@ -13,9 +12,7 @@
     {{!reporters}reporter}.
 
     See the {{!basics}basics}, a few {{!usage}usage conventions} to
-    respect and a note on {{!sync}synchronous logging}.
-
-    {e v0.7.0+dune2 - {{:https://github.com/dune-universe/logs }homepage}} *)
+    respect and a note on {{!sync}synchronous logging}. *)
 
 (** {1:levels Reporting levels} *)
 
@@ -357,7 +354,6 @@ val report : src -> level -> over:(unit -> unit) -> (unit -> 'b) ->
   ('a, 'b) msgf -> 'b
 val incr_err_count : unit -> unit
 val incr_warn_count : unit -> unit
-val pp_print_text : Format.formatter -> string -> unit
 (**/**)
 
 val pp_header : Format.formatter -> (level * string option) -> unit
@@ -424,8 +420,9 @@ let () =
 let main () =
   Logs.set_reporter (Logs_fmt.reporter ());
   ...
-  exit (if Logs.err_count () > 0 then 1 else 0);
-  ()
+  if Logs.err_count () > 0 then 1 else 0
+
+let () = if !Sys.interactive then () else exit (main ())
 ]}
     If you have logging code that is performed in the toplevel
     initialization code of modules (not a good idea) or you depend on
@@ -480,7 +477,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
     {- [Info], condition that allows the program {e user} to get a better
        understanding of what the program is doing.}
     {- [Debug], condition that allows the program {e developer} to get a
-       better undersanding of what the program is doing.}}
+       better understanding of what the program is doing.}}
 
     {1:sync Note on synchronous logging}
 
@@ -570,9 +567,9 @@ let main () =
   Logs.set_level (Some Logs.Info);
   run ();
   run ();
-  ()
+  if Logs.err_count () > 0 then 1 else 0
 
-let () = main ()
+let () = if !Sys.interactive then () else main ()
 ]}
 Here is the standard output of a sample run of the program:
 {v
@@ -610,19 +607,3 @@ let () =
   ()
 ]}
 *)
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2015 The logs programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

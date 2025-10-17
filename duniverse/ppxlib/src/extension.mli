@@ -1,3 +1,5 @@
+(** Declare extenders to rewrite extension nodes. *)
+
 open! Import
 
 type (_, _) equality = Eq : ('a, 'a) equality | Ne : (_, _) equality
@@ -31,16 +33,6 @@ module Context : sig
   val structure_item : structure_item t
   val eq : 'a t -> 'b t -> ('a, 'b) equality
   val get_extension : 'a t -> 'a -> (extension * attributes) option
-
-  val node_of_extension : ?loc:Location.t -> ?x:'a -> 'a t -> extension -> 'a
-  (** [node_of_extension ctx ext] turns an extension node into an AST node of
-      the same type as [ctx]. By default, the location of the node is
-      {!Location.none}.
-
-      Only for the special case of [Ppx_import], a value of type
-      {!type_declaration} has to be passed as the named argument [x], the
-      extension node will be added as the {!ptype_manifest} of [x]. *)
-
   val merge_attributes : 'a t -> 'a -> attributes -> 'a
 
   val merge_attributes_res :
@@ -104,7 +96,7 @@ val declare_inline_with_path_arg :
   t
 
 module For_context : sig
-  (** This module is used to implement {!Context_free.V1.map_top_down} *)
+  (** This module is used to implement {!Context_free.map_top_down} *)
 
   type 'a t
 
@@ -204,6 +196,33 @@ module V3 : sig
     'context Context.t ->
     (payload, 'a, 'context list) Ast_pattern.t ->
     (ctxt:Expansion_context.Extension.t -> 'a) ->
+    t
+
+  val declare_with_path_arg :
+    string ->
+    'context Context.t ->
+    (payload, 'a, 'context) Ast_pattern.t ->
+    (ctxt:Expansion_context.Extension.t ->
+    arg:Longident.t Asttypes.loc option ->
+    'a) ->
+    t
+  (** Same as [declare] except that the extension name takes an additional path
+      argument. The path is the part of the name that start with a capitalized
+      component. For instance in the following, the extension ["map"] would
+      receive the path argument [Foo.Bar]:
+
+      {[
+        let%map.Foo.Bar x = 1 in
+        ...
+      ]} *)
+
+  val declare_inline_with_path_arg :
+    string ->
+    'context Context.t ->
+    (payload, 'a, 'context list) Ast_pattern.t ->
+    (ctxt:Expansion_context.Extension.t ->
+    arg:Longident.t Asttypes.loc option ->
+    'a) ->
     t
 end
 

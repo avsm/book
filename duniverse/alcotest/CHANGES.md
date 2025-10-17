@@ -1,8 +1,60 @@
-### dev
+### 1.9.1 (2025-10-01)
 
-### v1.6.0 (2022-06-24)
+- Remove bad test with `cmdliner` to be compatible with `cmdliner.2.0.0` (@MisterDA, #424)
 
-- Fix a bug when running test concurently. Alcotest could fail to
+### 1.9.0 (2025-03-13)
+
+- Add `seq`, a testable for `Seq.t` and `contramap` (#412 @xvw)
+- Expose the `V1.Skip` exception (#415, #416, @Khady)
+- BREAKING FIX: `match_raises` now expects the user-defined function to return
+  true for expected exceptions. Previously false was interpreted as an
+  expected exception. (#418, #419, @psafont)
+
+### 1.8.0 (2024-07-25)
+
+- Add `match_raises`, a generalized version of `check_raises`
+  (#88, #386, @JoanThibault)
+
+- Update JaneStreet core and async to v0.16 (#390 @tmcgilchrist)
+
+- Fix division by zero when size of the terminal is incorrectly
+  reported as zero. (fix #356, #381, @MisterDA)
+
+- Enable terminal size reporting on macOS and Windows. Also report the
+  terminal size even when the test is run buffered by Dune.
+  (#381, #396, @MisterDA)
+
+- Allow overriding the number of columns with `ALCOTEST_COLUMNS` env
+  var. (#322, #381, @MisterDA)
+
+- Be able to allocate and use user's formatters for stdout/stderr
+  (#399, @dinosaure)
+
+- Stop detecting ocamlci specifically, since there's nothing specific
+  about it. Simply use the `CI` env var to detect CIs. Improve CI
+  detection.
+  (#397, @MisterDA)
+
+### 1.7.0 (2023-02-24)
+
+- Allow skipping a test case from inside the test case (#368, @apeschar)
+
+- Fix compilation on bytecode architectures (#335, @glondu)
+
+- Get `alcotest_stubs.c` to compile with MSVC (#369, @jonahbeckford,
+  review by @TheLortex and @MisterDA)
+
+- Try automatically reporting the location of calls to Alcotest.check.
+  (#366, @MisterDA, review by @TheLortex)
+
+- Detect that Alcotest is running in CI and change output accordingly.
+  (#364, @MisterDA)
+
+- Upgrade to `dune >= 3.0`. (#360, @MisterDA)
+
+### 1.6.0 (2022-06-24)
+
+- Fix a bug when running test concurrently. Alcotest could fail to
   output the content of the log file. (#353, @hhugo)
 
 - Require Cmdliner.1.1.0. (#339, @MisterDA)

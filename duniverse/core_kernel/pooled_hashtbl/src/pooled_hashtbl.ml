@@ -87,6 +87,7 @@ type 'a key = 'a
 module type S_plain = S_plain with type ('a, 'b) hashtbl = ('a, 'b) t
 module type S = S with type ('a, 'b) hashtbl = ('a, 'b) t
 module type S_binable = S_binable with type ('a, 'b) hashtbl = ('a, 'b) t
+module type S_stable = S_stable with type ('a, 'b) hashtbl = ('a, 'b) t
 
 let sexp_of_key t = t.hashable.Hashable.sexp_of_t
 
@@ -334,7 +335,7 @@ let find_exn t key =
   let e = find_entry t ~key ~it in
   if not (Entry.is_null e)
   then Entry.data t.entries e
-  else  raise Caml.Not_found
+  else  raise Stdlib.Not_found
 ;;
 
 let[@inline always] find_and_call_impl
@@ -467,7 +468,7 @@ let find_and_remove t key =
 ;;
 
 let change =
-  let call t f x = without_mutating t (fun () -> f x) () in
+  let call t f x = without_mutating t (fun () -> f x) () [@nontail] in
   let rec change_key t key f index e prev =
     if Entry.is_null e
     then `Not_found
@@ -512,7 +513,7 @@ let incr_by ~remove_if_zero t key by =
 
 let incr ?(by = 1) ?(remove_if_zero = false) t key = incr_by ~remove_if_zero t key by
 let decr ?(by = 1) ?(remove_if_zero = false) t key = incr_by ~remove_if_zero t key (-by)
-let update t key ~f = change t key ~f:(fun data -> Some (f data))
+let update t key ~f = change t key ~f:(fun data -> Some (f data)) [@nontail]
 
 (* This could be optimized if desired. *)
 let update_and_return t key ~f =
@@ -592,13 +593,13 @@ let iteri =
         raise exn)
 ;;
 
-let iter t ~f = iteri t ~f:(fun ~key:_ ~data -> f data)
-let iter_keys t ~f = iteri t ~f:(fun ~key ~data:_ -> f key)
+let iter t ~f = iteri t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let iter_keys t ~f = iteri t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let rec choose_nonempty t i =
   let entry = table_get t.table i in
   if Entry.is_null entry
-  then choose_nonempty t (i + 1)
+  then choose_nonempty t ((i + 1) land (t.capacity - 1))
   else Entry.key t.entries entry, Entry.data t.entries entry
 ;;
 
@@ -607,6 +608,21 @@ let choose t = if t.length = 0 then None else Some (choose_nonempty t 0)
 let choose_exn t =
   if t.length = 0 then raise_s [%message "[Pooled_hashtbl.choose_exn] of empty hashtbl"];
   choose_nonempty t 0
+;;
+
+let choose_randomly_nonempty ~random_state t =
+  let start_idx = Random.State.int random_state t.capacity in
+  choose_nonempty t start_idx
+;;
+
+let choose_randomly ?(random_state = Random.State.default) t =
+  if t.length = 0 then None else Some (choose_randomly_nonempty ~random_state t)
+;;
+
+let choose_randomly_exn ?(random_state = Random.State.default) t =
+  if t.length = 0
+  then raise_s [%message "[Pooled_hashtbl.choose_randomly_exn] of empty hashtbl"];
+  choose_randomly_nonempty ~random_state t
 ;;
 
 let fold =
@@ -666,19 +682,20 @@ let sexp_of_t sexp_of_k sexp_of_d t =
 let existsi t ~f =
   with_return (fun r ->
     iteri t ~f:(fun ~key ~data -> if f ~key ~data then r.return true);
-    false)
+    false) [@nontail]
 ;;
 
-let exists t ~f = existsi t ~f:(fun ~key:_ ~data -> f data)
+let exists t ~f = existsi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 let for_alli t ~f = not (existsi t ~f:(fun ~key ~data -> not (f ~key ~data)))
 let for_all t ~f = not (existsi t ~f:(fun ~key:_ ~data -> not (f data)))
 
 let counti t ~f =
-  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc)
+  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc) [@nontail
+  ]
 ;;
 
 let count t ~f =
-  fold t ~init:0 ~f:(fun ~key:_ ~data acc -> if f data then acc + 1 else acc)
+  fold t ~init:0 ~f:(fun ~key:_ ~data acc -> if f data then acc + 1 else acc) [@nontail]
 ;;
 
 let mapi t ~f =
@@ -689,7 +706,7 @@ let mapi t ~f =
   new_t
 ;;
 
-let map t ~f = mapi t ~f:(fun ~key:_ ~data -> f data)
+let map t ~f = mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let filter_mapi t ~f =
   let new_t =
@@ -702,14 +719,14 @@ let filter_mapi t ~f =
   new_t
 ;;
 
-let filter_map t ~f = filter_mapi t ~f:(fun ~key:_ ~data -> f data)
+let filter_map t ~f = filter_mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let filteri t ~f =
-  filter_mapi t ~f:(fun ~key ~data -> if f ~key ~data then Some data else None)
+  filter_mapi t ~f:(fun ~key ~data -> if f ~key ~data then Some data else None) [@nontail]
 ;;
 
-let filter t ~f = filteri t ~f:(fun ~key:_ ~data -> f data)
-let filter_keys t ~f = filteri t ~f:(fun ~key ~data:_ -> f key)
+let filter t ~f = filteri t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let filter_keys t ~f = filteri t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let partition_mapi t ~f =
   let t0 =
@@ -725,13 +742,14 @@ let partition_mapi t ~f =
   t0, t1
 ;;
 
-let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data)
+let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let partitioni_tf t ~f =
-  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data)
+  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data) 
+  [@nontail]
 ;;
 
-let partition_tf t ~f = partitioni_tf t ~f:(fun ~key:_ ~data -> f data)
+let partition_tf t ~f = partitioni_tf t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let create_mapped ?growth_allowed ?size ~hashable ~get_key ~get_data rows =
   let size =
@@ -806,7 +824,7 @@ let add_to_groups groups ~get_key ~get_data ~combine ~rows =
       | None -> data
       | Some old -> combine old data
     in
-    replace groups ~key ~data)
+    replace groups ~key ~data) [@nontail]
 ;;
 
 let group ?growth_allowed ?size ~hashable ~get_key ~get_data ~combine rows =
@@ -864,8 +882,8 @@ let merge =
                 match find t_left key with
                 | None -> maybe_set new_t ~key ~f (`Right right)
                 | Some _ -> ()
-                (* already done above *)))
-           ())
+                (* already done above *)) [@nontail])
+           () [@nontail])
       ();
     new_t
 ;;
@@ -879,7 +897,8 @@ let merge_into ~src ~dst ~f =
     | Set_to data ->
       (match dst_data with
        | None -> replace dst ~key ~data
-       | Some dst_data -> if not (phys_equal dst_data data) then replace dst ~key ~data))
+       | Some dst_data -> if not (phys_equal dst_data data) then replace dst ~key ~data)) [@nontail
+  ]
 ;;
 
 let filteri_inplace t ~f =
@@ -889,8 +908,8 @@ let filteri_inplace t ~f =
   List.iter to_remove ~f:(fun key -> remove t key)
 ;;
 
-let filter_inplace t ~f = filteri_inplace t ~f:(fun ~key:_ ~data -> f data)
-let filter_keys_inplace t ~f = filteri_inplace t ~f:(fun ~key ~data:_ -> f key)
+let filter_inplace t ~f = filteri_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let filter_keys_inplace t ~f = filteri_inplace t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let filter_mapi_inplace t ~f =
   let map_results = fold t ~init:[] ~f:(fun ~key ~data ac -> (key, f ~key ~data) :: ac) in
@@ -900,14 +919,16 @@ let filter_mapi_inplace t ~f =
     | Some data -> set t ~key ~data)
 ;;
 
-let filter_map_inplace t ~f = filter_mapi_inplace t ~f:(fun ~key:_ ~data -> f data)
+let filter_map_inplace t ~f =
+  filter_mapi_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+;;
 
 let mapi_inplace t ~f =
   let map_results = fold t ~init:[] ~f:(fun ~key ~data ac -> (key, f ~key ~data) :: ac) in
   List.iter map_results ~f:(fun (key, data) -> set t ~key ~data)
 ;;
 
-let map_inplace t ~f = mapi_inplace t ~f:(fun ~key:_ ~data -> f data)
+let map_inplace t ~f = mapi_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let equal equal t t' =
   length t = length t'
@@ -944,6 +965,8 @@ let copy t =
 module Accessors = struct
   let choose = choose
   let choose_exn = choose_exn
+  let choose_randomly = choose_randomly
+  let choose_randomly_exn = choose_randomly_exn
   let clear = clear
   let copy = copy
   let remove = remove
@@ -1015,6 +1038,7 @@ end
 module type Key_plain = Key_plain
 module type Key = Key
 module type Key_binable = Key_binable
+module type Key_stable = Key_stable
 module type For_deriving = For_deriving
 
 module Creators (Key : sig
@@ -1201,6 +1225,30 @@ struct
         t
       ;;
     end)
+
+  module Provide_stable_witness
+      (Key' : sig
+         type t [@@deriving stable_witness]
+       end
+       with type t := key) =
+  struct
+    (* I'm not sure whether it makes sense for pooled hashtbl to be used as a stable type,
+       since pooling seems like an in-process thing, but in order to satisfy the entire
+       [Hashtbl_intf.Hashtbl] module type, we need to provide a stable witness.
+
+       The implementation and comment from hashtbl.ml is copied below.
+    *)
+    (* The binary representation of hashtbl is relied on by stable modules
+       (e.g. Hashtable.Stable) and is therefore assumed to be stable.  So, if the key and
+       data can provide a stable witnesses, then we can safely say the hashtbl is also
+       stable. *)
+    let stable_witness (type data) (_data_stable_witness : data Stable_witness.t)
+      : data t Stable_witness.t
+      =
+      let (_ : key Stable_witness.t) = Key'.stable_witness in
+      Stable_witness.assert_stable
+    ;;
+  end
 end
 
 module Make_with_hashable (T : sig
@@ -1223,6 +1271,16 @@ struct
   include Provide_bin_io (T.Key)
 end
 
+module Make_stable_with_hashable (T : sig
+    module Key : Key_stable
+
+    val hashable : Key.t Hashable.t
+  end) =
+struct
+  include Make_binable_with_hashable (T)
+  include Provide_stable_witness (T.Key)
+end
+
 module Make_plain (Key : Key_plain) = Make_plain_with_hashable (struct
     module Key = Key
 
@@ -1243,6 +1301,11 @@ module Make_binable (Key : sig
 struct
   include Make (Key)
   include Provide_bin_io (Key)
+end
+
+module Make_stable (Key : Key_stable) = struct
+  include Make_binable (Key)
+  include Provide_stable_witness (Key)
 end
 
 module M (K : T) = struct

@@ -586,6 +586,20 @@ let test_ambiguous_record () =
     Test_ambiguous_record_j.ambiguous'_of_string json_out' in
   check ((x, x') = (x2, x2'))
 
+let test_ambiguous_classic_variants () =
+  let json_in = {|["Int", 123]|} in
+  let json_in' = {|["Int", 456]|} in
+  let x, x' =
+    Test_ambiguous_variant_j.ambiguous_of_string json_in,
+    Test_ambiguous_variant_j.ambiguous'_of_string json_in' in
+  let json_out, json_out' =
+    Test_ambiguous_variant_j.string_of_ambiguous x,
+    Test_ambiguous_variant_j.string_of_ambiguous' x' in
+  let x2, x2' =
+    Test_ambiguous_variant_j.ambiguous_of_string json_out,
+    Test_ambiguous_variant_j.ambiguous'_of_string json_out' in
+  check ((x, x') = (x2, x2'))
+
 let test_polymorphic_wrap () =
   let json_in = {|["1", "2"]|} in
   let x =
@@ -596,13 +610,46 @@ let test_polymorphic_wrap () =
     Test_polymorphic_wrap_j.t_of_string Yojson.Safe.read_string json_out in
   check (x = x2)
 
-let test_encoding_int64 () =
-  let encoded = Test_int64_enc_j.string_of_int64 Int64.max_int in
-  check (String.equal encoded {|"9223372036854775807"|})
+let test_encoding_int () =
+  let encoded = Test_int_j.string_of_char 'A' in
+  check (String.equal encoded {|65|});
+  let encoded = Test_int_j.string_of_int32 Int32.max_int in
+  check (String.equal encoded {|2147483647|});
+  let encoded = Test_int_j.string_of_int64 Int64.max_int in
+  check (String.equal encoded {|9223372036854775807|});
+  let encoded = Test_int_j.string_of_afloat 123.456 in
+  check (String.equal encoded {|123|})
 
-let test_encoding_decoding_int64 () =
-  let encoded = Test_int64_enc_j.string_of_int64 Int64.max_int in
-  let decoded = Test_int64_enc_j.int64_of_string encoded in
+let test_encoding_decoding_int () =
+  let encoded = Test_int_j.string_of_char 'A' in
+  let decoded = Test_int_j.char_of_string encoded in
+  check (decoded = 'A');
+  let encoded = Test_int_j.string_of_int32 Int32.max_int in
+  let decoded = Test_int_j.int32_of_string encoded in
+  check (decoded = Int32.max_int);
+  let encoded = Test_int_j.string_of_int64 Int64.max_int in
+  let decoded = Test_int_j.int64_of_string encoded in
+  check (decoded = Int64.max_int)
+
+let test_encoding_int_with_string_repr () =
+  let encoded = Test_int_with_string_repr_j.string_of_char 'A' in
+  check (String.equal encoded {|"65"|});
+  let encoded = Test_int_with_string_repr_j.string_of_int32 Int32.max_int in
+  check (String.equal encoded {|"2147483647"|});
+  let encoded = Test_int_with_string_repr_j.string_of_int64 Int64.max_int in
+  check (String.equal encoded {|"9223372036854775807"|});
+  let encoded = Test_int_with_string_repr_j.string_of_afloat 123.456 in
+  check (String.equal encoded {|"123"|})
+
+let test_encoding_decoding_int_with_string_repr () =
+  let encoded = Test_int_with_string_repr_j.string_of_char 'A' in
+  let decoded = Test_int_with_string_repr_j.char_of_string encoded in
+  check (decoded = 'A');
+  let encoded = Test_int_with_string_repr_j.string_of_int32 Int32.max_int in
+  let decoded = Test_int_with_string_repr_j.int32_of_string encoded in
+  check (decoded = Int32.max_int);
+  let encoded = Test_int_with_string_repr_j.string_of_int64 Int64.max_int in
+  let decoded = Test_int_with_string_repr_j.int64_of_string encoded in
   check (decoded = Int64.max_int)
 
 let test_raw_json () =
@@ -626,6 +673,20 @@ let test_untyped_json () =
   let decoded = Test_abstract_j.any_items_of_string input in
   let encoded = Test_abstract_j.string_of_any_items decoded in
   check (encoded = input)
+
+let test_inline_records () =
+  let open Test_classic_inline_record_t in
+  let foo = Foo { x = 42; y = 5.1 } in
+  Alcotest.(check string)
+    "test_inline_records"
+    (Test_classic_inline_record_j.string_of_foo foo)
+    {|["Foo",{"x":42,"y":5.1}]|};
+  Alcotest.(check bool)
+    "test_inline_records-involution"
+    (foo = (Test_classic_inline_record_j.string_of_foo foo
+            |> Test_classic_inline_record_j.foo_of_string))
+    true;
+  ()
 
 let all_tests : (string * (unit -> unit)) list = [
   "ocaml internals", test_ocaml_internals;
@@ -667,11 +728,15 @@ let all_tests : (string * (unit -> unit)) list = [
    for unknown tags", test_tag_field_emulation_with_catchall;
   "test <json open_enum>", test_json_open_enum;
   "test ambiguous record with json adapters", test_ambiguous_record;
+  "test ambiguous classic variants with json adapters", test_ambiguous_classic_variants;
   "test wrapping of polymorphic types", test_polymorphic_wrap;
-  "json encoding int64 as string", test_encoding_int64;
-  "json encoding & decoding int64", test_encoding_decoding_int64;
+  "json encoding int", test_encoding_int;
+  "json encoding & decoding int", test_encoding_decoding_int;
+  "json encoding int with string representation", test_encoding_int_with_string_repr;
+  "json encoding & decoding int with string representation", test_encoding_decoding_int_with_string_repr;
   "abstract types", test_abstract_types;
   "untyped json", test_untyped_json;
+  "inline-records", test_inline_records;
 ]
 
 let () =

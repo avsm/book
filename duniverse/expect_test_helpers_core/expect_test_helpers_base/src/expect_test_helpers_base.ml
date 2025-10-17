@@ -129,6 +129,19 @@ let expect_test_output here =
     (Expect_test_common.File.Location.of_source_code_position here)
 ;;
 
+let am_running_expect_test = Expect_test_collector.am_running_expect_test
+
+let assert_am_running_expect_test here =
+  if am_running_expect_test ()
+  then ()
+  else
+    raise_s
+      [%message
+        "This code should be run inside an expect test; currently, it is running outside \
+         an expect test."
+          ~_:(here : Source_code_position.t)]
+;;
+
 let wrap f =
   Staged.stage (fun ?hide_positions string ->
     f (maybe_hide_positions_in_string ?hide_positions string))
@@ -214,6 +227,31 @@ let require_equal
             ~_:(if_false_then_print_s : (Sexp.t Lazy.t option[@sexp.option]))])
 ;;
 
+let require_not_equal
+      (type a)
+      ?cr
+      ?hide_positions
+      ?if_false_then_print_s
+      ?(message = "values are equal")
+      here
+      (module M : With_equal with type t = a)
+      x
+      y
+  =
+  require
+    ?cr
+    ?hide_positions
+    here
+    (not (M.equal x y))
+    ~if_false_then_print_s:
+      (lazy
+        [%message
+          message
+            ~_:(x : M.t)
+            ~_:(y : M.t)
+            ~_:(if_false_then_print_s : (Sexp.t Lazy.t option[@sexp.option]))])
+;;
+
 let require_compare_equal
       (type a)
       ?cr
@@ -238,16 +276,45 @@ let require_compare_equal
     y
 ;;
 
+let require_compare_not_equal
+      (type a)
+      ?cr
+      ?hide_positions
+      ?message
+      here
+      (module M : With_compare with type t = a)
+      x
+      y
+  =
+  require_not_equal
+    ?cr
+    ?hide_positions
+    ?message
+    here
+    (module struct
+      include M
+
+      let equal = [%compare.equal: t]
+    end)
+    x
+    y
+;;
+
 let require_sets_are_equal
-      (type elt cmp)
+      (type elt)
       ?cr
       ?hide_positions
       ?(names = "first", "second")
       here
-      (module Elt : With_comparator with type t = elt and type comparator_witness = cmp)
       first
       second
   =
+  let module Elt = struct
+    type t = elt
+
+    let sexp_of_t = (Set.comparator first).sexp_of_t
+  end
+  in
   require
     ?cr
     ?hide_positions
@@ -289,7 +356,7 @@ let try_with ?raise_message ?(show_backtrace = false) (type a) (f : unit -> a) =
             ""
               ~_:(raise_message : (string option[@sexp.option]))
               ~_:(exn : exn)
-              (backtrace : (Backtrace.t option[@sexp.option]))]))
+              (backtrace : (Backtrace.t option[@sexp.option]))])) [@nontail]
 ;;
 
 let require_does_not_raise ?cr ?hide_positions ?show_backtrace here f =
@@ -394,6 +461,104 @@ let require_ok ?cr ?hide_positions ?print_ok here res =
 let require_error ?cr ?hide_positions ?(print_error = false) here sexp_of_ok res =
   let print_error = Option.some_if print_error [%sexp_of: Error.t] in
   require_error_result ?cr ?hide_positions ?print_error here sexp_of_ok res
+;;
+
+let print_and_check_round_trip
+      (type a)
+      ?cr
+      ?hide_positions
+      here
+      (module T : With_equal with type t = a)
+      reprs
+      examples
+  =
+  require_does_not_raise ?cr ?hide_positions here (fun () ->
+    let tag_of name =
+      String.map name ~f:(fun char -> if Char.is_alphanum char then char else '_')
+    in
+    List.iter examples ~f:(fun t ->
+      (* compute conversions for each value *)
+      let conversions =
+        List.map reprs ~f:(fun (module M : With_round_trip with type t = a) ->
+          let repr = M.to_repr t in
+          let sexp = M.sexp_of_repr repr in
+          let round_trip_result = M.of_repr repr in
+          let name = M.repr_name in
+          name, sexp, round_trip_result)
+      in
+      (* print one-way conversions *)
+      (match conversions with
+       | [] -> (* a useless case anyway *) ()
+       | [ (_, sexp, _) ] ->
+         (* only one repr, print unlabeled *)
+         print_s sexp
+       | _ :: _ :: _ ->
+         (* multiple reprs, print with labels *)
+         print_s
+           (List
+              (List.map conversions ~f:(fun (name, sexp, _) ->
+                 [%sexp (tag_of name : string), (sexp : Sexp.t)]))));
+      (* check two-way round-trip *)
+      List.iter conversions ~f:(fun (name, sexp, round_trip) ->
+        require
+          ?cr
+          ?hide_positions
+          here
+          (T.equal t round_trip)
+          ~if_false_then_print_s:
+            (lazy
+              (Sexp.message
+                 (name ^ " serialization failed to round-trip")
+                 [ "original", T.sexp_of_t t
+                 ; tag_of name, sexp
+                 ; tag_of name ^ "_roundtrip", T.sexp_of_t round_trip
+                 ])))))
+;;
+
+let print_and_check_stringable
+      (type a)
+      ?cr
+      ?hide_positions
+      here
+      (module T : With_stringable with type t = a)
+      list
+  =
+  let module T = struct
+    include T
+
+    let sexp_of_t t = Sexp.Atom (to_string t)
+  end
+  in
+  let module Conv = struct
+    type t = T.t
+    type repr = string [@@deriving sexp_of]
+
+    let to_repr = T.to_string
+    let of_repr = T.of_string
+    let repr_name = "string"
+  end
+  in
+  print_and_check_round_trip ?cr ?hide_positions here (module T) [ (module Conv) ] list
+;;
+
+let print_and_check_sexpable
+      (type a)
+      ?cr
+      ?hide_positions
+      here
+      (module T : With_sexpable with type t = a)
+      list
+  =
+  let module Conv = struct
+    type t = T.t
+    type repr = Sexp.t [@@deriving sexp_of]
+
+    let to_repr = T.sexp_of_t
+    let of_repr = T.t_of_sexp
+    let repr_name = "sexp"
+  end
+  in
+  print_and_check_round_trip ?cr ?hide_positions here (module T) [ (module Conv) ] list
 ;;
 
 let show_raise (type a) ?hide_positions ?show_backtrace (f : unit -> a) =

@@ -95,10 +95,12 @@ let ( != ) x y = not (x = y)
 (* meta-test that we are using sensible bindings for [=] and [!=] *)
 let%test _ = [%bin_shape: int] = [%bin_shape: int]
 let%test _ = not ([%bin_shape: int] != [%bin_shape: int])
+
 (* int/string have distinct hashes; but self-equal *)
 let%test _ = [%bin_shape: int] = [%bin_shape: int]
 let%test _ = [%bin_shape: string] = [%bin_shape: string]
 let%test _ = [%bin_shape: int] != [%bin_shape: string]
+
 (* existence of some predefined bin_shape_<t> functions *)
 let%test _ = [%bin_shape: int] = bin_shape_int
 let%test _ = [%bin_shape: string] = bin_shape_string
@@ -490,13 +492,9 @@ end
 module Blowup2 = struct
   (* Exponential blowup in code size here *)
   type t0 = int
-
   and t1 = t0 * t0
-
   and t2 = t1 * t1
-
   and t3 = t2 * t2
-
   and t4 = t3 * t3 [@@deriving bin_shape]
 end
 
@@ -504,13 +502,9 @@ module Blowup3 = struct
   (* Reverse the order of the decs...*)
   (* Still have exponential blowup in code size here *)
   type t4 = t3 * t3
-
   and t3 = t2 * t2
-
   and t2 = t1 * t1
-
   and t1 = t0 * t0
-
   and t0 = int [@@deriving bin_shape]
 end
 
@@ -541,15 +535,12 @@ let%test_unit _ =
 module Tricky_mutual_recursion = struct
   module A = struct
     type t1 = A of t1
-
     and t2 = B of t1 * t2 [@@deriving bin_shape]
   end
 
   module B = struct
     type t0 = t1
-
     and t1 = A of t0
-
     and t2 = B of t1 * t2 [@@deriving bin_shape]
   end
 
@@ -853,15 +844,11 @@ end
 
 module Parameters_and_orders = struct
   type a1 = A of a3
-
   and a2 = B of a1
-
   and a3 = C of a2 [@@deriving bin_shape]
 
   type b3 = C of b2
-
   and b2 = B of b1
-
   and b1 = A of b3 [@@deriving bin_shape]
 
   type ('a, 'b) c1 = 'a * 'b [@@deriving bin_shape]
@@ -1268,13 +1255,14 @@ module Dub = struct
 
   let test_eval_time n allowed =
     let exp = By_hand.gen_t n in
-    let before = Time.now () in
+    let before = Time_float.now () in
     let _res = Shape.eval_to_digest exp in
-    let after = Time.now () in
-    [%test_pred: Time.Span.t] (fun x -> x < allowed) (Time.diff after before)
+    let after = Time_float.now () in
+    [%test_pred: Time_float.Span.t] (fun x -> x < allowed) (Time_float.diff after before)
   ;;
 
   let%test_unit _ = test_eval_time 15 (sec 1.)
+
   (* demonstate that we have no exponential blowup *)
   let%test_unit _ = test_eval_time 10000 (sec 1.)
 end
@@ -1359,7 +1347,6 @@ module Too_aggressive_memoization_2 = struct
   type t1 = A of t [@@deriving bin_shape]
 
   type u1 = X of v1
-
   and v1 = A of u1 [@@deriving bin_shape]
 
   type u2 = X of t [@@deriving bin_shape]
@@ -1430,7 +1417,6 @@ module Example_block_of_3 = struct
     | Cons of 'a * 'a mylist
 
   and 'a and_string = 'a * string
-
   and t = (int * float) mylist and_string [@@deriving bin_shape]
 
   let exp = [%bin_shape: t]
@@ -1616,7 +1602,6 @@ module Test_nested_type_application = struct
 
   let exp = [%bin_shape: int pair pair]
   let expect = Canonical.(create (tuple [ tuple [ int; int ]; tuple [ int; int ] ]))
-
   let%test_unit _ = ensure_shape exp ~expect
 end
 

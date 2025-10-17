@@ -102,6 +102,9 @@ let of_int63_ns i = i
 let of_int_us i = Int63.(of_int i * microsecond)
 let of_int_ms i = Int63.(of_int i * millisecond)
 let of_int_sec i = Int63.(of_int i * second)
+let of_int_min i = Int63.(of_int i * minute)
+let of_int_hr i = Int63.(of_int i * hour)
+let of_int_day i = Int63.(of_int i * day)
 let of_us f = round_nearest (f *. float microsecond)
 let of_ms f = round_nearest (f *. float millisecond)
 let of_sec f = round_nearest (f *. float second)
@@ -177,15 +180,38 @@ let to_unit_of_time t : Unit_of_time.t =
   else Nanosecond
 ;;
 
-module Stable = struct
-  module V1 = struct end
-  module Option = struct end
+let to_span_float_round_nearest t = Span_float.of_sec (to_sec t)
+let of_span_float_round_nearest s = of_sec (Span_float.to_sec s)
+
+module Stable0 = struct
+  module V1 = struct
+    module T = struct
+      type nonrec t = t [@@deriving bin_io, compare, hash, equal]
+
+      let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
+
+      let sexp_of_t t =
+        Time_float.Stable.Span.V1.sexp_of_t (to_span_float_round_nearest t)
+      ;;
+
+      let t_of_sexp s =
+        of_span_float_round_nearest (Time_float.Stable.Span.V1.t_of_sexp s)
+      ;;
+
+      let of_int63_exn t = of_int63_ns t
+      let to_int63 t = to_int63_ns t
+    end
+
+    include T
+    include Comparator.Stable.V1.Make (T)
+  end
 
   module V2 = struct
     module T = struct
       module T0 = struct
         type nonrec t = t [@@deriving bin_io, compare, hash, equal]
 
+        let stable_witness : t Stable_witness.t = Int63.Stable.V1.stable_witness
         let of_int63_exn t = of_int63_ns t
         let to_int63 t = to_int63_ns t
 
@@ -648,8 +674,12 @@ module Stable = struct
     end
 
     include T
-    include Comparable.Stable.V1.Make (T)
+    include Comparable.Stable.V1.With_stable_witness.Make (T)
   end
+end
+
+open struct
+  module Stable = Stable0
 end
 
 let to_string = Stable.V2.to_string
@@ -717,7 +747,9 @@ let random ?state () =
   - Int63.random ?state (neg min_value_for_1us_rounding + Int63.one)
 ;;
 
-let randomize t ~percent = Span_helpers.randomize t ~percent ~scale
+let randomize ?(state = Random.State.default) t ~percent =
+  Span_helpers.randomize t state ~percent ~scale
+;;
 
 let to_short_string t =
   let ({ sign; hr; min; sec; ms; us; ns } : Parts.t) = to_parts t in
@@ -752,8 +784,6 @@ include Comparable.Make_binable_using_comparator (struct
 module Replace_polymorphic_compare = T.Replace_polymorphic_compare
 include Replace_polymorphic_compare
 
-let to_span_float_round_nearest t = Span_float.of_sec (to_sec t)
-let of_span_float_round_nearest s = of_sec (Span_float.to_sec s)
 let half_microsecond = Int63.of_int 500
 let nearest_microsecond t = Int63.((to_int63_ns t + half_microsecond) /% of_int 1000)
 
@@ -813,6 +843,174 @@ let min_value = min_value_for_1us_rounding
 let max_value = max_value_for_1us_rounding
 let of_span = of_span_float_round_nearest_microsecond
 let to_span = to_span_float_round_nearest_microsecond
-let arg_type = `Use_Time_ns_unix
 
-module Option = struct end
+module Option = struct
+  type span = t [@@deriving sexp]
+  type t = Int63.t [@@deriving bin_io, compare, hash, typerep]
+  (* nanoseconds or none *)
+
+  let none = Int63.min_value
+  let is_none t = Int63.(t = none)
+  let is_some t = Int63.(t <> none)
+  let some_is_representable span = is_some (to_int63_ns span)
+
+  let[@cold] raise_some_error span =
+    raise_s [%message [%here] "Span.Option.some value not representable" (span : span)]
+  ;;
+
+  let some span =
+    if some_is_representable span then to_int63_ns span else raise_some_error span
+  ;;
+
+  let unchecked_value t = of_int63_ns t
+  let value t ~default = Bool.select (is_none t) default (unchecked_value t)
+
+  let value_exn t =
+    if is_some t
+    then unchecked_value t
+    else raise_s [%message [%here] "Span.Option.value_exn none"]
+  ;;
+
+  let of_option = function
+    | None -> none
+    | Some t -> some t
+  ;;
+
+  let to_option t = if is_none t then None else Some (of_int63_ns t)
+
+  module For_quickcheck = struct
+    module Some = struct
+      type t = span
+
+      let quickcheck_generator =
+        Quickcheck.Generator.filter quickcheck_generator ~f:some_is_representable
+      ;;
+
+      let quickcheck_observer = quickcheck_observer
+
+      let quickcheck_shrinker =
+        Base_quickcheck.Shrinker.filter quickcheck_shrinker ~f:some_is_representable
+      ;;
+    end
+
+    type t = Some.t option [@@deriving quickcheck]
+  end
+
+  let quickcheck_generator =
+    Quickcheck.Generator.map For_quickcheck.quickcheck_generator ~f:of_option
+  ;;
+
+  let quickcheck_observer =
+    Quickcheck.Observer.unmap For_quickcheck.quickcheck_observer ~f:to_option
+  ;;
+
+  let quickcheck_shrinker =
+    Quickcheck.Shrinker.map
+      For_quickcheck.quickcheck_shrinker
+      ~f:of_option
+      ~f_inverse:to_option
+  ;;
+
+  module Optional_syntax = struct
+    module Optional_syntax = struct
+      let is_none = is_none
+      let unsafe_value = unchecked_value
+    end
+  end
+
+  module Stable = struct
+    module V1 = struct
+      module T = struct
+        type nonrec t = t [@@deriving compare, bin_io]
+
+        let v1_some span =
+          assert (some_is_representable span);
+          to_int63_ns span
+        ;;
+
+        let sexp_of_t t = [%sexp_of: Stable.V1.t option] (to_option t)
+        let t_of_sexp s = of_option ([%of_sexp: Stable.V1.t option] s)
+        let of_int63_exn i = if is_none i then none else v1_some (of_int63_ns i)
+        let to_int63 t = t
+
+        let stable_witness : t Stable_witness.t =
+          Stable_witness.of_serializable
+            Int63.Stable.V1.stable_witness
+            of_int63_exn
+            to_int63
+        ;;
+      end
+
+      include T
+      include Comparator.Stable.V1.Make (T)
+    end
+
+    module V2 = struct
+      module T = struct
+        type nonrec t = t [@@deriving compare, bin_io]
+
+        let sexp_of_t t =
+          Sexp.List
+            (if is_none t then [] else [ Stable.V2.sexp_of_t (unchecked_value t) ])
+        ;;
+
+        let t_of_sexp sexp =
+          let fail () =
+            of_sexp_error
+              "Time_ns.Span.Option.Stable.V2.t_of_sexp: sexp must be a List of 0-1 Atom"
+              sexp
+          in
+          match sexp with
+          | Sexp.Atom _ -> fail ()
+          | Sexp.List list ->
+            (match list with
+             | [] -> none
+             | [ Sexp.Atom x ] ->
+               some
+                 (try of_string x with
+                  | exn -> of_sexp_error (Exn.to_string exn) sexp)
+             | _ -> fail ())
+        ;;
+
+        let of_int63_exn i = i
+        let to_int63 t = t
+
+        let stable_witness : t Stable_witness.t =
+          Stable_witness.of_serializable
+            Int63.Stable.V1.stable_witness
+            of_int63_exn
+            to_int63
+        ;;
+      end
+
+      include T
+      include Comparator.Stable.V1.Make (T)
+    end
+  end
+
+  let sexp_of_t = Stable.V2.sexp_of_t
+  let t_of_sexp = Stable.V2.t_of_sexp
+
+  include Identifiable.Make (struct
+      type nonrec t = t [@@deriving sexp, compare, bin_io, hash]
+
+      let module_name = "Core.Time_ns.Span.Option"
+
+      include Sexpable.To_stringable (struct
+          type nonrec t = t [@@deriving sexp]
+        end)
+    end)
+
+  include (Int63 : Comparisons.S with type t := t)
+end
+
+module Stable = struct
+  include Stable0
+
+  module Option = struct
+    module V1 = Option.Stable.V1
+    module V2 = Option.Stable.V2
+  end
+end
+
+let arg_type = Command.Arg_type.create of_string

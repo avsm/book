@@ -16,21 +16,24 @@
 (* This API is currently entirely self-contained, except for a reference
    to the module [Keyword], which is also part of [MenhirSdk]. *)
 
-(* The module type [INDEXED] describes a type [t] whose elements are
-   in a bijection with an integer interval of the form [0..count). *)
-
+(**The module type [INDEXED] describes a type [t] whose elements are
+   in a bijection with an integer interval of the form [\[0..count)]. *)
 module type INDEXED = sig
   type t
   val count : int
   val of_int : int -> t
   val to_int : t -> int
+  (* Hashing, equality and ordering. *)
+  val hash : t -> int
+  val equal : t -> t -> bool
+  val compare : t -> t -> int
+  (* Iteration and tabulation. *)
   val iter : (t -> unit) -> unit
   val fold : (t -> 'a -> 'a) -> 'a -> 'a
   val tabulate : (t -> 'a) -> t -> 'a
 end
 
-(* The module type [GRAMMAR] describes the grammar and automaton. *)
-
+(**The module type [GRAMMAR] describes the grammar and automaton. *)
 module type GRAMMAR = sig
 
   type terminal    = private int
@@ -85,10 +88,27 @@ module type GRAMMAR = sig
     val attributes   : t -> Attribute.t list
   end
 
-  type symbol =
+  module Symbol : sig
+
+    type t =
+      | T of terminal
+      | N of nonterminal
+
+    val name : ?mangled:bool -> t -> string
+
+    (* Hashing, equality and ordering. *)
+    val hash : t -> int
+    val equal : t -> t -> bool
+    val compare : t -> t -> int
+
+  end
+
+  (**The type [symbol] is a synonym for [Symbol.t]. *)
+  type symbol = Symbol.t =
     | T of terminal
     | N of nonterminal
 
+  (**[symbol_name] is a synonym for [Symbol.name]. *)
   val symbol_name : ?mangled:bool -> symbol -> string
 
   type identifier = string
@@ -107,6 +127,9 @@ module type GRAMMAR = sig
     val positions    : t -> Range.t list
     val action       : t -> Action.t option
     val attributes   : t -> Attribute.t list
+        (* Before 2023/08/02, these were the attributes of the left-hand
+           side of the production. Now, these are the attributes of the
+           production itself. *)
   end
 
   module Lr0 : sig
@@ -119,7 +142,11 @@ module type GRAMMAR = sig
     include INDEXED with type t = lr1
     val lr0          : t -> lr0
     val transitions  : t -> (symbol * t) list
+    val get_reductions : t -> (terminal * production) list
+    val default_reduction : t -> production option
+
     val reductions   : t -> (terminal * production list) list
+    [@@ocaml.deprecated "Please use [get_reductions]"]
   end
 
   module Print : sig

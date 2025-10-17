@@ -84,17 +84,17 @@ class type ['a] bounded_push = object
       is already blocked on [push], it raises {!Lwt_stream.Full}. *)
 
   method close : unit
-  (** Closes the stream. Any thread currently blocked on
-      {!Lwt_stream.bounded_push.push} fails with {!Lwt_stream.Closed}. *)
+  (** Closes the stream. Any thread currently blocked on a call to
+      the [push] method fails with {!Lwt_stream.Closed}. *)
 
   method count : int
   (** Number of elements in the stream queue. *)
 
   method blocked : bool
-  (** Is a thread is blocked on {!Lwt_stream.bounded_push.push} ? *)
+  (** Is a thread is blocked on a call to the [push] method? *)
 
   method closed : bool
-  (** Is the stream closed ? *)
+  (** Is the stream closed? *)
 
   method set_reference : 'a. 'a -> unit
   (** Set the reference to an external source. *)
@@ -234,8 +234,8 @@ val junk_while_s : ('a -> bool Lwt.t) -> 'a t -> unit Lwt.t
 (** [junk_while f st] removes all elements at the beginning of the
     streams which satisfy [f]. *)
 
-val junk_old : 'a t -> unit Lwt.t
-(** [junk_old st] removes all elements that are ready to be read
+val junk_available : 'a t -> unit
+(** [junk_available st] removes all elements that are ready to be read
     without yielding from [st]. *)
 
 val get_available : 'a t -> 'a list
@@ -263,19 +263,10 @@ val closed : 'a t -> unit Lwt.t
 
     @since 2.6.0 *)
 
-val on_termination : 'a t -> (unit -> unit) -> unit
-[@@ocaml.deprecated " Bind on Lwt_stream.closed."]
-(** [on_termination st f] executes [f] when the end of the stream [st]
-    is reached. Note that the stream may still contain elements if
-    {!peek} or similar was used.
+(** {3 Deprecated} *)
 
-    @deprecated Use {!closed}. *)
-
-val on_terminate : 'a t -> (unit -> unit) -> unit
-[@@ocaml.deprecated " Bind on Lwt_stream.closed."]
-(** Same as {!on_termination}.
-
-    @deprecated Use {!closed}. *)
+val junk_old : 'a t -> unit Lwt.t [@@deprecated "Use junk_available instead"]
+(** @deprecated [junk_old st] is [Lwt.return (junk_available st)]. *)
 
 (** {2 Stream transversal} *)
 
@@ -360,7 +351,7 @@ val concat : 'a t t -> 'a t
 val flatten : 'a list t -> 'a t
 (** [flatten st = map_list (fun l -> l) st] *)
 
-val wrap_exn : 'a t -> 'a Lwt.result t
+val wrap_exn : 'a t -> ('a, exn) result t
 (** [wrap_exn s] is a stream [s'] such that each time [s] yields a value [v],
     [s'] yields [Result.Ok v], and when the source of [s] raises an exception
     [e], [s'] yields [Result.Error e].
@@ -398,32 +389,3 @@ val hexdump : char t -> string t
         end
     ]}
 *)
-
-(** {2 Deprecated} *)
-
-type 'a result =
-  | Value of 'a
-  | Error of exn
-[@@ocaml.deprecated
-  " This type is being replaced by Lwt.result and the corresponding function
- Lwt_stream.wrap_exn."]
-(** A value or an error.
-
-    @deprecated Replaced by {!wrap_exn}, which uses {!Lwt.result}. *)
-
-[@@@ocaml.warning "-3"]
-val map_exn : 'a t -> 'a result t
-[@@ocaml.deprecated " Use Lwt_stream.wrap_exn"]
-(** [map_exn s] returns a stream that captures all exceptions raised
-    by the source of the stream (the function passed to {!from}).
-
-    Note that for push-streams (as returned by {!create}) all
-    elements of the mapped streams are values.
-
-    If the stream source keeps raising the same exception [e] each time the
-    stream is read, the stream produced by [map_exn] is unbounded. Reading it
-    will produce [Lwt_stream.Error e] indefinitely.
-
-    @deprecated Use {!wrap_exn}. *)
-
-[@@@ocaml.warning "+3"]

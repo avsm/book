@@ -18,7 +18,7 @@ open! Import
 module Cheap_option = struct
   (* This is taken from core. Rather than expose it in the public interface of base, just
      keep a copy around here. *)
-  let phys_same (type a b) (a : a) (b : b) = phys_equal a (Caml.Obj.magic b : a)
+  let phys_same (type a b) (a : a) (b : b) = phys_equal a (Stdlib.Obj.magic b : a)
 
   module T0 : sig
     type 'a t
@@ -29,7 +29,7 @@ module Cheap_option = struct
     val is_some : _ t -> bool
     val value_exn : 'a t -> 'a
     val value_unsafe : 'a t -> 'a
-    val iter_some : 'a t -> f:('a -> unit) -> unit
+    val iter_some : 'a t -> f:(('a -> unit)[@local]) -> unit
   end = struct
     type +'a t
 
@@ -42,7 +42,9 @@ module Cheap_option = struct
 
        this code is duplicated in Moption, and if we find yet another place where we want
        it we should reconsider making it shared. *)
-    let none_substitute : _ t = Caml.Obj.obj (Caml.Obj.new_block Caml.Obj.abstract_tag 1)
+    let none_substitute : _ t =
+      Stdlib.Obj.obj (Stdlib.Obj.new_block Stdlib.Obj.abstract_tag 1)
+    ;;
 
     let none : _ t =
       (* The number was produced by
@@ -56,18 +58,18 @@ module Cheap_option = struct
          y] is not a pointer if [c] is an integer compile-time constant.  This is being
          fixed in https://github.com/ocaml/ocaml/pull/555.  The "memory corruption" test
          below demonstrates the issue.  *)
-      Caml.Obj.magic `x6e8ee3478e1d7449
+      Stdlib.Obj.magic `x6e8ee3478e1d7449
     ;;
 
     let is_none x = phys_equal x none
     let is_some x = not (phys_equal x none)
 
     let some (type a) (x : a) : a t =
-      if phys_same x none then none_substitute else Caml.Obj.magic x
+      if phys_same x none then none_substitute else Stdlib.Obj.magic x
     ;;
 
     let value_unsafe (type a) (x : a t) : a =
-      if phys_equal x none_substitute then Caml.Obj.magic none else Caml.Obj.magic x
+      if phys_equal x none_substitute then Stdlib.Obj.magic none else Stdlib.Obj.magic x
     ;;
 
     let value_exn x =
@@ -114,7 +116,7 @@ let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
   Uniform_array.sexp_of_t (Cheap_option.sexp_of_t _of_a__004_) x__005_
 ;;
 
-let (t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t) =
+let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
   fun _'a_sexp_grammar ->
   Uniform_array.t_sexp_grammar (Cheap_option.t_sexp_grammar _'a_sexp_grammar)
 ;;
@@ -123,8 +125,8 @@ let (t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t
 
 let empty = Uniform_array.empty
 let create ~len = Uniform_array.create ~len Cheap_option.none
-let init n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.of_option (f i))
-let init_some n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.some (f i))
+let init n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.of_option (f i)) [@nontail]
+let init_some n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.some (f i)) [@nontail]
 let length = Uniform_array.length
 let[@inline] get t i = Cheap_option.to_option (Uniform_array.get t i)
 let get_some_exn t i = Cheap_option.value_exn (Uniform_array.get t i)
@@ -158,7 +160,7 @@ let iteri input ~f =
   done
 ;;
 
-let iter input ~f = iteri input ~f:(fun (_ : int) x -> f x)
+let iter input ~f = iteri input ~f:(fun (_ : int) x -> f x) [@nontail]
 
 let foldi input ~init ~f =
   let acc = ref init in
@@ -166,10 +168,10 @@ let foldi input ~init ~f =
   !acc
 ;;
 
-let fold input ~init ~f = foldi input ~init ~f:(fun (_ : int) acc x -> f acc x)
+let fold input ~init ~f = foldi input ~init ~f:(fun (_ : int) acc x -> f acc x) [@nontail]
 
 include Indexed_container.Make_gen (struct
-    type nonrec 'a t = 'a t
+    type nonrec ('a, _) t = 'a t
     type 'a elt = 'a option
 
     let fold = fold
@@ -179,13 +181,15 @@ include Indexed_container.Make_gen (struct
     let length = `Custom length
   end)
 
+let length = Uniform_array.length
+
 let mapi input ~f =
   let output = create ~len:(length input) in
   iteri input ~f:(fun i elem -> unsafe_set output i (f i elem));
   output
 ;;
 
-let map input ~f = mapi input ~f:(fun (_ : int) elem -> f elem)
+let map input ~f = mapi input ~f:(fun (_ : int) elem -> f elem) [@nontail]
 
 let map_some input ~f =
   let len = length input in

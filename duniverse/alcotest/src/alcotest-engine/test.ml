@@ -42,6 +42,10 @@ let testable (type a) (pp : a Fmt.t) (equal : a -> a -> bool) : a testable =
   end in
   (module M)
 
+let map f t =
+  let pp ppf = (Fmt.using f (pp t)) ppf and equal a b = equal t (f a) (f b) in
+  testable pp equal
+
 let int32 = testable Fmt.int32 ( = )
 let int64 = testable Fmt.int64 ( = )
 let int = testable Fmt.int ( = )
@@ -77,6 +81,15 @@ let list e =
     | _ -> false
   in
   testable (Fmt.Dump.list (pp e)) eq
+
+let seq e =
+  let rec eq s1 s2 =
+    match (s1 (), s2 ()) with
+    | Seq.Cons (x, xs), Seq.Cons (y, ys) -> equal e x y && eq xs ys
+    | Nil, Nil -> true
+    | _ -> false
+  in
+  testable (Fmt.Dump.seq (pp e)) eq
 
 let slist (type a) (a : a testable) compare =
   let l = list a in
@@ -151,8 +164,11 @@ let reject (type a) =
 let show_assert = function
   | "" -> ()
   | msg ->
-      Fmt.(flush stdout) () (* Flush any test stdout preceding the assert *);
-      Format.eprintf "%a %s\n%!" Pp.tag `Assert msg
+      Fmt.(flush (Formatters.get_stdout () :> Format.formatter))
+        () (* Flush any test stdout preceding the assert *);
+      Format.fprintf
+        (Formatters.get_stderr () :> Format.formatter)
+        "%a %s\n%!" Pp.tag `Assert msg
 
 let check_err fmt = raise (Core.Check_error fmt)
 
@@ -192,6 +208,10 @@ let check (type a) ?here ?pos (t : a testable) msg (expected : a) (actual : a) =
       ()
     and pp_actual ppf () =
       Fmt.pf ppf "   Received: `%a'" (styled `Red (pp t)) actual
+    and here, pos =
+      match (here, pos) with
+      | None, None -> (Callsite_loc.get (), None)
+      | _ -> (here, pos)
     in
     raise
       (Core.Check_error
@@ -227,12 +247,25 @@ let check_raises ?here ?pos msg exn f =
   match collect_exception f with
   | None ->
       check_err (fun ppf () ->
-          Fmt.pf ppf "%t%a %s: expecting %s, got nothing."
-            (pp_location ?here ?pos) Pp.tag `Fail msg (Printexc.to_string exn))
+          Fmt.pf ppf "%t%a %s: expecting %a, got nothing."
+            (pp_location ?here ?pos) Pp.tag `Fail msg Fmt.exn exn)
   | Some e ->
       if e <> exn then
         check_err (fun ppf () ->
-            Fmt.pf ppf "%t%a %s: expecting %s, got %s." (pp_location ?here ?pos)
-              Pp.tag `Fail msg (Printexc.to_string exn) (Printexc.to_string e))
+            Fmt.pf ppf "%t%a %s: expecting %a, got %a." (pp_location ?here ?pos)
+              Pp.tag `Fail msg Fmt.exn exn Fmt.exn e)
 
-let () = at_exit (Format.pp_print_flush Format.err_formatter)
+let match_raises ?here ?pos msg exnp f =
+  show_assert msg;
+  match collect_exception f with
+  | None ->
+      check_err (fun ppf () ->
+          Fmt.pf ppf "%t%a %s: got nothing." (pp_location ?here ?pos) Pp.tag
+            `Fail msg)
+  | Some e ->
+      if not (exnp e) then
+        check_err (fun ppf () ->
+            Fmt.pf ppf "%t%a %s: got %a." (pp_location ?here ?pos) Pp.tag `Fail
+              msg Fmt.exn e)
+
+let skip () = raise Core.V1.Skip

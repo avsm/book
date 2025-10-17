@@ -12,8 +12,7 @@ type.
 It provides corresponding functionality for variant types as
 `ppx_fields_conv` provides for record types.
 
-Basic use of `[@@deriving variants]` and variantslib
-----------------------------------------------------
+# Basic use of `[@@deriving variants]` and variantslib
 
 This code:
 
@@ -53,12 +52,12 @@ module Variants : sig
   val d : (int -> int -> 'a t) Variant.t
 
   val fold :
-    init: 'b
-    -> a:('b -> ('a -> 'a t)         Variant.t -> 'c)
-    -> b:('c -> (char -> 'a t)       Variant.t -> 'd)
-    -> c:('d -> ('a t)               Variant.t -> 'e)
-    -> d:('e -> (int -> int -> 'a t) Variant.t -> 'f)
-    -> 'f
+    init: 'acc1
+    -> a:('acc1 -> ('a -> 'a t)         Variant.t -> 'acc2)
+    -> b:('acc2 -> (char -> 'a t)       Variant.t -> 'acc3)
+    -> c:('acc3 -> ('a t)               Variant.t -> 'acc4)
+    -> d:('acc4 -> (int -> int -> 'a t) Variant.t -> 'acc5)
+    -> 'acc5
 
   val iter :
        a: (('a -> 'a t)         Variant.t -> unit)
@@ -76,12 +75,12 @@ module Variants : sig
     -> 'r
 
   val make_matcher :
-       a:(('a -> 'a t)         Variant.t -> 'b -> ('c -> 'd)         * 'e)
-    -> b:((char -> 'f t)       Variant.t -> 'e -> (char -> 'd)       * 'g)
-    -> c:('h t                 Variant.t -> 'g -> (unit -> 'd)       * 'i)
-    -> d:((int -> int -> 'j t) Variant.t -> 'i -> (int -> int -> 'd) * 'k)
-    -> 'b
-    -> ('c t -> 'd) * 'k
+       a:(('b -> 'b t)        Variant.t -> 'acc1 -> ('a -> 'r)         * 'acc2)
+    -> b:((char -> _ t)       Variant.t -> 'acc2 -> (char -> 'r)       * 'acc3)
+    -> c:(_ t                 Variant.t -> 'acc3 -> (unit -> 'r)       * 'acc4)
+    -> d:((int -> int -> _ t) Variant.t -> 'acc4 -> (int -> int -> 'r) * 'acc5)
+    -> 'acc1
+    -> ('a t -> 'r) * 'acc5
 
   val to_rank : _ t -> int
   val to_name : _ t -> string
@@ -127,5 +126,17 @@ let all =
 Just like with `[@@deriving fields]`, if the type changes, the
 compiler will complain until this definition is updated as well.
 
-`ppx_variant_libs` works similarly on simple polymorphic variants
+# Polymorphic Variants
+
+`ppx_variants_conv` works similarly on simple polymorphic variants
 (without row variables and without inclusion).
+
+# GADTs
+
+`ppx_variants_conv` can be used with GADTs but with some limitations. 
+
+The preprocessor will not generate `*_val` functions for the GADTs
+constructors, because it's not clear which type such functions should
+have. This may be revisited in the future. As a consequence neither
+`Variants.map` nor `Variants.make_matcher` functions will be generated
+either.

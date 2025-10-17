@@ -1,27 +1,8 @@
-version: "0.7.0+dune2"
+version: "0.9.0+dune2"
 opam-version: "2.0"
-maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
-authors: ["The logs programmers"]
-homepage: "https://github.com/dune-universe/logs"
-bug-reports: "https://github.com/dbuenzli/logs/issues"
-tags: [ "log" "system" "org:erratique" ]
-license: "ISC"
-depends: [
-  "ocaml" {>= "4.03.0"}
-  "lwt"
-  "fmt"
-  "cmdliner"
-  "dune"
-  "mtime" {with-test} ]
-depopts: [
-  "js_of_ocaml"
-]
-conflicts: [
-  "js_of_ocaml" { < "3.3.0" } ]
-
-synopsis: """Logging infrastructure for OCaml"""
+name: "logs"
+synopsis: "Logging infrastructure for OCaml"
 description: """\
-
 Logs provides a logging infrastructure for OCaml. Logging is performed
 on sources whose reporting level can be set independently. Log message
 report is decoupled from logging and is handled by a reporter.
@@ -43,7 +24,31 @@ Logs and its reporters are distributed under the ISC license.
 [jsoo]: http://ocsigen.org/js_of_ocaml/
 [cmdliner]: http://erratique.ch/software/cmdliner
 [lwt]: http://ocsigen.org/lwt/
-"""
 
+Home page: <http://erratique.ch/software/logs>"""
+maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
+authors: "The logs programmers"
+license: "ISC"
+tags: ["log" "system" "org:erratique"]
+homepage: "https://erratique.ch/software/logs"
+doc: "https://erratique.ch/software/logs/doc"
+bug-reports: "https://github.com/dbuenzli/logs/issues"
+depends: [
+  "ocaml" {>= "4.14.0"}
+  "lwt"
+  "fmt" {>= "0.9.0"}
+  "cmdliner" {>= "1.3.0"}
+  "dune"
+  "mtime" {with-test}
+]
+depopts: [
+  "js_of_ocaml"
+]
+conflicts: [
+  "js_of_ocaml-compiler" {< "5.5.0"}
+]
 build: [[ "dune" "build" "-p" name ]]
 dev-repo: "git+https://github.com/dune-universe/logs.git"
+url {
+  src: "git://github.com/dune-universe/logs.git#duniverse-v0.9.0"
+}

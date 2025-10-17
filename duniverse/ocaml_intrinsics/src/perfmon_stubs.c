@@ -19,7 +19,7 @@ static uint64_t rdtsc()
   return ((uint64_t)lo) | (((uint64_t)hi)<<32);
 }
 #elif defined(_MSC_VER)
-#error "Functionality on Windows has not been tested"
+#warning "Functionality on Windows has not been tested"
 #include <intrin.h>
 #pragma intrinsic(__rdtsc)
 
@@ -31,11 +31,20 @@ static uint64_t rdpmc(__attribute__ ((unused)) uint32_t c) { return 0; }
 #else
 static uint64_t rdpmc(__attribute__ ((unused)) uint32_t c) { return 0; }
 static uint64_t rdtsc() { return 0; }
-#endif
+#endif // defined(__GNUC__)
+#elif defined(__aarch64__)
+static uint64_t rdpmc(__attribute__ ((unused)) uint32_t c) { return 0; }
+
+static uint64_t rdtsc()
+{
+  uint64_t tsc;
+  asm volatile("mrs %0, cntvct_el0" : "=r" (tsc));
+  return tsc;
+}
 #else
 static uint64_t rdpmc(__attribute__ ((unused)) uint32_t c) { return 0; }
 static uint64_t rdtsc() { return 0; }
-#endif
+#endif // (defined(__i386__) || defined(__x86_64__))
 
 uint64_t caml_rdpmc_unboxed(uint32_t v1)
 {

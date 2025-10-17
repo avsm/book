@@ -61,7 +61,10 @@ end
 
 module Unpack_to = struct
   type 'a t =
-    | Iter of ('a -> unit)
+    | Iter of
+        { f : 'a -> unit
+        ; pushback : unit -> unit Deferred.t
+        }
     | Pipe of 'a Pipe.Writer.t
   [@@deriving sexp_of]
 end
@@ -69,10 +72,12 @@ end
 let unpack_all ~(from : Unpack_from.t) ~(to_ : _ Unpack_to.t) ~using:unpack_buffer =
   let unpack_all_available =
     match to_ with
-    | Iter f ->
+    | Iter { f; pushback } ->
       fun () ->
         (match Unpack_buffer.unpack_iter unpack_buffer ~f with
-         | Ok () -> return `Continue
+         | Ok () ->
+           let%bind.Eager_deferred () = pushback () in
+           return `Continue
          | Error error -> return (`Stop (Unpack_result.Unpack_error error)))
     | Pipe output_writer ->
       let f a =
@@ -99,8 +104,7 @@ let unpack_all ~(from : Unpack_from.t) ~(to_ : _ Unpack_to.t) ~using:unpack_buff
       (* In rare situations, a reader can asynchronously raise.  We'd rather not raise
          here, since we have a natural place to report the error. *)
       try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () ->
            Reader.read_one_chunk_at_a_time input ~handle_chunk:(fun buf ~pos ~len ->
@@ -154,8 +158,8 @@ let unpack_into_pipe ~from ~using =
   output_reader, result
 ;;
 
-let unpack_iter ~from ~using ~f =
-  unpack_all ~from ~to_:(Iter f) ~using
+let unpack_iter_internal ~from ~using ~f ~pushback =
+  unpack_all ~from ~to_:(Iter { f; pushback }) ~using
   >>| function
   | Input_closed -> Unpack_iter_result.Input_closed
   | Input_closed_in_the_middle_of_data x -> Input_closed_in_the_middle_of_data x
@@ -166,6 +170,14 @@ let unpack_iter ~from ~using ~f =
       "Unpack_sequence.unpack_iter got unexpected value"
       t
       [%sexp_of: _ Unpack_result.t]
+;;
+
+let unpack_iter ~from ~using ~f =
+  unpack_iter_internal ~from ~using ~f ~pushback:(const Deferred.unit)
+;;
+
+let unpack_iter_with_pushback ~from ~using ~f ~pushback =
+  unpack_iter_internal ~from ~using ~f ~pushback
 ;;
 
 let%test_module _ =
@@ -276,7 +288,7 @@ let%test_module _ =
       >>| (function
         | `Timeout ->
           failwithf
-            !"unpack_sequence.ml: Deferred took more than %{Time.Span}"
+            !"unpack_sequence.ml: Deferred took more than %{Time_float.Span}"
             timeout
             ()
         | `Result result -> result)
@@ -320,6 +332,7 @@ let%test_module _ =
     let run_tests ?(only_supports_output_to_pipe = false) test_fn =
       Thread_safe.block_on_async_exn (fun () ->
         Deferred.List.iter
+          ~how:`Sequential
           ([ setup_reader; setup_string_pipe_reader ]
            @ if only_supports_output_to_pipe then [] else [ setup_iter ])
           ~f:(fun setup ->

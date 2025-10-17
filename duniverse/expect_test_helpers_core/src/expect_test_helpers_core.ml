@@ -34,83 +34,75 @@ let print_and_check_stable_internal
       (int63able : (module Int63able with type t = a) option)
       list
   =
-  let equal = [%compare.equal: M.t] in
+  let module M = struct
+    include M
+
+    let equal = [%compare.equal: t]
+  end
+  in
   print_s
     ?hide_positions
     [%message
       "" ~bin_shape_digest:(Bin_prot.Shape.eval_to_digest_string M.bin_shape_t : string)];
-  require_does_not_raise ?cr ?hide_positions here (fun () ->
-    List.iter list ~f:(fun original ->
-      let sexp = M.sexp_of_t original in
-      let bin_io = Binable.to_string (module M) original in
-      let int63 = Option.map int63able ~f:(fun (module I) -> I.to_int63 original) in
-      print_s
-        ?hide_positions
-        [%message
-          ""
-            (sexp : Sexp.t)
-            (bin_io : string)
-            (int63 : (Int63.t option[@sexp.option]))];
-      let sexp_roundtrip = M.t_of_sexp sexp in
-      require
-        ?cr
-        ?hide_positions
-        here
-        (equal original sexp_roundtrip)
-        ~if_false_then_print_s:
-          (lazy
-            [%message
-              "sexp serialization failed to round-trip"
-                (original : M.t)
-                (sexp : Sexp.t)
-                (sexp_roundtrip : M.t)]);
-      let bin_io_roundtrip = Binable.of_string (module M) bin_io in
-      require
-        ?cr
-        ?hide_positions
-        here
-        (equal original bin_io_roundtrip)
-        ~if_false_then_print_s:
-          (lazy
-            [%message
-              "bin-io serialization failed to round-trip"
-                (original : M.t)
-                (bin_io : string)
-                (bin_io_roundtrip : M.t)]);
-      (match max_binable_length with
-       | None -> ()
-       | Some max_binable_length ->
-         let bin_io_length = String.length bin_io in
-         require
-           ?cr
-           ?hide_positions
-           here
-           (bin_io_length <= max_binable_length)
-           ~if_false_then_print_s:
-             (lazy
-               [%message
-                 "bin-io serialization exceeds max binable length"
-                   (original : M.t)
-                   (bin_io : string)
-                   (bin_io_length : int)
-                   (max_binable_length : int)]));
-      match int63able with
-      | None -> ()
-      | Some (module I) ->
-        let int63 = Option.value_exn int63 in
-        let int63_roundtrip = I.of_int63_exn int63 in
+  let sexp_m =
+    (module struct
+      type t = M.t
+      type repr = Sexp.t [@@deriving sexp_of]
+
+      let to_repr = M.sexp_of_t
+      let of_repr = M.t_of_sexp
+      let repr_name = "sexp"
+    end : With_round_trip
+      with type t = a)
+  in
+  let bin_io_m =
+    (module struct
+      type t = M.t
+      type repr = string [@@deriving sexp_of]
+
+      let to_repr = Binable.to_string (module M)
+      let of_repr = Binable.of_string (module M)
+      let repr_name = "bin-io"
+    end : With_round_trip
+      with type t = a)
+  in
+  let int63able_m =
+    let%map.Option (module I) = int63able in
+    (module struct
+      type t = M.t
+      type repr = Int63.t [@@deriving sexp_of]
+
+      let to_repr = I.to_int63
+      let of_repr = I.of_int63_exn
+      let repr_name = "int63"
+    end : With_round_trip
+      with type t = a)
+  in
+  print_and_check_round_trip
+    ?cr
+    ?hide_positions
+    here
+    (module M)
+    (List.concat [ [ sexp_m; bin_io_m ]; Option.to_list int63able_m ])
+    list;
+  Option.iter max_binable_length ~f:(fun max_binable_length ->
+    require_does_not_raise ?cr ?hide_positions here (fun () ->
+      List.iter list ~f:(fun original ->
+        let bin_io = Binable.to_string (module M) original in
+        let bin_io_length = String.length bin_io in
         require
           ?cr
           ?hide_positions
           here
-          (equal original int63_roundtrip)
+          (bin_io_length <= max_binable_length)
           ~if_false_then_print_s:
             (lazy
               [%message
-                "int63 serialization failed to round-trip"
+                "bin-io serialization exceeds max binable length"
                   (original : M.t)
-                  (int63 : Int63.t)
-                  (int63_roundtrip : M.t)])))
+                  (bin_io : string)
+                  (bin_io_length : int)
+                  (max_binable_length : int)]))))
 ;;
 
 let print_and_check_stable_type
@@ -154,6 +146,7 @@ let print_and_check_stable_int63able_type
 let require_allocation_does_not_exceed_private
       ?(cr = CR.CR)
       ?hide_positions
+      ?(print_limit = 1_000)
       allocation_limit
       here
       f
@@ -183,13 +176,20 @@ let require_allocation_does_not_exceed_private
            else Some minor_words_allocated, None
          in
          if not (CR.hide_unstable_output cr)
-         then
+         then (
+           let allocs =
+             if List.length allocs > print_limit
+             then (
+               Printf.printf "Cutting off list of allocations after %d\n" print_limit;
+               List.take allocs print_limit)
+             else allocs
+           in
            List.iter allocs ~f:(fun { size_in_words; is_major; backtrace } ->
              Printf.printf
                "Allocation of %d %s words occurred at:\n%s\n"
                size_in_words
                (if is_major then "major" else "minor")
-               backtrace);
+               backtrace));
          [%message
            "allocation exceeded limit"
              (allocation_limit : Allocation_limit.t)
@@ -198,12 +198,23 @@ let require_allocation_does_not_exceed_private
   x
 ;;
 
-let require_allocation_does_not_exceed ?hide_positions allocation_limit here f =
-  require_allocation_does_not_exceed_private ?hide_positions allocation_limit here f
+let require_allocation_does_not_exceed
+      ?print_limit
+      ?hide_positions
+      allocation_limit
+      here
+      f
+  =
+  require_allocation_does_not_exceed_private
+    ?print_limit
+    ?hide_positions
+    allocation_limit
+    here
+    f
 ;;
 
-let require_no_allocation ?hide_positions here f =
-  require_allocation_does_not_exceed ?hide_positions (Minor_words 0) here f
+let require_no_allocation ?print_limit ?hide_positions here f =
+  require_allocation_does_not_exceed ?print_limit ?hide_positions (Minor_words 0) here f
 ;;
 
 let print_and_check_comparable_sexps

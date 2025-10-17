@@ -233,14 +233,14 @@ let reset_pipe ctxt = { ctxt with pipe=false }
 *)
 
 let list :
-      'a.
-      ?sep:space_formatter ->
-      ?first:space_formatter ->
-      ?last:space_formatter ->
-      (Format.formatter -> 'a -> unit) ->
-      Format.formatter ->
-      'a list ->
-      unit =
+    'a.
+    ?sep:space_formatter ->
+    ?first:space_formatter ->
+    ?last:space_formatter ->
+    (Format.formatter -> 'a -> unit) ->
+    Format.formatter ->
+    'a list ->
+    unit =
  fun ?sep ?first ?last fu f xs ->
   let first = match first with Some x -> x | None -> ("" : _ format6)
   and last = match last with Some x -> x | None -> ("" : _ format6)
@@ -264,13 +264,13 @@ let list :
   aux f xs
 
 let option :
-      'a.
-      ?first:space_formatter ->
-      ?last:space_formatter ->
-      (Format.formatter -> 'a -> unit) ->
-      Format.formatter ->
-      'a option ->
-      unit =
+    'a.
+    ?first:space_formatter ->
+    ?last:space_formatter ->
+    (Format.formatter -> 'a -> unit) ->
+    Format.formatter ->
+    'a option ->
+    unit =
  fun ?first ?last fu f a ->
   let first = match first with Some x -> x | None -> ("" : _ format6)
   and last = match last with Some x -> x | None -> ("" : _ format6) in
@@ -282,14 +282,14 @@ let option :
       pp f last
 
 let paren :
-      'a.
-      ?first:space_formatter ->
-      ?last:space_formatter ->
-      bool ->
-      (Format.formatter -> 'a -> unit) ->
-      Format.formatter ->
-      'a ->
-      unit =
+    'a.
+    ?first:space_formatter ->
+    ?last:space_formatter ->
+    bool ->
+    (Format.formatter -> 'a -> unit) ->
+    Format.formatter ->
+    'a ->
+    unit =
  fun ?(first = ("" : _ format6)) ?(last = ("" : _ format6)) b fu f x ->
   if b then (
     pp f "(";
@@ -513,8 +513,10 @@ and pattern1 ctxt (f : Format.formatter) (x : pattern) : unit =
     | Ppat_construct ({ txt = Lident ("()" | "[]"); _ }, _) ->
         simple_pattern ctxt f x
     | Ppat_construct (({ txt; _ } as li), po) -> (
-        if (* FIXME The third field always false *)
-           txt = Lident "::" then pp f "%a" pattern_list_helper x
+        if
+          (* FIXME The third field always false *)
+          txt = Lident "::"
+        then pp f "%a" pattern_list_helper x
         else
           match po with
           | Some ([], x) ->
@@ -1756,3 +1758,5 @@ let module_type = module_type reset_ctxt
 let signature_item = signature_item reset_ctxt
 let structure_item = structure_item reset_ctxt
 let type_declaration = type_declaration reset_ctxt
+let binding = binding reset_ctxt
+let payload = payload reset_ctxt

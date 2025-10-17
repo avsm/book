@@ -1,5 +1,5 @@
 opam-version: "2.0"
-version: "v0.15.0"
+version: "v0.16.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/async_kernel"
@@ -11,12 +11,13 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"       {>= "4.08.0"}
-  "core"        {>= "v0.15" & < "v0.16"}
-  "core_kernel" {>= "v0.15" & < "v0.16"}
-  "ppx_jane"    {>= "v0.15" & < "v0.16"}
+  "ocaml"       {>= "4.14.0"}
+  "core"        {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "ppx_jane"    {>= "v0.16" & < "v0.17"}
   "dune"        {>= "2.0.0"}
 ]
+available: arch != "arm32" & arch != "x86_32"
 synopsis: "Monadic concurrency library"
 description: "
 Part of Jane Street's Core library

@@ -26,8 +26,8 @@ val invariant : _ t -> unit
 val empty : _ t
 val create : len:int -> 'a -> 'a t
 val singleton : 'a -> 'a t
-val init : int -> f:(int -> 'a) -> 'a t
-val length : 'a t -> int
+val init : int -> f:((int -> 'a)[@local]) -> 'a t
+val length : ('a t[@local]) -> int
 val get : 'a t -> int -> 'a
 val unsafe_get : 'a t -> int -> 'a
 val set : 'a t -> int -> 'a -> unit
@@ -48,15 +48,15 @@ val unsafe_set_with_caml_modify : 'a t -> int -> 'a -> unit
 (** Same as [unsafe_set_with_caml_modify], but with bounds check. *)
 val set_with_caml_modify : 'a t -> int -> 'a -> unit
 
-val map : 'a t -> f:('a -> 'b) -> 'b t
-val mapi : 'a t -> f:(int -> 'a -> 'b) -> 'b t
-val iter : 'a t -> f:('a -> unit) -> unit
+val map : 'a t -> f:(('a -> 'b)[@local]) -> 'b t
+val mapi : 'a t -> f:((int -> 'a -> 'b)[@local]) -> 'b t
+val iter : 'a t -> f:(('a -> unit)[@local]) -> unit
 
 (** Like {!iter}, but the function is applied to the index of the element as first
     argument, and the element itself as second argument. *)
-val iteri : 'a t -> f:(int -> 'a -> unit) -> unit
+val iteri : 'a t -> f:((int -> 'a -> unit)[@local]) -> unit
 
-val foldi : 'a t -> init:'b -> f:(int -> 'b -> 'a -> 'b) -> 'b
+val foldi : 'a t -> init:'acc -> f:((int -> 'acc -> 'a -> 'acc)[@local]) -> 'acc
 
 (** [of_array] and [to_array] return fresh arrays with the same contents rather than
     returning a reference to the underlying array. *)
@@ -76,37 +76,43 @@ val copy : 'a t -> 'a t
 val unsafe_create_uninitialized : len:int -> _ t
 
 (** New obj array filled with [Obj.repr 0] *)
-val create_obj_array : len:int -> Caml.Obj.t t
+val create_obj_array : len:int -> Stdlib.Obj.t t
 
 (** [unsafe_set_assuming_currently_int t i obj] sets index [i] of [t] to [obj], but only
-    works correctly if the value there is an immediate, i.e. [Caml.Obj.is_int (get t i)].
+    works correctly if the value there is an immediate, i.e. [Stdlib.Obj.is_int (get t i)].
     This precondition saves a dynamic check.
 
     [unsafe_set_int_assuming_currently_int] is similar, except the value being set is an
     int.
 
     [unsafe_set_int] is similar but does not assume anything about the target. *)
-val unsafe_set_assuming_currently_int : Caml.Obj.t t -> int -> Caml.Obj.t -> unit
+val unsafe_set_assuming_currently_int : Stdlib.Obj.t t -> int -> Stdlib.Obj.t -> unit
 
-val unsafe_set_int_assuming_currently_int : Caml.Obj.t t -> int -> int -> unit
-val unsafe_set_int : Caml.Obj.t t -> int -> int -> unit
+val unsafe_set_int_assuming_currently_int : Stdlib.Obj.t t -> int -> int -> unit
+val unsafe_set_int : Stdlib.Obj.t t -> int -> int -> unit
 
 
 (** [unsafe_clear_if_pointer t i] prevents [t.(i)] from pointing to anything to prevent
-    space leaks.  It does this by setting [t.(i)] to [Caml.Obj.repr 0].  As a performance
-    hack, it only does this when [not (Caml.Obj.is_int t.(i))].  It is an error to access
+    space leaks.  It does this by setting [t.(i)] to [Stdlib.Obj.repr 0].  As a performance
+    hack, it only does this when [not (Stdlib.Obj.is_int t.(i))].  It is an error to access
     the cleared index before setting it again. *)
-val unsafe_clear_if_pointer : Caml.Obj.t t -> int -> unit
+val unsafe_clear_if_pointer : Stdlib.Obj.t t -> int -> unit
 
 (** As [Array.exists]. *)
-val exists : 'a t -> f:('a -> bool) -> bool
+val exists : 'a t -> f:(('a -> bool)[@local]) -> bool
 
 (** As [Array.for_all]. *)
-val for_all : 'a t -> f:('a -> bool) -> bool
+val for_all : 'a t -> f:(('a -> bool)[@local]) -> bool
 
 (** Functions with the 2 suffix raise an exception if the lengths of the two given arrays
     aren't the same. *)
-val map2_exn : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
+val map2_exn : 'a t -> 'b t -> f:(('a -> 'b -> 'c)[@local]) -> 'c t
 
-val min_elt : 'a t -> compare:('a -> 'a -> int) -> 'a option
-val max_elt : 'a t -> compare:('a -> 'a -> int) -> 'a option
+val min_elt : 'a t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
+val max_elt : 'a t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
+
+(** [sort] uses constant heap space.
+
+    To sort only part of the array, specify [pos] to be the index to start sorting from
+    and [len] indicating how many elements to sort. *)
+val sort : ?pos:int -> ?len:int -> 'a t -> compare:(('a -> 'a -> int)[@local]) -> unit

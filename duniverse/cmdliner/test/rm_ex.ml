@@ -53,7 +53,7 @@ let cmd =
     `S Manpage.s_bugs; `P "Report bugs to <bugs@example.org>.";
     `S Manpage.s_see_also; `P "$(b,rmdir)(1), $(b,unlink)(2)" ]
   in
-  let info = Cmd.info "rm" ~version:"v1.1.1" ~doc ~man in
+  let info = Cmd.info "rm" ~version:"v1.3.0+dune" ~doc ~man in
   Cmd.v info Term.(const rm $ prompt $ recursive $ files)
 
 let main () = exit (Cmd.eval cmd)

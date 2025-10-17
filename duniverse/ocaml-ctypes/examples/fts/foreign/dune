@@ -1,13 +1,7 @@
-(executables
- (names fts_cmd)
+(test
+ (name fts_cmd)
  (enabled_if
   (= %{os_type} Unix))
- (libraries ctypes-foreign))
-
-(rule
- (alias runtest)
- (enabled_if
-  (= %{os_type} Unix))
+ (libraries ctypes-foreign)
  (package ctypes-foreign)
- (action (progn))
- (deps ./fts_cmd.exe))
+ (action (progn)))

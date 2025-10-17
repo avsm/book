@@ -19,7 +19,7 @@
 #define int64_popcnt __builtin_popcountll
 #else /* defined(__GNUC__) */
 #ifdef _MSC_VER
-#error "Functionality on Windows has not been tested"
+#warning "Functionality on Windows has not been tested"
 #include <intrin.h>
 #pragma intrinsic(_BitScanReverse)
 
@@ -116,7 +116,7 @@ intnat naive_int32_popcnt (uint32_t x)
 #define int32_popcnt naive_int32_popcnt
 #define int64_popcnt naive_int64_popcnt
 #elseif /* _MSC_VER */
-#error "Not __GNUC__ Not _MSC_VER"
+#error "Target not supported"
 #endif /* _MSC_VER */
 #endif /* defined(__GNUC__) */
 
@@ -394,4 +394,48 @@ CAMLprim value caml_nativeint_ctz(value v1)
 CAMLprim value caml_nativeint_popcnt(value v1)
 {
   return Val_long(caml_nativeint_popcnt_unboxed_to_untagged(Int64_val(v1)));
+}
+
+/* x86 BMI2 Intrinsics */
+
+#if (defined(__GNUC__) && defined(__BMI2__))
+#include <immintrin.h>
+#define ARCH_BMI2
+#elif (defined(_MSC_VER) && defined(__AVX2__))
+// MSVC does not define a BMI2 macro, but AVX2 implies it.
+#define ARCH_BMI2
+#endif
+
+uint64_t caml_bmi2_int64_deposit_bits(uint64_t a, uint64_t mask)
+{
+#ifdef ARCH_BMI2
+  return _pdep_u64(a, mask);
+#else
+  /* Platform not supported, but we don't want to prevent the rest of the library from
+     building on it. This is a temporary solution. */
+  (void)a;
+  (void)mask;
+  abort();
+#endif
+}
+
+uint64_t caml_bmi2_int64_extract_bits(uint64_t a, uint64_t mask)
+{
+#ifdef ARCH_BMI2
+  return _pext_u64(a, mask);
+#else
+  /* Platform not supported, but we don't want to prevent the rest of the library from
+     building on it. This is a temporary solution. */
+  (void)a;
+  (void)mask;
+  abort();
+#endif
+}
+
+CAMLprim value caml_bmi2_int64_deposit_bits_bytecode(value a, value mask) {
+  return caml_copy_int64(caml_bmi2_int64_deposit_bits(Int64_val(a), Int64_val(mask)));
+}
+
+CAMLprim value caml_bmi2_int64_extract_bits_bytecode(value a, value mask) {
+  return caml_copy_int64(caml_bmi2_int64_extract_bits(Int64_val(a), Int64_val(mask)));
 }

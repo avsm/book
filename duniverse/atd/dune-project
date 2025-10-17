@@ -1,9 +1,10 @@
 (lang dune 2.8)
 (using menhir 2.0)
 (implicit_transitive_deps false)
+(cram enable)
 
 (name atd)
-(version 2.10.0)
+(version 2.16.0)
 (license MIT)
 
 (maintainers
@@ -84,20 +85,22 @@
   (odoc :with-doc)
   (re (>= 1.9.0))
   (yojson (>= 1.6.0))
+  (cmdliner (>= 1.1.0))
  )
  (synopsis "Parser for the ATD data format description language")
  (description "\
 ATD is the OCaml library providing a parser for the ATD language and various
 utilities. ATD stands for Adjustable Type Definitions in reference to its main
 property of supporting annotations that allow a good fit with a variety of data
-formats. "))
+formats. This package also provides the 'atdcat' and 'atddiff' command-line
+utilities."))
 
 (package
  (name atdgen)
  (depends
   (ocaml (>= 4.08))
   (alcotest :with-test)
-  (atd (>= 2.7.0))
+  (atd (>= 2.14.0))
   (atdgen-runtime (>= 2.1.0))
   (atdgen-codec-runtime :with-test)
   (biniou (>= 1.0.6))
@@ -168,7 +171,7 @@ automatically handled")
  (description "Python/mypy code generation for ATD APIs")
  (depends
   (ocaml (>= 4.08))
-  (atd (>= 2.7.0))
+  (atd (>= 2.11.0))
   (cmdliner (>= 1.1.0))
   re
   (alcotest :with-test)
@@ -177,10 +180,10 @@ automatically handled")
 
 (package
  (name atdgen-codec-runtime)
- (synopsis "Runtime for atdgen generated bucklescript converters")
+ (synopsis "Runtime for atdgen generated Melange converters")
  (description "\
 This library contains the types that are used by atdgen's
-bucklescript backend")
+Melange backend")
  (depends
   (ocaml (>= 4.08))
   (odoc :with-doc)))
@@ -191,8 +194,31 @@ bucklescript backend")
  (description "TypeScript code generation for ATD APIs")
  (depends
   (ocaml (>= 4.08))
-  (atd (>= 2.7.0))
+  (atd (>= 2.13.0))
   (cmdliner (>= 1.1.0))
   re
   (alcotest :with-test)
+  (odoc :with-doc)))
+
+
+(package
+ (name atdd)
+ (synopsis "DLang code generation for ATD APIs")
+ (description "DLang code generation for ATD APIs")
+ (depends
+  (ocaml (>= 4.08))
+  (atd (>= 2.11.0))
+  (cmdliner (>= 1.1.0))
+  re
+  (odoc :with-doc)))
+
+(package
+ (name atdcpp)
+ (synopsis "C++ code generation for ATD APIs")
+ (description "C++ code generation for ATD APIs")
+ (depends
+  (ocaml (>= 4.08))
+  (atd (>= 2.11.0))
+  (cmdliner (>= 1.1.0))
+  re
   (odoc :with-doc)))

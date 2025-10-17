@@ -1,4 +1,4 @@
-version: "0.4.0"
+version: "0.4.1"
 opam-version: "2.0"
 maintainer: "Hannes Mehnert <hannes@mehnert.org>"
 authors: "Hannes Mehnert <hannes@mehnert.org>"
@@ -8,7 +8,7 @@ doc: "https://hannesm.github.io/domain-name/doc"
 bug-reports: "https://github.com/hannesm/domain-name/issues"
 depends: [
   "ocaml" {>= "4.04.2"}
-  "dune"
+  "dune" {>= "1.0"}
   "alcotest" {with-test}
 ]
 build: [
@@ -26,3 +26,4 @@ representation is 255), but other protocols (such as SMTP) may apply even
 smaller limits.  A domain name label is case preserving, comparison is done in a
 case insensitive manner.
 """
+x-maintenance-intent: [ "(latest)" ]

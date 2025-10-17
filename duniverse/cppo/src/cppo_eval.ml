@@ -5,35 +5,59 @@ open Cppo_types
 module S = Set.Make (String)
 module M = Map.Make (String)
 
-let builtins = [
-  "__FILE__", (fun _env -> `Special);
-  "__LINE__", (fun _env -> `Special);
-  "STRINGIFY", (fun env ->
-                  `Defun (dummy_loc, "STRINGIFY",
-                          ["x"],
-                          [`Stringify (`Ident (dummy_loc, "x", None))],
-                          env)
-               );
-  "CONCAT", (fun env ->
-               `Defun (dummy_loc, "CONCAT",
-                       ["x";"y"],
-                       [`Concat (`Ident (dummy_loc, "x", None),
-                                 `Ident (dummy_loc, "y", None))],
-                       env)
-            );
-  "CAPITALIZE", (fun env ->
-    `Defun (dummy_loc, "CAPITALIZE",
-            ["x"],
-            [`Capitalize (`Ident (dummy_loc, "x", None))],
-            env)
-  );
+let find_opt name env =
+  try Some (M.find name env)
+  with Not_found -> None
 
+(* An environment entry. *)
+
+(* In a macro definition [EDef (loc, formals, body, env)],
+
+   + [loc] is the location of the macro definition,
+   + [formals] is the list of formal parameters,
+   + [body] and [env] represent the closed body of the macro definition. *)
+
+type entry =
+  | EDef of loc * formals * body * env
+
+(* An environment is a map of (macro) names to environment entries. *)
+
+and env =
+  entry M.t
+
+let basic x : formal =
+  (x, base)
+
+let ident x =
+  `Ident (dummy_loc, x, [])
+
+let dummy_defun formals body env =
+  EDef (dummy_loc, List.map basic formals, body, env)
+
+let builtins : (string * (env -> entry)) list = [
+  "STRINGIFY",
+  dummy_defun
+    ["x"]
+    (`Stringify (ident "x"))
+  ;
+  "CONCAT",
+  dummy_defun
+    ["x";"y"]
+    (`Concat (ident "x", ident "y"))
+  ;
+  "CAPITALIZE",
+  dummy_defun
+    ["x"]
+    (`Capitalize (ident "x"))
+  ;
 ]
 
 let is_reserved s =
+  s = "__FILE__" ||
+  s = "__LINE__" ||
   List.exists (fun (s', _) -> s = s') builtins
 
-let builtin_env =
+let builtin_env : env =
   List.fold_left (fun env (s, f) -> M.add s (f env) env) M.empty builtins
 
 let line_directive buf pos =
@@ -50,9 +74,18 @@ let rec add_sep sep last = function
   | [x] -> [ x; last ]
   | x :: l -> x :: sep :: add_sep sep last l
 
-
-let remove_space l =
-  List.filter (function `Text (_, true, _) -> false | _ -> true) l
+(* Transform a list of actual macro arguments back into ordinary text,
+   after discovering that they are not macro arguments after all. *)
+let text loc name (actuals : actuals) : node list =
+  match actuals with
+  | [] ->
+      [`Text (loc, false, name)]
+  | _ :: _ ->
+      `Text (loc, false, name ^ "(") ::
+      add_sep
+        (`Text (loc, false, ","))
+        (`Text (loc, false, ")"))
+        actuals
 
 let trim_and_compact buf s =
   let started = ref false in
@@ -117,6 +150,24 @@ let concat loc x y =
     if s = "" then " "
     else " " ^ s ^ " "
 
+let int_expansion_error loc name =
+    error loc
+      (sprintf "\
+Variable %s found in cppo boolean expression must expand
+into an int literal, into a tuple of int literals,
+or into a variable with the same properties."
+         name)
+
+let rec int_expansion loc name (node : node) : string =
+  match node with
+  | `Text (_loc, _is_space, s) ->
+      s
+  | `Seq (_loc, nodes) ->
+      List.map (int_expansion loc name) nodes
+      |> String.concat ""
+  | _ ->
+      int_expansion_error loc name
+
 (*
    Expand the contents of a variable used in a boolean expression.
 
@@ -138,47 +189,31 @@ let concat loc x y =
    - x, where x expands into 123.
 *)
 let rec eval_ident env loc name =
-  let l =
-    try
-      match M.find name env with
-      | `Def (_, _, l, _) -> l
-      | `Defun _ ->
-          error loc (sprintf "%S expects arguments" name)
-      | `Special -> assert false
-    with Not_found -> error loc (sprintf "Undefined identifier %S" name)
-  in
-  let expansion_error () =
-    error loc
-      (sprintf "\
-Variable %s found in cppo boolean expression must expand
-into an int literal, into a tuple of int literals,
-or into a variable with the same properties."
-         name)
+  let body =
+    match find_opt name env with
+    | Some (EDef (_loc, [], body, _env)) ->
+        body
+    | Some (EDef _) ->
+        error loc (sprintf "%S expects arguments" name)
+    | None ->
+        error loc (sprintf "Undefined identifier %S" name)
   in
   (try
-     match remove_space l with
-       [ `Ident (loc, name, None) ] ->
+     match node_is_ident body with
+     | Some (loc, name) ->
          (* single identifier that we expand recursively *)
          eval_ident env loc name
-     | _ ->
+     | None ->
          (* int literal or int tuple literal; variables not allowed *)
-         let text =
-           List.map (
-             function
-               `Text (_, _is_space, s) -> s
-             | _ ->
-                 expansion_error ()
-           ) (Cppo_types.flatten_nodes l)
-         in
-         let s = String.concat "" text in
+         let s = int_expansion loc name body in
          (match Cppo_lexer.int_tuple_of_string s with
             Some [i] -> `Int i
           | Some l -> `Tuple (loc, List.map (fun i -> `Int i) l)
           | None ->
-              expansion_error ()
+              int_expansion_error loc name
          )
    with Cppo_error _ ->
-     expansion_error ()
+     int_expansion_error loc name
   )
 
 let rec replace_idents env (x : arith_expr) : arith_expr =
@@ -314,7 +349,8 @@ let rec eval_bool env (x : bool_expr) =
 type globals = {
   call_loc : Cppo_types.loc;
     (* location used to set the value of
-       __FILE__ and __LINE__ global variables *)
+       __FILE__ and __LINE__ global variables;
+       also used in the expansion of CONCAT *)
 
   mutable buf : Buffer.t;
     (* buffer where the output is written *)
@@ -346,7 +382,13 @@ type globals = {
     (* mapping from extension ID to pipeline command *)
 }
 
-
+(* [preserving_enable_loc g action] saves [g.enable_loc], runs [action()],
+   then restores [g.enable_loc]. The result of [action()] is returned. *)
+let preserving_enable_loc g action =
+  let enable_loc0 = !(g.enable_loc) in
+  let result = action() in
+  g.enable_loc := enable_loc0;
+  result
 
 let parse ~preserve_quotations file lexbuf =
   let lexer_env = Cppo_lexer.init ~preserve_quotations file lexbuf in
@@ -354,11 +396,11 @@ let parse ~preserve_quotations file lexbuf =
     Cppo_parser.main (Cppo_lexer.line lexer_env) lexbuf
   with
       Parsing.Parse_error ->
-        error (Cppo_lexer.loc lexbuf) "syntax error"
+        error (Cppo_lexer.long_loc lexer_env) "syntax error"
     | Cppo_types.Cppo_error _ as e ->
         raise e
     | e ->
-        error (Cppo_lexer.loc lexbuf) (Printexc.to_string e)
+        error (Cppo_lexer.long_loc lexer_env) (Printexc.to_string e)
 
 let plural n =
   if abs n <= 1 then ""
@@ -401,6 +443,84 @@ let expand_ext g loc id data =
     | _ ->
         failwith (sprintf "Command %S failed" cmd)
 
+let check_arity loc name (formals : _ list) (actuals : _ list) =
+  let formals = List.length formals
+  and actuals = List.length actuals in
+  if formals <> actuals then
+    sprintf "%S expects %i argument%s but is applied to %i argument%s."
+      name formals (plural formals) actuals (plural actuals)
+    |> error loc
+
+(* [macro_of_node node] checks that [node] is a single identifier,
+   possibly surrounded with whitespace, and returns this identifier
+   as well as its location. *)
+let macro_of_node (node : node) : loc * macro =
+  match node_is_ident node with
+  | Some (loc, x) ->
+      loc, x
+  | None ->
+      sprintf "The name of a macro is expected in this position"
+      |> error (node_loc node)
+
+(* [fetch loc x env] checks that the macro [x] exists in [env]
+   and fetches its definition.  *)
+let fetch loc (x : macro) env : entry =
+  match find_opt x env with
+  | None ->
+      sprintf "The macro '%s' is not defined" x
+      |> error loc
+  | Some def ->
+      def
+
+(* [entry_shape def] returns the shape of the macro that is defined
+   by the environment entry [def]. *)
+let entry_shape (entry : entry) : shape =
+  let EDef (_loc, formals, _body, _env) = entry in
+  Shape (List.map snd formals)
+
+(* [check_shape loc expected provided] checks that the shapes
+   [expected] and [provided] are equal. *)
+let check_shape loc expected provided =
+  if not (same_shape expected provided) then
+    sprintf "A macro of type %s was expected, but\n       \
+             a macro of type %s was provided"
+      (print_shape expected) (print_shape provided)
+    |> error loc
+
+(* [bind_one formal (loc, actual, env) accu] binds one formal parameter
+   to one actual argument, extending the environment [accu]. *)
+let bind_one (formal : formal) (loc, actual, env) accu =
+  let (x : macro), (expected : shape) = formal in
+  (* Analyze the shape of this formal parameter. *)
+  match expected with
+  | Shape [] ->
+      (* This formal parameter has the base shape: it is an ordinary
+         parameter. It becomes an ordinary (unparameterized) macro:
+         the name [x] becomes bound to the closure [actual, env]. *)
+      M.add x (EDef (loc, [], actual, env)) accu
+  | _ ->
+      (* This formal parameter has a shape other than the base shape:
+         it is itself a parameterized macro. In that case, we expect
+         the actual parameter to be just a name [y]. *)
+      let loc, y = macro_of_node actual in
+      (* Check that the macro [y] exists, and fetch its definition. *)
+      let def = fetch loc y env in
+      (* Compute its shape. *)
+      let provided = entry_shape def in
+      (* Check that the shapes match. *)
+      check_shape loc expected provided;
+      (* Now bind [x] to the definition of [y]. *)
+      (* This is analogous to [let x = y] in OCaml. *)
+      M.add x def accu
+
+(* [bind_many formals (loc, actuals, env) accu] binds a tuple of formal
+   parameters to a tuple of actual arguments, extending the environment
+   [accu]. *)
+let bind_many formals (loc, actuals, env) accu =
+  List.fold_left2 (fun accu formal actual ->
+    bind_one formal (loc, actual, env) accu
+  ) accu formals actuals
+
 let rec include_file g loc rel_file env =
   let file =
     if not (Filename.is_relative rel_file) then
@@ -439,112 +559,78 @@ let rec include_file g loc rel_file env =
 and expand_list ?(top = false) g env l =
   List.fold_left (expand_node ~top g) env l
 
+(* [expand_ident] is the special case of [expand_node] where the node is
+   an identifier [`Ident (loc, name, actuals)]. *)
+and expand_ident ~top g env0 loc name (actuals : actuals) =
+
+  (* Test whether there exists a definition for the macro [name]. *)
+  let def = find_opt name env0 in
+  match def with
+  | None ->
+      (* There is no definition for the macro [name], so this is not
+         a macro application after all. Transform it back into text,
+         and process it. *)
+      expand_list g env0 (text loc name actuals)
+  | Some def ->
+      expand_macro_application ~top g env0 loc name actuals def
+
+(* [expand_macro_application] is the special case of [expand_ident] where
+   it turns out that the identifier [name] is a macro. *)
+and expand_macro_application ~top g env0 loc name actuals def =
+
+  let g =
+    if top || g.call_loc == dummy_loc then
+      { g with call_loc = loc }
+    else g
+  in
+
+  preserving_enable_loc g @@ fun () ->
+
+  g.require_location := true;
+
+  if not g.show_exact_locations then (
+    (* error reports will point more or less to the point
+       where the code is included rather than the source location
+       of the macro definition *)
+    maybe_print_location g (fst loc);
+    g.enable_loc := false
+  );
+
+  let EDef (_loc, formals, body, env) = def in
+  (* Check that this macro is applied to a correct number of arguments. *)
+  check_arity loc name formals actuals;
+  (* Extend the macro's captured environment [env] with bindings of
+     formals to actuals. Each actual captures the environment [env0]
+     that exists here, at the macro application site. *)
+  let env = bind_many formals (loc, actuals, env0) env in
+  (* Process the macro's body in this extended environment. *)
+  let (_ : env) = expand_node g env body in
+
+  g.require_location := true;
+
+  (* Continue with our original environment. *)
+  env0
+
 and expand_node ?(top = false) g env0 (x : node) =
   match x with
-      `Ident (loc, name, opt_args) ->
 
-        let def =
-          try Some (M.find name env0)
-          with Not_found -> None
-        in
-        let g =
-          if top && def <> None || g.call_loc == dummy_loc then
-            { g with call_loc = loc }
-          else g
-        in
+    | `Ident (loc, name, actuals) ->
+        expand_ident ~top g env0 loc name actuals
 
-        let enable_loc0 = !(g.enable_loc) in
-
-        if def <> None then (
-          g.require_location := true;
-
-          if not g.show_exact_locations then (
-            (* error reports will point more or less to the point
-               where the code is included rather than the source location
-               of the macro definition *)
-            maybe_print_location g (fst loc);
-            g.enable_loc := false
-          )
-        );
-
-        let env =
-          match def, opt_args with
-              None, None ->
-                expand_node g env0 (`Text (loc, false, name))
-            | None, Some args ->
-                let with_sep =
-                  add_sep
-                    [`Text (loc, false, ",")]
-                    [`Text (loc, false, ")")]
-                    args in
-                let l =
-                  `Text (loc, false, name ^ "(") :: List.flatten with_sep in
-                expand_list g env0 l
-
-            | Some (`Defun (_, _, arg_names, _, _)), None ->
-                error loc
-                  (sprintf "%S expects %i arguments but is applied to none."
-                     name (List.length arg_names))
-
-            | Some (`Def _), Some _ ->
-                error loc
-                  (sprintf "%S expects no arguments" name)
-
-            | Some (`Def (_, _, l, env)), None ->
-                ignore (expand_list g env l);
-                env0
-
-            | Some (`Defun (_, _, arg_names, l, env)), Some args ->
-                let argc = List.length arg_names in
-                let n = List.length args in
-                let args =
-                  (* it's ok to pass an empty arg if one arg
-                     is expected *)
-                  if n = 0 && argc = 1 then [[]]
-                  else args
-                in
-                if argc <> n then
-                  error loc
-                    (sprintf "%S expects %i argument%s but is applied to \
-                              %i argument%s."
-                       name argc (plural argc) n (plural n))
-                else
-                  let app_env =
-                    List.fold_left2 (
-                      fun env name l ->
-                        M.add name (`Def (loc, name, l, env0)) env
-                    ) env arg_names args
-                  in
-                  ignore (expand_list g app_env l);
-                  env0
-
-            | Some `Special, _ -> assert false
-        in
-
-        if def = None then
-          g.require_location := false
-        else
-          g.require_location := true;
-
-        (* restore initial setting *)
-        g.enable_loc := enable_loc0;
-
-        env
-
-
-    | `Def (loc, name, body)->
+    | `Def (loc, name, formals, body)->
         g.require_location := true;
         if M.mem name env0 then
           error loc (sprintf "%S is already defined" name)
         else
-          M.add name (`Def (loc, name, body, env0)) env0
+          M.add name (EDef (loc, formals, body, env0)) env0
 
-    | `Defun (loc, name, arg_names, body) ->
-        g.require_location := true;
-        if M.mem name env0 then
-          error loc (sprintf "%S is already defined" name)
-        else
-          M.add name (`Defun (loc, name, arg_names, body, env0)) env0
+    | `Scope body ->
+        (* A [body] is just a [node]. We expand this node, and drop
+           the resulting environment; instead, we return the current
+           environment. *)
+        let env = expand_node ~top g env0 body in
+        ignore env;
+        env0
 
     | `Undef (loc, name) ->
         g.require_location := true;
@@ -591,11 +677,11 @@ and expand_node ?(top = false) g env0 (x : node) =
         Buffer.add_string g.buf s;
         env0
 
-    | `Seq l ->
+    | `Seq (_loc, l) ->
         expand_list g env0 l
 
     | `Stringify x ->
-        let enable_loc0 = !(g.enable_loc) in
+        preserving_enable_loc g @@ fun () ->
         g.enable_loc := false;
         let buf0 = g.buf in
         let local_buf = Buffer.create 100 in
@@ -603,11 +689,10 @@ and expand_node ?(top = false) g env0 (x : node) =
         ignore (expand_node g env0 x);
         stringify buf0 (Buffer.contents local_buf);
         g.buf <- buf0;
-        g.enable_loc := enable_loc0;
         env0
 
     | `Capitalize (x : node) ->
-        let enable_loc0 = !(g.enable_loc) in
+        preserving_enable_loc g @@ fun () ->
         g.enable_loc := false;
         let buf0 = g.buf in
         let local_buf = Buffer.create 100 in
@@ -618,10 +703,10 @@ and expand_node ?(top = false) g env0 (x : node) =
           (* stringify buf0 (Buffer.contents local_buf); *)
         Buffer.add_string buf0 s ;
         g.buf <- buf0;
-        g.enable_loc := enable_loc0;
         env0
+
     | `Concat (x, y) ->
-        let enable_loc0 = !(g.enable_loc) in
+        preserving_enable_loc g @@ fun () ->
         g.enable_loc := false;
         let buf0 = g.buf in
         let local_buf = Buffer.create 100 in
@@ -634,7 +719,6 @@ and expand_node ?(top = false) g env0 (x : node) =
         let s = concat g.call_loc xs ys in
         Buffer.add_string buf0 s;
         g.buf <- buf0;
-        g.enable_loc := enable_loc0;
         env0
 
     | `Line (loc, opt_file, n) ->

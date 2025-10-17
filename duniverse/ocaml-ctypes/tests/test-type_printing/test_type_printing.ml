@@ -66,11 +66,17 @@ let test_atomic_printing _ =
     assert_typ_printed_as "int32_t"
       int32_t;
 
+    assert_typ_printed_as "int32_t const"
+      (const int32_t);
+
     assert_typ_printed_as ~name:"f" "int64_t f"
       int64_t;
 
     assert_typ_printed_as "unsigned char"
       uchar;
+
+    assert_typ_printed_as "unsigned char volatile"
+      (volatile uchar);
 
     assert_typ_printed_as "_Bool"
       bool;
@@ -126,6 +132,15 @@ let test_pointer_printing _ =
 
     assert_typ_printed_as "unsigned long long **"
       (ptr (ptr ullong));
+
+    assert_typ_printed_as "unsigned long long const **"
+      (ptr (ptr (const ullong)));
+
+    assert_typ_printed_as "unsigned long long * const *"
+      (ptr (const (ptr ullong)));
+
+    assert_typ_printed_as "unsigned long long ** const"
+      (const (ptr (ptr ullong)));
 
     assert_typ_printed_as ~name:"b" "char *****b"
       (ptr (ptr (ptr (ptr (ptr char)))));
@@ -518,7 +533,7 @@ let test_view_printing _ =
   begin
     (* By default, views are printed as the underlying type *)
 
-    assert_typ_printed_as ~name:"a" "char *a"
+    assert_typ_printed_as ~name:"a" "char const* a"
       string;
 
     let v : unit typ = view ~read:(fun _ -> ()) ~write:(fun () () -> ())

@@ -36,7 +36,7 @@ let to_string t = Sexp.to_string_hum (sexp_of_t t)
 let the_one_and_only () = Scheduler.the_one_and_only ()
 
 let create ?avoid_setting_nonblock kind file_descr info =
-  Scheduler.create_fd ?avoid_setting_nonblock (the_one_and_only ()) kind file_descr info
+  Scheduler.create_fd ?avoid_setting_nonblock kind file_descr info
 ;;
 
 (* We do not make [stdin], [stdout], or [stderr] nonblocking so that
@@ -96,11 +96,10 @@ module Close = struct
               | Do_not_close_file_descriptor -> return ()
               | Close_file_descriptor socket_handling ->
                 Monitor.protect
-                  ~run:
-                    `Schedule
-                  ~rest:`Log
+                  ~run:`Schedule
                   ~finally:(fun () ->
-                    In_thread.syscall_exn ~name:"close" (fun () -> Unix.close t.file_descr))
+                    In_thread.syscall_exn ~name:"close" (fun () ->
+                      Unix.close t.file_descr))
                   (fun () ->
                      match t.kind, socket_handling with
                      | Socket `Active, Shutdown_socket ->
@@ -139,7 +138,6 @@ let create_borrowed ?avoid_setting_nonblock kind file_descr info ~f =
   let fd = create ?avoid_setting_nonblock kind file_descr info in
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
     ~name:"Fd.create_borrowed"
     (fun () -> f fd)
     ~finally:(fun () -> close ~file_descriptor_handling:Do_not_close_file_descriptor fd)
@@ -148,7 +146,6 @@ let create_borrowed ?avoid_setting_nonblock kind file_descr info ~f =
 let with_close t ~f =
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
     (fun () -> f t)
     ~finally:(fun () -> close t)
 ;;
@@ -159,8 +156,7 @@ let with_file_descr_deferred t f =
   | `Ok ->
     let%map result =
       Monitor.try_with
-        ~run:
-          `Schedule
+        ~run:`Schedule
         ~rest:`Log
         (fun () -> f t.file_descr)
     in
@@ -226,8 +222,7 @@ let interruptible_ready_to t read_or_write ~interrupt =
   | `Watching ->
     stop_watching_upon_interrupt t read_or_write ready ~interrupt;
     Deferred.map (Ivar.read ready) ~f:(function
-      | `Unsupported ->
-        if Deferred.is_determined interrupt then `Interrupted else `Ready
+      | `Unsupported -> if Deferred.is_determined interrupt then `Interrupted else `Ready
       | (`Bad_fd | `Closed | `Interrupted | `Ready) as res -> res)
 ;;
 

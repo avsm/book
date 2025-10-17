@@ -1,5 +1,5 @@
 (* OCaml promise library
- * http://www.ocsigen.org/lwt
+ * https://ocsigen.org/lwt
  * Copyright (c) 2009, Metaweb Technologies, Inc.
  * All rights reserved.
  *
@@ -31,9 +31,7 @@
    ("deprecated"), and create a local, non-deprecated alias for
    [Lwt_sequence] that can be referred to by the rest of the code in this
    module without triggering any more warnings. *)
-[@@@ocaml.warning "-3"]
 module Lwt_sequence = Lwt_sequence
-[@@@ocaml.warning "+3"]
 
 type 'a t = 'a Lwt.u Lwt_sequence.t
 

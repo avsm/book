@@ -74,7 +74,14 @@ let to_camel_case s =
         Buffer.add_char buf c;
         start_word := false
   done;
-  Buffer.contents buf
+  let name = Buffer.contents buf in
+  if name = "" then "X"
+  else
+    (* Make sure we don't start with a digit. This happens with
+       generated identifiers like '_42'. *)
+    match name.[0] with
+    | 'A'..'Z' | 'a'..'z' | '_' -> name
+    | _ -> "X" ^ name
 
 (* Use CamelCase as recommended by PEP 8. *)
 let class_name env id =
@@ -197,7 +204,7 @@ methods and functions to convert data from/to JSON.
 
 # Import annotations to allow forward references
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, NoReturn, Optional, Tuple, Union
 
 import json
@@ -325,6 +332,19 @@ def _atd_read_nullable(read_elt: Callable[[Any], Any]) \
     return read_nullable
 
 
+def _atd_read_option(read_elt: Callable[[Any], Any]) \
+        -> Callable[[Optional[Any]], Optional[Any]]:
+    def read_option(x: Any) -> Any:
+        if x == 'None':
+            return None
+        elif isinstance(x, List) and len(x) == 2 and x[0] == 'Some':
+            return read_elt(x[1])
+        else:
+            _atd_bad_json('option', x)
+            raise AssertionError('impossible')  # keep mypy happy
+    return read_option
+
+
 def _atd_write_unit(x: Any) -> None:
     if x is None:
         return x
@@ -420,6 +440,16 @@ def _atd_write_nullable(write_elt: Callable[[Any], Any]) \
     return write_nullable
 
 
+def _atd_write_option(write_elt: Callable[[Any], Any]) \
+        -> Callable[[Optional[Any]], Optional[Any]]:
+    def write_option(x: Any) -> Any:
+        if x is None:
+            return 'None'
+        else:
+            return ['Some', write_elt(x)]
+    return write_option
+
+
 ############################################################################
 # Public classes
 ############################################################################|}
@@ -483,10 +513,6 @@ let py_type_name env (name : string) =
   | "abstract" -> "Any"
   | user_defined -> class_name env user_defined
 
-let option_is_not_implemented loc =
-  not_implemented loc "true option type (did you forget a '?' \
-                       before the field name?)"
-
 let rec type_name_of_expr env (e : type_expr) : string =
   match e with
   | Sum (loc, _, _) -> not_implemented loc "inline sum types"
@@ -498,7 +524,7 @@ let rec type_name_of_expr env (e : type_expr) : string =
       in
       sprintf "Tuple[%s]" (String.concat ", " type_names)
   | List (loc, e, an) ->
-      (match assoc_kind loc e an with
+     (match assoc_kind loc e an with
        | Array_list
        | Object_list _ ->
            sprintf "List[%s]"
@@ -515,22 +541,19 @@ let rec type_name_of_expr env (e : type_expr) : string =
   | Shared (loc, e, an) -> not_implemented loc "shared"
   | Wrap (loc, e, an) -> todo "wrap"
   | Name (loc, (loc2, name, []), an) -> py_type_name env name
-  | Name (loc, _, _) -> not_implemented loc "parametrized types"
+  | Name (loc, (_, name, _::_), _) -> assert false
   | Tvar (loc, _) -> not_implemented loc "type variables"
 
-let rec get_default_default
-    ?(mutable_ok = true) (e : type_expr) : string option =
+let rec get_default_default (e : type_expr) : string option =
   match e with
   | Sum _
   | Record _
   | Tuple _ (* a default tuple could be possible but we're lazy *) -> None
-  | List _ ->
-      if mutable_ok then Some "[]"
-      else None
-  | Option _ -> None
+  | List _ -> Some "[]"
+  | Option _
   | Nullable _ -> Some "None"
-  | Shared (loc, e, an) -> get_default_default ~mutable_ok e
-  | Wrap (loc, e, an) -> get_default_default ~mutable_ok e
+  | Shared (loc, e, an) -> get_default_default e
+  | Wrap (loc, e, an) -> get_default_default e
   | Name (loc, (loc2, name, []), an) ->
       (match name with
        | "unit" -> Some "None"
@@ -544,12 +567,11 @@ let rec get_default_default
   | Name _ -> None
   | Tvar _ -> None
 
-let get_python_default
-    ?mutable_ok (e : type_expr) (an : annot) : string option =
+let get_python_default (e : type_expr) (an : annot) : string option =
   let user_default = Python_annot.get_python_default an in
   match user_default with
   | Some s -> Some s
-  | None -> get_default_default ?mutable_ok e
+  | None -> get_default_default e
 
 (* see explanation where this function is used *)
 let has_no_class_inst_prop_default
@@ -558,7 +580,7 @@ let has_no_class_inst_prop_default
   | Required -> true
   | Optional -> (* default is None *) false
   | With_default ->
-      match get_python_default ~mutable_ok:false e an with
+      match get_python_default e an with
       | Some _ -> false
       | None ->
           (* There's either no default at all which is an error,
@@ -606,7 +628,8 @@ let rec json_writer env e =
            sprintf "_atd_write_assoc_list_to_object(%s)"
              (json_writer env value)
       )
-  | Option (loc, e, an) -> option_is_not_implemented loc
+  | Option (loc, e, an) ->
+      sprintf "_atd_write_option(%s)" (json_writer env e)
   | Nullable (loc, e, an) ->
       sprintf "_atd_write_nullable(%s)" (json_writer env e)
   | Shared (loc, e, an) -> not_implemented loc "shared"
@@ -687,7 +710,8 @@ let rec json_reader env (e : type_expr) =
            sprintf "_atd_read_assoc_object_into_list(%s)"
              (json_reader env value)
       )
-  | Option (loc, e, an) -> option_is_not_implemented loc
+  | Option (loc, e, an) ->
+      sprintf "_atd_read_option(%s)" (json_reader env e)
   | Nullable (loc, e, an) ->
       sprintf "_atd_read_nullable(%s)" (json_reader env e)
   | Shared (loc, e, an) -> not_implemented loc "shared"
@@ -767,9 +791,13 @@ let inst_var_declaration
     | Required -> ""
     | Optional -> " = None"
     | With_default ->
-        match get_python_default ~mutable_ok:false unwrapped_e an with
+        match get_python_default unwrapped_e an with
         | None -> ""
-        | Some value -> sprintf " = %s" value
+        | Some x ->
+            (* This construct ensures that a fresh default value is
+               evaluated for each class instantiation. It's important for
+               default lists since Python lists are mutable. *)
+            sprintf " = field(default_factory=lambda: %s)" x
   in
   [
     Line (sprintf "%s: %s%s" var_name type_name default)
@@ -1212,10 +1240,16 @@ let run_file src_path =
     |> String.lowercase_ascii
   in
   let dst_path = dst_name in
-  let (atd_head, atd_module), _original_types =
+  let full_module, _original_types =
     Atd.Util.load_file
       ~annot_schema
-      ~expand:false ~inherit_fields:true ~inherit_variants:true src_path
+      ~expand:true (* monomorphization = eliminate parametrized type defs *)
+      ~keep_builtins:true
+      ~inherit_fields:true
+      ~inherit_variants:true
+      src_path
   in
+  let full_module = Atd.Ast.use_only_specific_variants full_module in
+  let (atd_head, atd_module) = full_module in
   let head = Python_annot.get_python_json_text (snd atd_head) in
   to_file ~atd_filename:src_name ~head atd_module dst_path

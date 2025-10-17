@@ -12,10 +12,9 @@ open Asn_grammars
  *)
 
 type ec_curve =
-  [ `SECP224R1 | `SECP256R1 | `SECP384R1 | `SECP521R1 ]
+  [ `SECP256R1 | `SECP384R1 | `SECP521R1 ]
 
 let ec_curve_to_string = function
-  | `SECP224R1 -> "SECP224R1"
   | `SECP256R1 -> "SECP256R1"
   | `SECP384R1 -> "SECP384R1"
   | `SECP521R1 -> "SECP521R1"
@@ -28,10 +27,7 @@ type t =
   | EC_pub of ec_curve
 
   (* sig algos *)
-  | MD2_RSA
-  | MD4_RSA
   | MD5_RSA
-  | RIPEMD160_RSA
   | SHA1_RSA
   | SHA256_RSA
   | SHA384_RSA
@@ -46,16 +42,12 @@ type t =
   | ED25519
 
   (* digest algorithms *)
-  | MD2
-  | MD4
   | MD5
   | SHA1
   | SHA256
   | SHA384
   | SHA512
   | SHA224
-  | SHA512_224
-  | SHA512_256
 
   (* HMAC algorithms *)
   | HMAC_SHA1
@@ -65,28 +57,25 @@ type t =
   | HMAC_SHA512
 
   (* symmetric block ciphers *)
-  | AES128_CBC of Cstruct.t
-  | AES192_CBC of Cstruct.t
-  | AES256_CBC of Cstruct.t
+  | AES128_CBC of string
+  | AES192_CBC of string
+  | AES256_CBC of string
 
   (* PBE encryption algorithms *)
-  | SHA_RC4_128 of Cstruct.t * int
-  | SHA_RC4_40 of Cstruct.t * int
-  | SHA_3DES_CBC of Cstruct.t * int
-  | SHA_2DES_CBC of Cstruct.t * int
-  | SHA_RC2_128_CBC of Cstruct.t * int
-  | SHA_RC2_40_CBC of Cstruct.t * int
+  | SHA_RC4_128 of string * int
+  | SHA_RC4_40 of string * int
+  | SHA_3DES_CBC of string * int
+  | SHA_2DES_CBC of string * int
+  | SHA_RC2_128_CBC of string * int
+  | SHA_RC2_40_CBC of string * int
 
-  | PBKDF2 of Cstruct.t * int * int option * t
+  | PBKDF2 of string * int * int option * t
   | PBES2 of t * t
 
 let to_string = function
   | RSA -> "RSA"
   | EC_pub curve -> ec_curve_to_string curve
-  | MD2_RSA -> "RSA MD2"
-  | MD4_RSA -> "RSA MD4"
   | MD5_RSA -> "RSA MD5"
-  | RIPEMD160_RSA -> "RSA RIPEMD160"
   | SHA1_RSA -> "RSA SHA1"
   | SHA256_RSA -> "RSA SHA256"
   | SHA384_RSA -> "RSA SHA384"
@@ -98,16 +87,12 @@ let to_string = function
   | ECDSA_SHA384 -> "ECDSA SHA384"
   | ECDSA_SHA512 -> "ECDSA SHA512"
   | ED25519 -> "Ed25519"
-  | MD2 -> "MD2"
-  | MD4 -> "MD4"
   | MD5 -> "MD5"
   | SHA1 -> "SHA1"
   | SHA256 -> "SHA256"
   | SHA384 -> "SHA384"
   | SHA512 -> "SHA512"
   | SHA224 -> "SHA224"
-  | SHA512_224 -> "SHA512/224"
-  | SHA512_256 -> "SHA512/256"
   | HMAC_SHA1 -> "HMAC SHA1"
   | HMAC_SHA224 -> "HMAC SHA224"
   | HMAC_SHA256 -> "HMAC SHA256"
@@ -168,7 +153,6 @@ and of_key_type = function
   | `EC curve -> EC_pub curve
   | `ED25519 -> ED25519
 
-(* XXX: No MD2 / MD4 / RIPEMD160 *)
 and to_signature_algorithm = function
   | MD5_RSA -> Some (`RSA_PKCS1, `MD5)
   | SHA1_RSA -> Some (`RSA_PKCS1, `SHA1)
@@ -218,13 +202,11 @@ let curve_of_oid, curve_to_oid =
   let open Registry.ANSI_X9_62 in
   (let default oid = Asn.(S.parse_error "Unknown algorithm %a" OID.pp oid) in
    case_of_oid ~default [
-     (secp224r1, `SECP224R1) ;
      (secp256r1, `SECP256R1) ;
      (secp384r1, `SECP384R1) ;
      (secp521r1, `SECP521R1) ;
    ]),
   (function
-    | `SECP224R1 -> secp224r1
     | `SECP256R1 -> secp256r1
     | `SECP384R1 -> secp384r1
     | `SECP521R1 -> secp521r1)
@@ -265,11 +247,9 @@ let identifier =
       (ANSI_X9_62.ec_pub_key, oid (fun id -> EC_pub (curve_of_oid id))) ;
 
       (PKCS1.rsa_encryption          , null RSA                  ) ;
-      (PKCS1.md2_rsa_encryption      , null_or_none MD2_RSA      ) ;
-      (PKCS1.md4_rsa_encryption      , null_or_none MD4_RSA      ) ;
       (PKCS1.md5_rsa_encryption      , null_or_none MD5_RSA      ) ;
-      (PKCS1.ripemd160_rsa_encryption, null_or_none RIPEMD160_RSA) ;
       (PKCS1.sha1_rsa_encryption     , null_or_none SHA1_RSA     ) ;
+      (sha1_rsa_encryption           , null_or_none SHA1_RSA     ) ;
       (PKCS1.sha256_rsa_encryption   , null_or_none SHA256_RSA   ) ;
       (PKCS1.sha384_rsa_encryption   , null_or_none SHA384_RSA   ) ;
       (PKCS1.sha512_rsa_encryption   , null_or_none SHA512_RSA   ) ;
@@ -283,16 +263,12 @@ let identifier =
 
       (RFC8410.ed25519               , none ED25519 ) ;
 
-      (md2                           , null MD2          ) ;
-      (md4                           , null MD4          ) ;
       (md5                           , null MD5          ) ;
       (sha1                          , null SHA1         ) ;
       (sha256                        , null SHA256       ) ;
       (sha384                        , null SHA384       ) ;
       (sha512                        , null SHA512       ) ;
       (sha224                        , null SHA224       ) ;
-      (sha512_224                    , null SHA512_224   ) ;
-      (sha512_256                    , null SHA512_256   ) ;
 
       (PKCS2.hmac_sha1               , null HMAC_SHA1    );
       (PKCS2.hmac_sha224             , null HMAC_SHA224  );
@@ -328,10 +304,7 @@ let identifier =
     | EC_pub id     -> (ANSI_X9_62.ec_pub_key , oid (curve_to_oid id))
 
     | RSA           -> (PKCS1.rsa_encryption           , null)
-    | MD2_RSA       -> (PKCS1.md2_rsa_encryption       , null)
-    | MD4_RSA       -> (PKCS1.md4_rsa_encryption       , null)
     | MD5_RSA       -> (PKCS1.md5_rsa_encryption       , null)
-    | RIPEMD160_RSA -> (PKCS1.ripemd160_rsa_encryption , null)
     | SHA1_RSA      -> (PKCS1.sha1_rsa_encryption      , null)
     | SHA256_RSA    -> (PKCS1.sha256_rsa_encryption    , null)
     | SHA384_RSA    -> (PKCS1.sha384_rsa_encryption    , null)
@@ -346,16 +319,12 @@ let identifier =
 
     | ED25519       -> (RFC8410.ed25519                , none)
 
-    | MD2           -> (md2                            , null)
-    | MD4           -> (md4                            , null)
     | MD5           -> (md5                            , null)
     | SHA1          -> (sha1                           , null)
     | SHA256        -> (sha256                         , null)
     | SHA384        -> (sha384                         , null)
     | SHA512        -> (sha512                         , null)
     | SHA224        -> (sha224                         , null)
-    | SHA512_224    -> (sha512_224                     , null)
-    | SHA512_256    -> (sha512_256                     , null)
 
     | HMAC_SHA1     -> (PKCS2.hmac_sha1                , null)
     | HMAC_SHA224   -> (PKCS2.hmac_sha224              , null)
@@ -406,24 +375,11 @@ let identifier =
            (choice4 null oid pbkdf2_or_pbe_or_pbes2_params octet_string)))
 
 let ecdsa_sig =
-  let f (r, s) =
-    if Z.sign r < 0 then
-      Asn.S.parse_error "ECDSA signature: r < 0"
-    else if Z.sign s < 0 then
-      Asn.S.parse_error "ECDSA signature: s < 0"
-    else
-      Mirage_crypto_pk.Z_extra.to_cstruct_be r,
-      Mirage_crypto_pk.Z_extra.to_cstruct_be s
-  and g (r, s) =
-    Mirage_crypto_pk.Z_extra.of_cstruct_be r,
-    Mirage_crypto_pk.Z_extra.of_cstruct_be s
-  in
-  map f g @@
   sequence2
-    (required ~label:"r" integer)
-    (required ~label:"s" integer)
+    (required ~label:"r" unsigned_integer)
+    (required ~label:"s" unsigned_integer)
 
-let ecdsa_sig_of_cstruct, ecdsa_sig_to_cstruct =
+let ecdsa_sig_of_octets, ecdsa_sig_to_octets =
   projections_of Asn.der ecdsa_sig
 
 let pp fmt x = Fmt.string fmt (to_string x)

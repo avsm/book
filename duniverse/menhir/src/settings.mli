@@ -144,20 +144,27 @@ val base: string
 (** The filename of the standard library. *)
 val stdlib_filename : string
 
-(** Whether Menhir should behave as an interpreter. *)
-val interpret : bool
-
-(** Whether the interpreter should build and display concrete syntax trees. *)
-val interpret_show_cst : bool
-
-(** Whether Menhir should behave as an interpreter, in a special mode where
-   it checks one input sentence, expecting it to trigger an error at the
-   last token, and displays which state was reached. *)
-val interpret_error : bool
+(**This setting determines Menhir should behave as an interpreter of sentences
+   provided by the user on the standard input channel. Two interpretation
+   modes exist. In the mode [`Normal], Menhir interprets the sentence and
+   indicates whether it is rejected or accepted. (The flag --trace is taken
+   into account, so trace messages can be emitted if desired by the user.) In
+   this mode, an additional flag indicates whether a concrete syntax tree
+   should be displayed after an input is accepted. In the mode [`Error],
+   Menhir expects just one input sentence, expects it to trigger an error at
+   the very last token, and displays which state was reached. *)
+val interpret :
+  [ `No
+  | `Normal of [`ShowCST | `DoNotShowCST]
+  | `Error ]
 
 (** Whether to generate the inspection API (which requires GADTs, and
    requires producing more tables). *)
 val inspection : bool
+
+(** Whether to generate the unparsing API (which offers facilities for
+    constructing and displaying concrete syntax trees). *)
+val unparsing : bool
 
 (** Whether the standard menhir library should be used. *)
 val no_stdlib : bool
@@ -291,3 +298,18 @@ val stacklang_graph: bool
 (**The undocumented flag [--stacklang-test] causes the StackLang program to be
    tested (by comparison with the reference interpreter). *)
 val stacklang_test: bool
+
+(**The undocumented flag [--specialize-token] causes the StackLang program to
+   be specialized with respect to the current token. This guarantees that
+   every token is case-analyzed exactly once, immediately after it has been
+   read from the lexer. *)
+val specialize_token: bool
+
+(**The undocumented flag [--pack-classic] causes the table back-end to perform
+   table compression using the old algorithm in [RowDisplacement]. Without
+   this flag, table compression is performed using the new algorithm in
+   [FastDisplacement]. The new algorithm has been found to be significantly
+   faster and to produce results of roughly comparable quality. The size of
+   the resulting tables can vary, up or down, by up to 5% or 10%. This flag
+   may be removed in the future. *)
+val pack_classic : bool

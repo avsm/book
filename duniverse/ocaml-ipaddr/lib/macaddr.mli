@@ -16,7 +16,7 @@
 
 (** A library for manipulation of MAC address representations.
 
-    {e v5.3.1 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
+    {e v5.6.1 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
 
 exception Parse_error of string * string
 (** [Parse_error (err,packet)] is raised when parsing of the MAC address syntax
@@ -54,7 +54,7 @@ val to_string : ?sep:char -> t -> string
     of [mac_addr], i.e. [xx:xx:xx:xx:xx:xx]. *)
 
 val pp : Format.formatter -> t -> unit
-  [@@ocaml.toplevel_printer]
+[@@ocaml.toplevel_printer]
 (** [pp f mac_addr] outputs a human-readable representation of [mac_addr] to the
     formatter [f]. *)
 

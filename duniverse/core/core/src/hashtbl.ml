@@ -87,9 +87,11 @@ end
 module type S_plain = S_plain with type ('a, 'b) hashtbl = ('a, 'b) t
 module type S = S with type ('a, 'b) hashtbl = ('a, 'b) t
 module type S_binable = S_binable with type ('a, 'b) hashtbl = ('a, 'b) t
+module type S_stable = S_stable with type ('a, 'b) hashtbl = ('a, 'b) t
 module type Key_plain = Key_plain
 module type Key = Key
 module type Key_binable = Key_binable
+module type Key_stable = Key_stable
 
 module Poly = struct
   include Hashtbl.Poly
@@ -132,7 +134,6 @@ struct
   type key = T.Key.t
   type ('a, 'b) hashtbl = ('a, 'b) t
   type 'a t = (T.Key.t, 'a) hashtbl
-  type ('a, 'b) t__ = (T.Key.t, 'b) hashtbl
   type 'a key_ = T.Key.t
 
   include Creators (struct
@@ -144,18 +145,10 @@ struct
   include (
     Hashtbl :
     sig
-      include
-        Hashtbl.Accessors
-        with type ('a, 'b) t := ('a, 'b) t__
-        with type 'a key := 'a key_
-
-      include
-        Hashtbl.Multi with type ('a, 'b) t := ('a, 'b) t__ with type 'a key := 'a key_
-
       include Invariant.S2 with type ('a, 'b) t := ('a, 'b) hashtbl
     end)
 
-  let validate = validate
+  let equal = Hashtbl.equal
   let invariant invariant_key t = invariant ignore invariant_key t
   let sexp_of_t sexp_of_v t = Poly.sexp_of_t T.Key.sexp_of_t sexp_of_v t
 
@@ -206,6 +199,24 @@ struct
         t
       ;;
     end)
+
+  module Provide_stable_witness
+      (Key' : sig
+         type t [@@deriving stable_witness]
+       end
+       with type t := key) =
+  struct
+    (* The binary representation of hashtbl is relied on by stable modules
+       (e.g. Hashtable.Stable) and is therefore assumed to be stable.  So, if the key and
+       data can provide a stable witnesses, then we can safely the hashtbl is also
+       stable. *)
+    let stable_witness (type data) (_data_stable_witness : data Stable_witness.t)
+      : data t Stable_witness.t
+      =
+      let (_ : key Stable_witness.t) = Key'.stable_witness in
+      Stable_witness.assert_stable
+    ;;
+  end
 end
 
 module Make_with_hashable (T : sig
@@ -228,6 +239,16 @@ struct
   include Provide_bin_io (T.Key)
 end
 
+module Make_stable_with_hashable (T : sig
+    module Key : Key_stable
+
+    val hashable : Key.t Hashable.t
+  end) =
+struct
+  include Make_binable_with_hashable (T)
+  include Provide_stable_witness (T.Key)
+end
+
 module Make_plain (Key : Key_plain) = Make_plain_with_hashable (struct
     module Key = Key
 
@@ -244,6 +265,11 @@ end
 module Make_binable (Key : Key_binable) = struct
   include Make (Key)
   include Provide_bin_io (Key)
+end
+
+module Make_stable (Key : Key_stable) = struct
+  include Make_binable (Key)
+  include Provide_stable_witness (Key)
 end
 
 module M = Hashtbl.M

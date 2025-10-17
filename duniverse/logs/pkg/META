@@ -1,71 +1,85 @@
 description = "Logging infrastructure for OCaml"
-version = "0.7.0+dune2"
+version = "0.9.0+dune2"
+requires = ""
 archive(byte) = "logs.cma"
 archive(native) = "logs.cmxa"
 plugin(byte) = "logs.cma"
 plugin(native) = "logs.cmxs"
-
-package "fmt" (
-  description = "Format reporter for Logs"
-  version = "0.7.0+dune2"
-  requires = "logs fmt"
-  archive(byte) = "logs_fmt.cma"
-  archive(native) = "logs_fmt.cmxa"
-  plugin(byte) = "logs_fmt.cma"
-  plugin(native) = "logs_fmt.cmxs"
-  exists_if = "logs_fmt.cma"
-)
+exists_if = "logs.cma logs.cmxa"
 
 package "browser" (
-  description = "Browser console reporter for Logs"
-  version = "0.7.0+dune2"
-  requires = "logs js_of_ocaml"
+  directory = "browser"
+  description = "The logs.browser library"
+  version = "0.9.0+dune2"
+  requires = "logs js_of_ocaml-compiler.runtime"
+  exports = "logs"
   archive(byte) = "logs_browser.cma"
   archive(native) = "logs_browser.cmxa"
   plugin(byte) = "logs_browser.cma"
   plugin(native) = "logs_browser.cmxs"
-  exists_if = "logs_browser.cma"
+  exists_if = "logs_browser.cma logs_browser.cmxa"
 )
 
 package "cli" (
-  description = "Cmdliner support for Logs"
-  version = "0.7.0+dune2"
+  directory = "cli"
+  description = "The logs.cli library"
+  version = "0.9.0+dune2"
   requires = "logs cmdliner"
+  exports = "logs"
   archive(byte) = "logs_cli.cma"
   archive(native) = "logs_cli.cmxa"
   plugin(byte) = "logs_cli.cma"
   plugin(native) = "logs_cli.cmxs"
-  exists_if = "logs_cli.cma"
+  exists_if = "logs_cli.cma logs_cli.cmxa"
+)
+
+package "fmt" (
+  directory = "fmt"
+  description = "The logs.fmt library"
+  version = "0.9.0+dune2"
+  requires = "logs fmt"
+  exports = "logs"
+  archive(byte) = "logs_fmt.cma"
+  archive(native) = "logs_fmt.cmxa"
+  plugin(byte) = "logs_fmt.cma"
+  plugin(native) = "logs_fmt.cmxs"
+  exists_if = "logs_fmt.cma logs_fmt.cmxa"
 )
 
 package "lwt" (
-  description = "Lwt support for Logs"
-  version = "0.7.0+dune2"
+  directory = "lwt"
+  description = "The logs.lwt library"
+  version = "0.9.0+dune2"
   requires = "logs lwt"
+  exports = "logs"
   archive(byte) = "logs_lwt.cma"
   archive(native) = "logs_lwt.cmxa"
   plugin(byte) = "logs_lwt.cma"
   plugin(native) = "logs_lwt.cmxs"
-  exists_if = "logs_lwt.cma"
+  exists_if = "logs_lwt.cma logs_lwt.cmxa"
 )
 
 package "threaded" (
-  description = "Thread safe logging"
-  version = "0.7.0+dune2"
-  requires = "logs threads"
+  directory = "threaded"
+  description = "The logs.threaded library"
+  version = "0.9.0+dune2"
+  requires = "logs threads.posix"
+  exports = "logs"
   archive(byte) = "logs_threaded.cma"
   archive(native) = "logs_threaded.cmxa"
   plugin(byte) = "logs_threaded.cma"
   plugin(native) = "logs_threaded.cmxs"
-  exists_if = "logs_threaded.cma"
+  exists_if = "logs_threaded.cma logs_threaded.cmxa"
 )
 
 package "top" (
-  description = "Logs toplevel support"
-  version = "0.7.0+dune2"
+  directory = "top"
+  description = "The logs.top library"
+  version = "0.9.0+dune2"
   requires = "logs"
   archive(byte) = "logs_top.cma"
   archive(native) = "logs_top.cmxa"
   plugin(byte) = "logs_top.cma"
   plugin(native) = "logs_top.cmxs"
+  exists_if = "logs_top.cma logs_top.cmxa"
 )

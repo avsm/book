@@ -1,7 +1,7 @@
 (*$ open Ppxlib_cinaps_helpers $*)
 open! Import
-module Format = Caml.Format
-module Filename = Caml.Filename
+module Format = Stdlib.Format
+module Filename = Stdlib.Filename
 
 (* TODO: make the "deriving." depend on the matching attribute name. *)
 let end_marker_sig =
@@ -20,6 +20,7 @@ end
 
 module Make (M : sig
   type t
+  type compiler_t
 
   val get_loc : t -> Location.t
   val end_marker : (t, unit) Attribute.Floating.t
@@ -33,8 +34,9 @@ module Make (M : sig
   end
 
   val parse : Lexing.lexbuf -> t list
-  val pp : Format.formatter -> t -> unit
   val to_sexp : t -> Sexp.t
+  val to_compiler : t -> compiler_t
+  val pp_compiler : Format.formatter -> compiler_t -> unit
 end) =
 struct
   let extract_prefix ~pos l =
@@ -72,7 +74,9 @@ struct
 
   let diff_asts ~generated ~round_trip =
     let with_temp_file f =
-      Exn.protectx (Filename.temp_file "ppxlib" "") ~finally:Caml.Sys.remove ~f
+      Exn.protectx
+        (Filename.temp_file "ppxlib" "")
+        ~finally:Stdlib.Sys.remove ~f
     in
     with_temp_file (fun fn1 ->
         with_temp_file (fun fn2 ->
@@ -93,7 +97,7 @@ struct
                     (Filename.quote out)
                 in
                 let ok =
-                  Caml.Sys.command cmd = 1
+                  Stdlib.Sys.command cmd = 1
                   ||
                   let cmd =
                     Printf.sprintf
@@ -102,13 +106,28 @@ struct
                       (Filename.quote fn1) (Filename.quote fn2)
                       (Filename.quote out)
                   in
-                  Caml.Sys.command cmd = 1
+                  Stdlib.Sys.command cmd = 1
                 in
                 if ok then In_channel.read_all out
                 else "<no differences produced by diff>")))
 
   let parse_string s =
     match M.parse (Lexing.from_string s) with [ x ] -> x | _ -> assert false
+
+  (* To round trip our AST we convert it to the compiler's version, print it as
+     source using the compiler pretty-printers, parse it back using the
+     compiler's parser and migrate it back to our version.
+
+     Skipping the first migration can lead to errors because some subtleties may
+     be lost by older parsers. For instance in OCaml 5.02 [fun x y -> z] and
+     [fun x -> fun y -> z] have different representation but in OCaml 5.01 they
+     both parse to the same AST. Running the migration to the compiler AST first
+     anotates the AST using attributes allowing the final migration to preserve
+     such differences. *)
+  let round_trip ast =
+    let compiler_ast = M.to_compiler ast in
+    remove_loc
+      (parse_string (Format.asprintf "%a@." M.pp_compiler compiler_ast))
 
   let rec match_loop ~end_pos ~mismatch_handler ~expected ~source =
     match (expected, source) with
@@ -128,9 +147,7 @@ struct
         let x = remove_loc x in
         let y = remove_loc y in
         if Poly.( <> ) x y then (
-          let round_trip =
-            remove_loc (parse_string (Format.asprintf "%a@." M.pp x))
-          in
+          let round_trip = round_trip x in
           if Poly.( <> ) x round_trip then
             Location.raise_errorf ~loc
               "ppxlib: the corrected code doesn't round-trip.\n\
@@ -149,6 +166,7 @@ end
 (*$*)
 module Str = Make (struct
   type t = structure_item
+  type compiler_t = Ppxlib_ast.Compiler_version.Ast.Parsetree.structure_item
 
   let get_loc x = x.pstr_loc
   let end_marker = end_marker_str
@@ -158,13 +176,15 @@ module Str = Make (struct
   end
 
   let parse = Parse.implementation
-  let pp = Pprintast.structure_item
   let to_sexp = Ast_traverse.sexp_of#structure_item
+  let to_compiler = Ppxlib_ast.Selected_ast.To_ocaml.copy_structure_item
+  let pp_compiler = Astlib.Compiler_pprintast.structure_item
 end)
 
 (*$ str_to_sig _last_text_block *)
 module Sig = Make (struct
   type t = signature_item
+  type compiler_t = Ppxlib_ast.Compiler_version.Ast.Parsetree.signature_item
 
   let get_loc x = x.psig_loc
   let end_marker = end_marker_sig
@@ -174,8 +194,9 @@ module Sig = Make (struct
   end
 
   let parse = Parse.interface
-  let pp = Pprintast.signature_item
   let to_sexp = Ast_traverse.sexp_of#signature_item
+  let to_compiler = Ppxlib_ast.Selected_ast.To_ocaml.copy_signature_item
+  let pp_compiler = Astlib.Compiler_pprintast.signature_item
 end)
 
 (*$*)

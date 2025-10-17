@@ -8,9 +8,7 @@
    ("deprecated"), and create a local, non-deprecated alias for
    [Lwt_sequence] that can be referred to by the rest of the code in this
    module without triggering any more warnings. *)
-[@@@ocaml.warning "-3"]
 module Lwt_sequence = Lwt_sequence
-[@@@ocaml.warning "+3"]
 
 open Lwt.Infix
 
@@ -182,7 +180,7 @@ let detach f args =
   let task () =
     try
       result := Result.Ok (f args)
-    with exn ->
+    with exn when Lwt.Exception_filter.run exn ->
       result := Result.Error exn
   in
   get_worker () >>= fun worker ->
@@ -228,6 +226,14 @@ let job_notification =
        Mutex.unlock jobs_mutex;
        ignore (thunk ()))
 
+let run_in_main_dont_wait f =
+  (* Add the job to the queue. *)
+  Mutex.lock jobs_mutex;
+  Queue.add f jobs;
+  Mutex.unlock jobs_mutex;
+  (* Notify the main thread. *)
+  Lwt_unix.send_notification job_notification
+
 (* There is a potential performance issue from creating a cell every time this
    function is called. See:
    https://github.com/ocsigen/lwt/issues/218
@@ -245,13 +251,13 @@ let run_in_main f =
     CELL.set cell result;
     Lwt.return_unit
   in
-  (* Add the job to the queue. *)
-  Mutex.lock jobs_mutex;
-  Queue.add job jobs;
-  Mutex.unlock jobs_mutex;
-  (* Notify the main thread. *)
-  Lwt_unix.send_notification job_notification;
+  run_in_main_dont_wait job;
   (* Wait for the result. *)
   match CELL.get cell with
   | Result.Ok ret -> ret
   | Result.Error exn -> raise exn
+
+(* This version shadows the one above, adding an exception handler *)
+let run_in_main_dont_wait f handler =
+  let f () = Lwt.catch f (fun exc -> handler exc; Lwt.return_unit) in
+  run_in_main_dont_wait f

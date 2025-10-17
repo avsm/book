@@ -15,8 +15,8 @@ let find_files dir =
   in
   let get_files_dirs dir : (string list * string list) Deferred.t =
     Sys.ls_dir dir >>= fun all ->
-    Deferred.List.filter all ~f:(fun x -> is_file (dir/x)) >>= fun files ->
-    Deferred.List.filter all ~f:(fun x -> is_dir (dir/x)) >>= fun dirs ->
+    Deferred.List.filter all ~how:`Sequential ~f:(fun x -> is_file (dir/x)) >>= fun files ->
+    Deferred.List.filter all ~how:`Sequential ~f:(fun x -> is_dir (dir/x)) >>= fun dirs ->
     return (
       List.map files ~f:(fun x -> dir/x),
       List.map dirs  ~f:(fun x -> dir/x)
@@ -26,7 +26,7 @@ let find_files dir =
   let rec loop dir =
     get_files_dirs dir >>= fun (files,dirs) ->
     accum := files::!accum;
-    Deferred.List.iter dirs ~f:loop
+    Deferred.List.iter dirs ~how:`Sequential ~f:loop
   in
   loop dir >>| fun () ->
   List.concat !accum

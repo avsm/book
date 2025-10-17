@@ -42,16 +42,30 @@ module type Additional_helpers = sig
   val pexp_tuple_opt : (expression list -> expression option) with_loc
   val pconstruct : constructor_declaration -> pattern option -> pattern
   val econstruct : constructor_declaration -> expression option -> expression
+
+  val elist_tail : (expression list -> expression -> expression) with_loc
+  (** [elist_tail ~loc [expr1; expr2; expr3] expr_tail] produces the expression
+      [expr1::expr2::expr3::expr_tail]. *)
+
   val elist : (expression list -> expression) with_loc
+  (** [elist ~loc [expr1; expr2; expr3]] produces the list litteral expression
+      [[expr1; expr2; expr3]]. *)
+
+  val plist_tail : (pattern list -> pattern -> pattern) with_loc
+  (** [plist_tail ~loc [pat1; pat2; pat3] pat_tail] produces the pattern
+      [pat1::pat2::pat3::pat_tail]. *)
+
   val plist : (pattern list -> pattern) with_loc
+  (** [plist ~loc [pat1; pat2; pat3]] produces the list pattern
+      [[pat1; pat2; pat3]]. *)
 
   val pstr_value_list :
     loc:Location.t ->
     Asttypes.rec_flag ->
     value_binding list ->
     structure_item list
-  (** [pstr_value_list ~loc rf vbs] = [pstr_value ~loc rf vbs] if [vbs <> \[\]],
-      [\[\]] otherwise. *)
+  (** [pstr_value_list ~loc rf vbs] = [pstr_value ~loc rf vbs] if [vbs <> []],
+      [[]] otherwise. *)
 
   val nonrec_type_declaration :
     (name:string Loc.t ->
@@ -62,8 +76,8 @@ module type Additional_helpers = sig
     manifest:core_type option ->
     type_declaration)
     with_loc
-    [@@deprecated
-      "[since 2016-10] use Nonrecursive on the P(str|sig)_type instead"]
+  [@@deprecated
+    "[since 2016-10] use Nonrecursive on the P(str|sig)_type instead"]
 
   val unapplied_type_constr_conv :
     (Longident.t Loc.t -> f:(string -> string) -> expression) with_loc
@@ -128,10 +142,6 @@ type 'a with_location = loc:Location.t -> 'a
 
 module type S = sig
   module Located : Located with type 'a with_loc := 'a without_location
-
-  include module type of Ast_builder_generated.Make (struct
-    let loc = Location.none
-  end)
-
+  include Ast_builder_generated.Intf_located
   include Additional_helpers with type 'a with_loc := 'a without_location
 end

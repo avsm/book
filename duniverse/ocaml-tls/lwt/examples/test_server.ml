@@ -14,7 +14,8 @@ let serve_ssl port callback =
     ~priv_key:server_ec_key >>= fun ec_certificate ->
   let certificates = `Multiple [ certificate ; ec_certificate ] in
   let config =
-    Tls.Config.(server ~version:(`TLS_1_0, `TLS_1_3) ~certificates ~ciphers:Ciphers.supported ()) in
+    get_ok (Tls.Config.(server ~version:(`TLS_1_0, `TLS_1_3) ~certificates ~ciphers:Ciphers.supported ()))
+  in
 
   let server_s =
     let open Lwt_unix in
@@ -26,7 +27,8 @@ let serve_ssl port callback =
 
   yap ~tag ("-> start @ " ^ string_of_int port) >>= fun () ->
   server_s >>= fun s ->
-  Tls_lwt.accept_ext config s >>= fun (channels, addr) ->
+  Tls_lwt.Unix.accept config s >>= fun (t, addr) ->
+  let channels = Tls_lwt.of_t t in
   yap ~tag "-> connect" >>= fun () ->
   callback channels addr >>= fun () ->
   yap ~tag "<- handler done"

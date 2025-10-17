@@ -23,19 +23,29 @@
 (** Perl-style regular expressions *)
 
 exception Parse_error
-exception Not_supported
-(** Errors that can be raised during the parsing of the regular expression *)
 
+(** Errors that can be raised during the parsing of the regular expression *)
+exception Not_supported
 
 type opt =
-  [ `Ungreedy | `Dotall | `Dollar_endonly
-  | `Multiline | `Anchored | `Caseless ]
+  [ `Ungreedy
+  | `Dotall
+  | `Dollar_endonly
+  | `Multiline
+  | `Anchored
+  | `Caseless
+  ]
 
-val re : ?opts:opt list -> string -> Core.t
 (** Parsing of a Perl-style regular expression *)
+val re : ?opts:opt list -> string -> Core.t
 
-val compile : Core.t -> Core.re
+val re_result
+  :  ?opts:opt list
+  -> string
+  -> (Core.t, [ `Not_supported | `Parse_error ]) result
+
 (** (Same as [Re.compile]) *)
+val compile : Core.t -> Core.re
 
-val compile_pat : ?opts:opt list -> string -> Core.re
 (** Regular expression compilation *)
+val compile_pat : ?opts:opt list -> string -> Core.re

@@ -29,9 +29,17 @@ module Unix : sig
       handshake of [fd] using [server] configuration. *)
   val server_of_fd : Tls.Config.server -> Lwt_unix.file_descr -> t Lwt.t
 
+  (** [server_of_channels server (ic, oc)] is [t], after server-side TLS
+      handshake on the input/output channels [ic, oc] using [server] configuration. *)
+  val server_of_channels : Tls.Config.server -> Lwt_io.input_channel * Lwt_io.output_channel -> t Lwt.t
+
   (** [client_of_fd client ~host fd] is [t], after client-side
       TLS handshake of [fd] using [client] configuration and [host]. *)
   val client_of_fd : Tls.Config.client -> ?host:[ `host ] Domain_name.t -> Lwt_unix.file_descr -> t Lwt.t
+
+  (** [client_of_channels client ~host (ic, oc)] is [t], after client-side
+      TLS handshake over the input/output channels [ic, oc] using [client] configuration and [host]. *)
+  val client_of_channels : Tls.Config.client -> ?host:[ `host ] Domain_name.t -> Lwt_io.input_channel * Lwt_io.output_channel -> t Lwt.t
 
   (** [accept server fd] is [t, sockaddr], after accepting a
       client on [fd] and upgrading to a TLS connection. *)
@@ -43,15 +51,15 @@ module Unix : sig
 
   (** {2 Common stream operations} *)
 
-  (** [read t buffer] is [length], the number of bytes read into
-      [buffer]. *)
-  val read   : t -> Cstruct.t      -> int  Lwt.t
+  (** [read t ~off buffer] is [length], the number of bytes read into
+      [buffer]. It fills [buffer] starting at [off] (default is 0). *)
+  val read   : t -> ?off:int -> bytes -> int  Lwt.t
 
   (** [write t buffer] writes the [buffer] to the session. *)
-  val write  : t -> Cstruct.t      -> unit Lwt.t
+  val write  : t -> string -> unit Lwt.t
 
   (** [writev t buffers] writes the [buffers] to the session. *)
-  val writev : t -> Cstruct.t list -> unit Lwt.t
+  val writev : t -> string list -> unit Lwt.t
 
   (** [read_bytes t bytes offset len] is [read_bytes], the amount of
       bytes read. *)
@@ -61,8 +69,11 @@ module Unix : sig
       [bytes] starting at [offset] to the session. *)
   val write_bytes : t -> Lwt_bytes.t -> int -> int -> unit Lwt.t
 
-  (** [close t] closes the TLS session by sending a close notify to the peer. *)
-  val close_tls : t -> unit Lwt.t
+  (** [shutdown t direction] closes the [direction] of the TLS session [t].
+      If [`read_write] or [`write] is closed, a TLS close_notify is sent to the
+      other endpoint. If this results in a fully closed session (or an
+      errorneous session), the underlying file descriptor is closed. *)
+  val shutdown : t -> [ `read | `write | `read_write ] -> unit Lwt.t
 
   (** [close t] closes the TLS session and the underlying file descriptor. *)
   val close : t -> unit Lwt.t
@@ -101,7 +112,7 @@ val accept_ext : Tls.Config.server -> Lwt_unix.file_descr ->
     output channel from the accepted connection on [fd], using the
     default configuration with the given [own_cert]. *)
 val accept : Tls.Config.own_cert -> Lwt_unix.file_descr ->
-  ((ic * oc) * Lwt_unix.sockaddr) Lwt.t
+  ((ic * oc) * Lwt_unix.sockaddr, [> `Msg of string]) result Lwt.t
 
 (** [connect_ext client (host, port)] is [ic, oc], the input
     and output channel of a TLS connection to [host] on [port] using
@@ -111,7 +122,7 @@ val connect_ext : Tls.Config.client -> string * int -> (ic * oc) Lwt.t
 (** [connect authenticator (host, port)] is [ic, oc], the input
     and output channel of a TLS connection to [host] on [port] using the
     default configuration and the [authenticator]. *)
-val connect : X509.Authenticator.t -> string * int -> (ic * oc) Lwt.t
+val connect : X509.Authenticator.t -> string * int -> (ic * oc, [> `Msg of string ]) result Lwt.t
 
 (** [of_t t] is [ic, oc], the input and output channel.  [close]
     defaults to [!Unix.close]. *)

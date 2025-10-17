@@ -1,3 +1,67 @@
+## v8.0.0 (2025-02-17)
+
+* Use the defunctorized dns-client-mirage, ca-certs-nss, happy-eyeballs
+  (#436 @hannesm)
+
+## v7.1.0 (2024-09-19)
+
+* Support TLS tunnel over Lwt_io.channel (#428, @art-w)
+
+## v7.0.0 (2024-08-29)
+
+* adapt to TLS 1.0.0 API changes, bump OCaml lower bound to 4.13 (#432 @hannesm)
+* conduit-lwt-unix: improve the no TLS error message (#431 @filipeom)
+* Remove 4.12 CI runners, add 5.2 (#433 @art-w)
+* Update GitHub actions (#429 @smorimoto)
+* use failwith instead of Lwt.fail_with, use Lwt.reraise (#430 @MisterDA)
+* switch to sexplib0 instead of sexplib for lighter dependencies (#427 @emillon)
+
+## v6.2.3 (2024-06-13)
+
+* conduit-mirage: adapt to dns-client 8.0.0 API changes (#426 @hannesm)
+* conduit-async: removed misplaced deprecation attribute
+  (OCaml 5 complains about) (#426 @hannesm)
+
+## v6.2.2 (2024-04-30)
+
+* conduit-mirage: IPv6 literal * DNS support for default resolver (#425 @Firobe)
+* conduit-mirage: adapt to mirage-flow 4 API, requiring tls 0.17.4, vchan 6.0.2
+  (#424 @hannesm)
+* conduit-lwt-unix: disable deprecation alert (#424 @hannesm)
+
+## v6.2.1 (2023-11-28)
+
+* conduit-mirage: adapt to tls 0.17.0 API changes (no more sexplib converters)
+  #421 @hannesm
+
+## v6.2.0 (2023-02-17)
+
+* conduit-lwt-unix: adapt tls 0.16 split: tls.lwt is now tls-lwt (#419 @hannesm)
+* conduit-mirage: adapt dns-client 7.0.0 split: dns-client-mirage (#419 @hannesm)
+
+## v6.1.0 (2022-12-15)
+
+done by @psafont in #417:
+* conduit-lwt-unix-ssl: allow users to create a client ssl_context and use it for
+  any connections. This allows users to manage the lifecycle of the context.
+* conduit-lwt-unix-ssl: domain name verification can be disabled by users,
+  it's enabled by default. The library returns an error when the hostname
+  verification is turned on but it cannot be performed, this follows the TLS
+  implementation.
+* conduit-lwt-unix-ssl: IP verification can be enabled by users, it's disabled
+  by default.
+* conduit-lwt-unix-ssl: SNI is not sent when there isn't a domain name available
+* conduit-lwt-unix: avoid direct use of Ssl in conduit_lwt_unix (#418 @psafont)
+
+## v6.0.1 (2022-10-25)
+
+* conduit-mirage: adapt to dns 6.4.0 changes, Resolver_mirage.v is now in Lwt.t
+  monad (#416 @hannesm)
+
+## v6.0.0 (2022-10-11)
+
+* conduit-mirage: delay parsing of nameservers (#415 @reynir, review by @dinosaure)
+
 ## v5.1.1 (2022-07-04)
 
 * conduit-mirage: pass peer name to Tls.Config.client, fixes

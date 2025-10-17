@@ -132,3 +132,63 @@ let rec compare cmp l1 l2 =
     match cmp x1 x2 with
     | 0 -> compare cmp xs1 xs2
     | n -> n
+
+(* By writing [extract] in two successive steps, as follows, we avoid
+   rebuilding an identical list when no list element satisfies [p]. *)
+
+let rec extract (p : 'a -> bool) (xs : 'a list) : ('a * 'a list) option =
+  match xs with
+  | [] ->
+      None
+  | x :: xs ->
+      if p x then
+        Some (x, xs)
+      else
+        match extract p xs with
+        | None ->
+            None
+        | Some (w, xs) ->
+            Some (w, x :: xs)
+
+let extract (p : 'a -> bool) (xs : 'a list) : 'a option * 'a list =
+  match extract p xs with
+  | None ->
+      None, xs
+  | Some (x, xs) ->
+      Some x, xs
+
+let[@tail_mod_cons] rec merge_uniq cmp l1 l2 =
+  match l1, l2 with
+  | [], l2 ->
+      l2
+  | l1, [] ->
+      l1
+  | h1 :: t1, h2 :: t2 ->
+      let c = cmp h1 h2 in
+      if c = 0 then
+        merge_uniq cmp l1 t2
+      else if c < 0 then
+        h1 :: merge_uniq cmp t1 l2
+      else
+        h2 :: merge_uniq cmp l1 t2
+
+(* [reduce_round] divides the length of the list by two. *)
+
+let[@tail_mod_cons] rec reduce_round f xys =
+  match xys with
+  | x :: y :: xys ->
+      f x y :: reduce_round f xys
+  | xys ->
+      xys
+
+(* [reduce] iterates [reduce_round] until the size of the list
+   becomes zero or one. The number of iterations is logarithmic. *)
+
+let rec reduce e f xs =
+  match reduce_round f xs with
+  | [] ->
+      e
+  | [x] ->
+      x
+  | xs ->
+      reduce e f xs

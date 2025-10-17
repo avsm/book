@@ -454,15 +454,17 @@ let take_till f =
 let choice ?(failure_msg="no more choices") ps =
   List.fold_right (<|>) ps (fail failure_msg)
 
+let notset = { run = fun _buf _pos _more _fail _succ -> failwith "Angstrom.fix_direct not set" }
+
 let fix_direct f =
-  let rec p = lazy (f r)
+  let rec p = ref notset
   and r = { run = fun buf pos more fail succ ->
-    (Lazy.force p).run buf pos more fail succ }
+    (!p).run buf pos more fail succ }
   in
+  p := f r;
   r
 
-let fix_lazy f =
-  let max_steps = 20 in
+let fix_lazy ~max_steps f =
   let steps = ref max_steps in
   let rec p = lazy (f r)
   and r = { run = fun buf pos more fail succ ->
@@ -480,7 +482,7 @@ let fix_lazy f =
 let fix = match Sys.backend_type with
   | Native -> fix_direct
   | Bytecode -> fix_direct
-  | Other _ -> fix_lazy
+  | Other _ -> fun f -> fix_lazy ~max_steps:20 f
 
 let option x p =
   p <|> return x
@@ -493,9 +495,9 @@ let rec list ps =
   | p::ps -> lift2 cons p (list ps)
 
 let count n p =
-  if n < 0 
+  if n < 0
   then fail "count: n < 0"
-  else 
+  else
     let rec loop = function
       | 0 -> return []
       | n -> lift2 cons p (loop (n - 1))
@@ -522,7 +524,10 @@ let sep_by s p =
 
 let skip_many p =
   fix (fun m ->
-    (p *> m) <|> return ())
+      ((p >>| fun _ -> true) <|> return false) >>= function
+      | true -> m
+      | false -> return ()
+    )
 
 let skip_many1 p =
   p *> skip_many p

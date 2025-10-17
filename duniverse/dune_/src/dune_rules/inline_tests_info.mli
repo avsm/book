@@ -1,10 +1,12 @@
 open Import
+module Ocaml_flags := Dune_lang.Ocaml_flags
 
 module Backend : sig
   type t =
     { loc : Loc.t
     ; runner_libraries : (Loc.t * Lib_name.t) list
     ; flags : Ordered_set_lang.Unexpanded.t
+    ; list_partitions_flags : Ordered_set_lang.Unexpanded.t option
     ; generate_runner : (Loc.t * Action_unexpanded.t) option
     ; extends : (Loc.t * Lib_name.t) list
     }
@@ -15,15 +17,14 @@ end
 module Mode_conf : sig
   type t =
     | Byte
-    | Javascript
+    | Jsoo of Js_of_ocaml.Mode.t
     | Native
     | Best
 
   val compare : t -> t -> ordering
-
   val to_dyn : t -> Dyn.t
-
   val decode : t Dune_lang.Decoder.t
+  val to_string : t -> string
 
   module Map : Map.S with type key = t
 
@@ -31,7 +32,6 @@ module Mode_conf : sig
     include Set.S with type elt = t and type 'a map = 'a Map.t
 
     val decode : t Dune_lang.Decoder.t
-
     val default : t
   end
 end
@@ -53,3 +53,6 @@ module Tests : sig
 
   include Sub_system_info.S with type t := t
 end
+
+val inline_test_dirname : Lib_name.Local.t -> string
+val inline_test_runner : string

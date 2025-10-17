@@ -15,6 +15,13 @@ type frozen
   | B of int
 ]
 
+type ('a, 'b) parametrized_record = {
+  field_a: 'a;
+  ~field_b: 'b list;
+}
+
+type 'a parametrized_tuple = ('a * 'a * int)
+
 type root = {
   id <json name="ID">: string;
   await: bool;
@@ -31,8 +38,10 @@ type root = {
   assoc3: (float * int) list <python repr="dict">;
   assoc4: (string * int) list <json repr="object"> <python repr="dict">;
   nullables: int nullable list;
+  options: int option list;
   untyped_things: abstract list;
-  (*options: int option list;*)
+  parametrized_record: (int, float) parametrized_record;
+  parametrized_tuple: kind parametrized_tuple;
 }
 
 type alias = int list
@@ -49,4 +58,8 @@ type recursive_class = {
   id: int;
   flag: bool;
   children: recursive_class list;
+}
+
+type default_list = {
+  ~items: int list;
 }

@@ -27,7 +27,7 @@
    StackLang code is not necessarily isomorphic to the LR automaton, because
    of the optimizations (specialization, etc.) that are performed in
    StackLang. Exploiting the static analysis in LRijkstra* would probably
-   requiring embedding the analysis data (as [assume] instructions) in the
+   require embedding the analysis data (as [assume] instructions) in the
    StackLang code when it is first produced, so as to allow this information
    to be preserved when the code is transformed. Perhaps this could be done in
    the future. *)
@@ -46,7 +46,6 @@ let token =
 
 module P = struct
   include Grammar.TerminalSet
-  let diff xs ys = fold remove ys xs
   type property = t
   let leq_join = union
 end
@@ -164,7 +163,7 @@ let make_exhaustive branches odefault =
          default branch, and the [case] construct remains exhaustive. *)
       odefault
   | None ->
-      (* This [case] construct has no default branch, because it is used to
+      (* This [case] construct has no default branch, because it used to
          be exhaustive, but is no longer exhaustive now that some dead
          branches have been removed. Introduce a default branch. *)
       Some (IDead `Dynamic)

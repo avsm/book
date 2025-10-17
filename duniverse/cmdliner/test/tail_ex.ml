@@ -77,7 +77,7 @@ let cmd =
     `S Manpage.s_see_also;
     `P "$(b,cat)(1), $(b,head)(1)" ]
   in
-  let info = Cmd.info "tail" ~version:"v1.1.1" ~doc ~man in
+  let info = Cmd.info "tail" ~version:"v1.3.0+dune" ~doc ~man in
   Cmd.v info Term.(const tail $ lines $ follow $ verb $ pid $ files)
 
 

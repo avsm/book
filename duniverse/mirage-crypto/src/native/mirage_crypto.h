@@ -6,10 +6,13 @@
 #include "bitfn.h"
 
 #include <caml/mlvalues.h>
-#include <caml/bigarray.h>
 
 #ifdef ACCELERATE
-#include <x86intrin.h>
+# ifdef _MSC_VER
+#  include <intrin.h>
+# else
+#  include <x86intrin.h>
+# endif
 #define __mc_ACCELERATE__
 #define __mc_detect_features__
 #endif
@@ -47,24 +50,29 @@ extern struct _mc_cpu_features mc_detected_cpu_features;
 
 #endif /* __mc_ACCELERATE__ */
 
-#if defined (__x86_64__) || defined (__aarch64__) || defined (__powerpc64__) || (64 == __riscv_xlen) || defined (__s390x__) || (defined (__mips__) && _MIPS_SIM==_ABI64)
+#if defined (__x86_64__) || defined (__aarch64__) || defined (__powerpc64__) || (64 == __riscv_xlen) || defined (__s390x__) || (defined (__mips__) && _MIPS_SIM==_ABI64) || defined (__loongarch_lp64) || (1 == _WIN64)
 #define ARCH_64BIT
-#elif defined (__i386__) || defined (__arm__) || (32 == __riscv_xlen) || (defined (__mips__) && _MIPS_SIM==_ABIO32)
+#elif defined (__i386__) || defined (__arm__) || (32 == __riscv_xlen) || (defined (__mips__) && _MIPS_SIM==_ABIO32) || (1 == _WIN32)
 #define ARCH_32BIT
 #else
 #error "unsupported platform"
 #endif
 
 #ifndef __unused
-#define __unused(x) x __attribute__((unused))
+# if defined(_MSC_VER) && _MSC_VER >= 1500
+#  define __unused(x) __pragma( warning (push) ) \
+    __pragma( warning (disable:4189 ) ) \
+    x \
+    __pragma( warning (pop))
+# else
+#  define __unused(x) x __attribute__((unused))
+# endif
 #endif
 #define __unit() value __unused(_)
 
-#define _ba_uint8_off(ba, off)  ((uint8_t*) Caml_ba_data_val (ba) + Long_val (off))
-#define _ba_uint32_off(ba, off) ((uint32_t*) Caml_ba_data_val (ba) + Long_val (off))
-
-#define _ba_uint8(ba)  ((uint8_t*) Caml_ba_data_val (ba))
-#define _ba_uint32(ba) ((uint32_t*) Caml_ba_data_val (ba))
+#define _st_uint8(v) ((const uint8_t*) (String_val(v)))
+#define _st_uint32(v) ((const uint32_t*) (String_val(v)))
+#define _st_uint8_off(v, off) ((const uint8_t*)(String_val(v) + Long_val(off)))
 
 #define _bp_uint8_off(bp, off) ((uint8_t *) Bp_val (bp) + Long_val (off))
 #define _bp_uint8(bp) ((uint8_t *) Bp_val (bp))
@@ -81,10 +89,10 @@ extern struct _mc_cpu_features mc_detected_cpu_features;
 CAMLprim value mc_aes_rk_size_generic (value rounds);
 
 CAMLprim value
-mc_aes_derive_e_key_generic (value key, value off1, value rk, value rounds);
+mc_aes_derive_e_key_generic (value key, value rk, value rounds);
 
 CAMLprim value
-mc_aes_derive_d_key_generic (value key, value off1, value kr, value rounds, value __unused (rk));
+mc_aes_derive_d_key_generic (value key, value kr, value rounds, value __unused (rk));
 
 CAMLprim value
 mc_aes_enc_generic (value src, value off1, value dst, value off2, value rk, value rounds, value blocks);
@@ -94,13 +102,16 @@ mc_aes_dec_generic (value src, value off1, value dst, value off2, value rk, valu
 
 CAMLprim value mc_ghash_key_size_generic (__unit ());
 
-CAMLprim value mc_ghash_init_key_generic (value key, value off, value m);
+CAMLprim value mc_ghash_init_key_generic (value key, value m);
 
 CAMLprim value
 mc_ghash_generic (value m, value hash, value src, value off, value len);
 
 CAMLprim value
 mc_xor_into_generic (value b1, value off1, value b2, value off2, value n);
+
+CAMLprim value
+mc_xor_into_bytes_generic (value b1, value off1, value b2, value off2, value n);
 
 CAMLprim value
 mc_count_16_be_4_generic (value ctr, value dst, value off, value blocks);

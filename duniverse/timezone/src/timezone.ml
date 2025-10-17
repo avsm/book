@@ -44,10 +44,10 @@ module Zone_cache = struct
       if depth < 1
       then ()
       else
-        Array.iter (Caml.Sys.readdir dir) ~f:(fun fn ->
+        Array.iter (Stdlib.Sys.readdir dir) ~f:(fun fn ->
           let fn = dir ^ "/" ^ fn in
           let relative_fn = String.drop_prefix fn basedir_len in
-          match Caml.Sys.is_directory fn with
+          match Stdlib.Sys.is_directory fn with
           | true ->
             if not
                  (List.exists skip_prefixes ~f:(fun prefix ->
@@ -183,7 +183,8 @@ module Stable = struct
              of_utc_offset_explicit_name ~name ~hours:offset)
            else find_exn name
          with
-         | exc -> of_sexp_error (sprintf "Timezone.t_of_sexp: %s" (Exn.to_string exc)) sexp)
+         | exc ->
+           of_sexp_error (sprintf "Timezone.t_of_sexp: %s" (Exn.to_string exc)) sexp)
       | _ -> of_sexp_error "Timezone.t_of_sexp: expected atom" sexp
     ;;
 
@@ -194,6 +195,16 @@ module Stable = struct
       Sexp.Atom name
     ;;
 
+    let t_sexp_grammar : t Sexplib.Sexp_grammar.t =
+      { untyped =
+          Tagged
+            { key = Sexplib.Sexp_grammar.type_name_tag
+            ; value = Atom "Timezone.t"
+            ; grammar = String
+            }
+      }
+    ;;
+
     include Sexpable.Stable.To_stringable.V1 (struct
         type nonrec t = t [@@deriving sexp]
       end)
@@ -202,8 +213,18 @@ module Stable = struct
        the outside world that would allow the construction of two Zone's with the same
        name and different transitions. *)
     let compare t1 t2 = String.compare (to_string t1) (to_string t2)
+    let equal t1 t2 = String.equal (to_string t1) (to_string t2)
     let hash_fold_t state t = String.hash_fold_t state (to_string t)
     let hash = Ppx_hash_lib.Std.Hash.of_fold hash_fold_t
+
+    let to_binable t =
+      let name = name t in
+      if String.equal name "/etc/localtime"
+      then failwith "the local time zone cannot be serialized";
+      name
+    ;;
+
+    let of_binable s = t_of_sexp (Sexp.Atom s)
 
     include (
       Binable.Stable.Of_binable.V1 [@alert "-legacy"]
@@ -211,27 +232,29 @@ module Stable = struct
         (struct
           type nonrec t = t
 
-          let to_binable t =
-            let name = name t in
-            if String.equal name "/etc/localtime"
-            then failwith "the local time zone cannot be serialized";
-            name
-          ;;
-
-          let of_binable s = t_of_sexp (Sexp.Atom s)
+          let to_binable = to_binable
+          let of_binable = of_binable
         end) :
         Binable.S with type t := t)
+
+    let stable_witness =
+      Stable_witness.of_serializable String.Stable.V1.stable_witness of_binable to_binable
+    ;;
   end
+
+  module Current = V1
 end
 
 include Identifiable.Make (struct
     let module_name = "Timezone"
 
-    include Stable.V1
+    include Stable.Current
 
     let of_string = of_string
     let to_string = to_string
   end)
+
+include Stable.Current
 
 module Private = struct
   module Zone_cache = Zone_cache

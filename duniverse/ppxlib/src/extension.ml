@@ -104,35 +104,7 @@ module Context = struct
     | Ppx_import, type_decl -> get_ppx_import_extension type_decl
     | _ -> None
 
-  let node_of_extension :
-      type a. ?loc:Location.t -> ?x:a -> a t -> extension -> a =
-   fun ?(loc = Location.none) ?x t ->
-    let open Ast_builder.Default in
-    match (t, x) with
-    | Class_expr, _ -> pcl_extension ~loc
-    | Class_field, _ -> pcf_extension ~loc
-    | Class_type_field, _ -> pctf_extension ~loc
-    | Class_type, _ -> pcty_extension ~loc
-    | Core_type, _ -> ptyp_extension ~loc
-    | Expression, _ -> pexp_extension ~loc
-    | Module_expr, _ -> pmod_extension ~loc
-    | Module_type, _ -> pmty_extension ~loc
-    | Pattern, _ -> ppat_extension ~loc
-    | Signature_item, _ -> fun ext -> psig_extension ~loc ext []
-    | Structure_item, _ -> fun ext -> pstr_extension ~loc ext []
-    | Ppx_import, Some x ->
-        fun ext ->
-          {
-            x with
-            ptype_manifest = Some (Ast_builder.Default.ptyp_extension ~loc ext);
-          }
-    | Ppx_import, None ->
-        failwith
-          "Ppxlib internal error: Item not provided to build an extension node \
-           from a Ppx_import context."
-
-  let merge_attributes_res :
-      type a.
+  let merge_attributes_res : type a.
       a t -> a -> attributes -> (a, Location.Error.t NonEmptyList.t) result =
    fun t x attrs ->
     match t with
@@ -179,8 +151,7 @@ struct
     with_arg : bool;
   }
 
-  let declare :
-      type a.
+  let declare : type a.
       with_arg:bool ->
       string ->
       a Context.t ->
@@ -320,8 +291,8 @@ let check_context_for_inline : type a. func:string -> a Context.t -> unit =
       Printf.ksprintf invalid_arg "%s: %s can't be inlined" func
         (Context.desc context)
 
-let rec filter_by_context :
-    type a. a Context.t -> t list -> a For_context.t list =
+let rec filter_by_context : type a.
+    a Context.t -> t list -> a For_context.t list =
  fun context expanders ->
   match expanders with
   | [] -> []
@@ -484,6 +455,16 @@ module V3 = struct
     T
       (M.declare ~with_arg:false name context pattern (fun ~ctxt ~arg:_ ->
            k ~ctxt))
+
+  let declare_with_path_arg name context pattern k =
+    let pattern = Ast_pattern.map_result pattern ~f:(fun x -> Simple x) in
+    T (M.declare ~with_arg:true name context pattern k)
+
+  let declare_inline_with_path_arg name context pattern k =
+    check_context_for_inline context
+      ~func:"Extension.declare_inline_with_path_arg";
+    let pattern = Ast_pattern.map_result pattern ~f:(fun x -> Inline x) in
+    T (M.declare ~with_arg:true name context pattern k)
 end
 
 let declare name context pattern f =

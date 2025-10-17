@@ -30,17 +30,27 @@ module X509 = struct
 end
 
 module Client = struct
+  let config ?certificates authenticator =
+    match Tls.Config.client ~authenticator ?certificates () with
+    | Error (`Msg msg) -> failwith ("tls configuration problem: " ^ msg)
+    | Ok config -> config
+
   let connect ?src ?certificates ~authenticator host sa =
     Conduit_lwt_server.with_socket sa (fun fd ->
         (match src with
         | None -> Lwt.return_unit
         | Some src_sa -> Lwt_unix.bind fd src_sa)
         >>= fun () ->
-        let config = Tls.Config.client ~authenticator ?certificates () in
+        let config = config ?certificates authenticator in
         Lwt_unix.connect fd sa >>= fun () ->
         Tls_lwt.Unix.client_of_fd config ~host fd >|= fun t ->
         let ic, oc = Tls_lwt.of_t t in
         (fd, ic, oc))
+
+  let tunnel ?certificates ~authenticator host channels =
+    let config = config ?certificates authenticator in
+    Tls_lwt.Unix.client_of_channels config ~host channels >|= fun t ->
+    Tls_lwt.of_t t
 end
 
 module Server = struct
@@ -53,14 +63,15 @@ module Server = struct
               (fun t ->
                 let ic, oc = Tls_lwt.of_t t in
                 Lwt.return (fd, ic, oc))
-              (fun exn -> Lwt_unix.close fd >>= fun () -> Lwt.fail exn)
+              (fun exn -> Lwt_unix.close fd >>= fun () -> Lwt.reraise exn)
             >>= Conduit_lwt_server.process_accept ?timeout (callback addr))
 
   let init ?backlog ~certfile ~keyfile ?stop ?timeout sa callback =
     X509_lwt.private_of_pems ~cert:certfile ~priv_key:keyfile
     >>= fun certificate ->
-    let config = Tls.Config.server ~certificates:(`Single certificate) () in
-    init' ?backlog ?stop ?timeout config sa callback
+    match Tls.Config.server ~certificates:(`Single certificate) () with
+    | Error (`Msg msg) -> failwith ("tls configuration problem: " ^ msg)
+    | Ok config -> init' ?backlog ?stop ?timeout config sa callback
 end
 
 let available = true

@@ -35,8 +35,8 @@
     The functions that retrieve bytes ({!get_uint8} etc.) require a [read]
    capability, functions mutating the underlying buffer ({!set_uint8} etc.)
    require a [write] capability. Allocation of a buffer (via {!create}, ...)
-   returns a [t] with read and write capabilities. {!ro} drops the write
-   capability, {!wo} drops the read capability. The only exception is
+   returns a [t] with read and write capabilities. {!val:ro} drops the write
+   capability, {!val:wo} drops the read capability. The only exception is
    {!unsafe_to_bigarray} that returns the underlying [Bigarray.t].
 
     Accessors and mutators for fixed size integers (8, 16, 32, 64 bit) are
@@ -146,6 +146,14 @@ val sub : 'a t -> off:int -> len:int -> 'a t
 
     @raise Invalid_argument if the offset exceeds [t] length. *)
 
+val sub_copy : 'a t -> off:int -> len:int -> rdwr t
+(** [sub_copy t ~off ~len] is a new copy of [sub t ~off ~len],
+    that does not share the underlying buffer of [t].
+    The returned value has read-write capabilities because it doesn't
+    affect [t].
+
+    @raise Invalid_argument if the offset exceeds [t] length. *)
+
 val shift : 'a t -> int -> 'a t
 (** [shift t len] returns a proxy which shares the underlying buffer of [t]. The
     returned value starts [len] bytes later than the given [t]. The returned
@@ -168,6 +176,10 @@ val split : ?start:int -> 'a t -> int -> 'a t * 'a t
 
     @raise Invalid_argument if [start] exceeds the length of [t],
     or if there is a bounds violation of [t] via [len + start]. *)
+
+val copy : 'a t -> int -> int -> string
+[@@ocaml.alert deprecated "this is just like [to_string] without defaults, were you looking for [sub_copy]?"]
+(** [copy cstr off len] is the same as [Cstruct.to_string cstr ~off ~len]. *)
 
 (** {2 Construction from existing t} *)
 
@@ -256,6 +268,13 @@ val to_string : ?off:int -> ?len:int -> 'a rd t -> string
 
     @raise Invalid_argument if [off] and [len] does not designate a valid
     segment of [t]. *)
+
+val to_hex_string : ?off:int -> ?len:int -> _ rd t -> string
+(** [to_hex_string ~off ~len t] is a fresh OCaml [string] containing
+    the hex representation of [sub t off len]. See {!Cstruct.to_hex_string}.
+    @raise Invalid_argument if [off] or [len] is negative, or
+      if [Cstruct.length t - off < len].
+    @since 6.2 *)
 
 val of_hex : ?off:int -> ?len:int -> string -> rdwr t
 (** [of_hex ~off ~len s] allocates a buffer and copies the content of [s]
@@ -516,10 +535,10 @@ val span : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> 'a rd t -
 
     {ul
     {- if [rev] is [false] (default), [l] is at least [min] and at most
-       [max] consecutive [sat] satisfying initial bytes of [cs] or {!empty}
+       [max] consecutive [sat] satisfying initial bytes of [cs] or {!is_empty}
        if there are no such bytes. [r] are the remaining bytes of [cs].}
     {- if [rev] is [true], [r] is at least [min] and at most [max]
-       consecutive [sat] satisfying final bytes of [cs] or {!empty}
+       consecutive [sat] satisfying final bytes of [cs] or {!is_empty}
        if there are no such bytes. [l] are the remaining bytes of [cs].}}
 
     If [max] is unspecified the span is unlimited. If [min] is unspecified

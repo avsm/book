@@ -143,9 +143,7 @@ let%test_module _ =
           let timerfd = timerfd_create Timerfd.Clock.realtime in
           Epoll.set epoll (timerfd :> File_descr.t) Epoll.Flags.in_;
           List.iter [ 0; 1 ] ~f:(fun span_ns ->
-            Timerfd.set_after
-              timerfd
-              (Time_ns.Span.of_int63_ns (Int63.of_int span_ns));
+            Timerfd.set_after timerfd (Time_ns.Span.of_int63_ns (Int63.of_int span_ns));
             match Epoll.wait epoll ~timeout:`Never with
             | `Timeout -> assert false
             | `Ok -> ());
@@ -323,6 +321,111 @@ let%expect_test "set and get affinity" =
   | _ -> ()
 ;;
 
+(* Priority *)
+let%test_module "getpriority and setpriority" =
+  (module struct
+    let getpriority = ok_exn getpriority
+    let setpriority = ok_exn setpriority
+    let gettid = ok_exn Core_unix.gettid
+
+    let print_priority ?pid () =
+      printf !"%{sexp:Linux_ext.Priority.t}\n" (getpriority ?pid ())
+    ;;
+
+    let%expect_test "this thread" =
+      let starting_priority = getpriority () in
+      (* All of these actually refer to the current thread. *)
+      let tids = [ None; Some (gettid () |> Thread_id.to_int |> Pid.of_int) ] in
+      List.iteri (List.cartesian_product tids tids) ~f:(fun index (set_pid, get_pid) ->
+        let priority = Linux_ext.Priority.of_int (index + 1) in
+        setpriority ?pid:set_pid priority;
+        print_priority ?pid:get_pid ());
+      [%expect {|
+        1
+        2
+        3
+        4 |}];
+      setpriority starting_priority;
+      print_s
+        [%sexp ([%equal: Linux_ext.Priority.t] starting_priority (getpriority ()) : bool)];
+      [%expect {| true |}]
+    ;;
+
+    let%expect_test "other thread" =
+      let child_tid = Set_once.create () in
+      let ready_for_thread_to_get_priority = Set_once.create () in
+      let priority_retrieved_in_thread = Set_once.create () in
+      let ready_for_thread_to_exit = Set_once.create () in
+      (* [mutex] guards the vars above; [condition] is signalled when any change.
+
+         As there are only two threads involved, [signal] will suffice, but we may as well
+         broadcast since we do not care about performance and don't want to ambush someone
+         that modifies this test to add three threads.
+
+         The [`Locked] argument indicates that the caller knows they must have the mutex
+         locked. *)
+      let mutex = Caml_threads.Mutex.create () in
+      let condition = Caml_threads.Condition.create () in
+      let rec wait_for_set_once set_once `Locked =
+        match Set_once.get set_once with
+        | None ->
+          Caml_threads.Condition.wait condition mutex;
+          wait_for_set_once set_once `Locked
+        | Some v -> v
+      in
+      let set_set_once set_once value `Locked =
+        Set_once.set_exn set_once [%here] value;
+        Caml_threads.Condition.broadcast condition
+      in
+      let thread_body () =
+        Caml_threads.Mutex.lock mutex;
+        setpriority (Priority.of_int 4);
+        let tid = gettid () |> Thread_id.to_int |> Pid.of_int in
+        set_set_once child_tid tid `Locked;
+        wait_for_set_once ready_for_thread_to_get_priority `Locked;
+        let priority = getpriority () in
+        set_set_once priority_retrieved_in_thread priority `Locked;
+        wait_for_set_once ready_for_thread_to_exit `Locked;
+        Caml_threads.Mutex.unlock mutex
+      in
+      Caml_threads.Mutex.lock mutex;
+      let starting_priority = getpriority () in
+      setpriority (Priority.of_int 6);
+      print_priority ();
+      [%expect {| 6 |}];
+      (* Create the thread. *)
+      let thread = Caml_threads.Thread.create thread_body () in
+      let child_tid = wait_for_set_once child_tid `Locked in
+      (* When the child starts, it sets its priority to 4. We can read it by its TID: *)
+      print_priority ~pid:child_tid ();
+      [%expect {| 4 |}];
+      (* Our priority is unchanged: *)
+      print_priority ();
+      [%expect {| 6 |}];
+      (* We can modify the child's priority from here: *)
+      setpriority ~pid:child_tid (Priority.of_int 5);
+      print_priority ~pid:child_tid ();
+      [%expect {| 5 |}];
+      (* Our priority is unchanged: *)
+      print_priority ();
+      [%expect {| 6 |}];
+      (* Ask the child to read its own priority: *)
+      set_set_once ready_for_thread_to_get_priority () `Locked;
+      let priority_retrieved_in_thread =
+        wait_for_set_once priority_retrieved_in_thread `Locked
+      in
+      (* It reads the correct priority: *)
+      print_s [%sexp (priority_retrieved_in_thread : Priority.t)];
+      [%expect {| 5 |}];
+      (* Clean up. *)
+      set_set_once ready_for_thread_to_exit () `Locked;
+      Caml_threads.Mutex.unlock mutex;
+      Caml_threads.Thread.join thread;
+      setpriority starting_priority
+    ;;
+  end)
+;;
+
 let%test_unit "get_terminal_size" =
   match get_terminal_size with
   | Error _ -> ()
@@ -392,9 +495,7 @@ let%test_module "getxattr and setxattr" =
     let%expect_test "test setxattr [`Create] semantics" =
       with_tmpfile (fun path ->
         let name = "user.foo" in
-        let set_and_create () =
-          set_and_print ~how:`Create ~path ~name ~value:"blah" ()
-        in
+        let set_and_create () = set_and_print ~how:`Create ~path ~name ~value:"blah" () in
         set_and_create ();
         [%expect {| Ok |}];
         get_and_print ~path ~name;
@@ -470,9 +571,7 @@ let%test_unit "peer_credentials" =
          with
          | Unix.Unix_error (ENOTSOCK, _, _) -> ());
         with_listening_server_unix_socket (fname ^ ".peercredsocket") ~f:(fun fname ->
-          let client_sock =
-            Unix.socket ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-          in
+          let client_sock = Unix.socket ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
           let rec connect count =
             try Unix.connect client_sock ~addr:(ADDR_UNIX fname) with
             | Unix_error (ECONNREFUSED, _, _) when count < 100 ->
@@ -528,4 +627,42 @@ let%expect_test "cpu_list_of_string_exn" =
     Error: ("cpu_list_of_string_exn: invalid grouped range stride or amount" (amt 0)
       (stride 0))
     |}]
+;;
+
+let%expect_test "TCP_CONGESTION" =
+  let gettcpopt_string = Or_error.ok_exn Linux_ext.gettcpopt_string in
+  let settcpopt_string = Or_error.ok_exn Linux_ext.settcpopt_string in
+  let sock = Unix.socket ~domain:PF_INET ~kind:SOCK_STREAM ~protocol:0 () in
+  (* man 7 tcp says that "reno" is always permitted. *)
+  settcpopt_string sock TCP_CONGESTION "reno";
+  let str = gettcpopt_string sock TCP_CONGESTION in
+  print_s [%sexp (str : string)];
+  [%expect {| reno |}];
+  (* basically everyone uses cubic as the default these days, so for the purposes of
+     this test I'm willing to assume that it's available for this test. *)
+  settcpopt_string sock TCP_CONGESTION "cubic";
+  let str = gettcpopt_string sock TCP_CONGESTION in
+  print_s [%sexp (str : string)];
+  [%expect {| cubic |}];
+  (* Passing a garbage algo should raise: *)
+  List.iter [ ""; "\000"; "notaccalgo"; "longer-than-16-chars" ] ~f:(fun garbage ->
+    Expect_test_helpers_base.show_raise (fun () ->
+      settcpopt_string sock TCP_CONGESTION garbage));
+  [%expect
+    {|
+    (raised (Unix.Unix_error "Invalid argument" setsockopt ""))
+    (raised (Unix.Unix_error "Invalid argument" setsockopt ""))
+    (raised (Unix.Unix_error "No such file or directory" setsockopt ""))
+    (raised (Unix.Unix_error "No such file or directory" setsockopt "")) |}];
+  (* We need to close the socket to clean up the test... *)
+  Unix.close sock;
+  (* But it also gives us an opportunity to demonstrate correct behaviour (gracefully
+     raising) on an illegal file descriptor: *)
+  Expect_test_helpers_base.show_raise (fun () -> gettcpopt_string sock TCP_CONGESTION);
+  Expect_test_helpers_base.show_raise (fun () ->
+    settcpopt_string sock TCP_CONGESTION "reno");
+  [%expect
+    {|
+    (raised (Unix.Unix_error "Bad file descriptor" getsockopt ""))
+    (raised (Unix.Unix_error "Bad file descriptor" setsockopt "")) |}]
 ;;

@@ -16,8 +16,8 @@
  *
  *)
 
-(** Connection establishment using the {{:http://ocsigen.org/lwt/api/Lwt_unix}
-    Lwt_unix} library *)
+(** Connection establishment using the
+    {{:http://ocsigen.org/lwt/api/Lwt_unix} Lwt_unix} library *)
 
 (** {2 Core types} *)
 
@@ -26,8 +26,13 @@ type client_tls_config =
 [@@deriving sexp]
 (** Configuration fragment for a TLS client connecting to a remote endpoint *)
 
+type 'a io = 'a Lwt.t
+type ic = (Lwt_io.input_channel[@sexp.opaque]) [@@deriving sexp]
+type oc = (Lwt_io.output_channel[@sexp.opaque]) [@@deriving sexp]
+
 type client =
   [ `TLS of client_tls_config
+  | `TLS_tunnel of [ `Hostname of string ] * ic * oc
   | `TLS_native of client_tls_config
     (** Force use of native OCaml TLS stack to connect.*)
   | `OpenSSL of client_tls_config
@@ -103,10 +108,6 @@ type server =
       the {{:http://mirage.github.io/ocaml-launchd/launchd/} ocaml-launchd}
       documentation for more. *)
 
-type 'a io = 'a Lwt.t
-type ic = Lwt_io.input_channel
-type oc = Lwt_io.output_channel
-
 type tcp_flow = private {
   fd : Lwt_unix.file_descr; [@sexp.opaque]
   ip : Ipaddr.t;
@@ -129,6 +130,7 @@ type vchan_flow = private { domid : int; port : string } [@@deriving sexp_of]
     transport method. *)
 type flow = private
   | TCP of tcp_flow
+  | Tunnel of string * ic * oc
   | Domain_socket of domain_flow
   | Vchan of vchan_flow
 [@@deriving sexp_of]
@@ -161,16 +163,22 @@ val init :
   ?src:string ->
   ?tls_own_key:tls_own_key ->
   ?tls_authenticator:Conduit_lwt_tls.X509.authenticator ->
+  ?ssl_ctx:Conduit_lwt_unix_ssl.Client.context ->
+  ?ssl_client_verify:Conduit_lwt_unix_ssl.Client.verify ->
   unit ->
   ctx io
-(** [init ?src ?tls_own_key ()] will initialize a Unix conduit that binds to the
-    [src] interface if specified. If TLS server connections are used, then
-    [tls_server_key] must contain a valid certificate to be used to advertise a
-    TLS connection.
+(** [init ?src ?tls_own_key ?tls_authenticator ?ssl_ctx ()] will initialize a
+    Unix conduit that binds to the [src] interface if specified.
 
-    The certificate is validated using [tls_authenticator]. By default, the
-    validation is using the {{:https://github.com/mirage/ca-certs} OS trust
-    anchors}. *)
+    If TLS server connections are used, then [tls_own_key] must contain a valid
+    certificate to be used to advertise a TLS connection. In TLS mode the
+    certificate is validated using [tls_authenticator]. By default, the
+    validation is using the
+    {{:https://github.com/mirage/ca-certs} OS trust anchors}.
+
+    If SSL client connections are used, then [tls_own_key] may contain a valid
+    certificate to be used to advertise a TLS connection. If it's not configured
+    [ssl_ctx] will be used to configure OpenSSL. *)
 
 val connect : ctx:ctx -> client -> (flow * ic * oc) io
 (** [connect ~ctx client] establishes an outgoing connection via the [ctx]
@@ -198,11 +206,18 @@ val set_max_active : int -> unit
     accepted. When the limit is hit accept blocks until another server
     connection is closed. *)
 
-val endp_of_flow : flow -> Conduit.endp
-(** [endp_of_flow flow] retrieves the original {!Conduit.endp} from the
-    established [flow] *)
+type endp =
+  [ Conduit.endp
+  | `TLS_tunnel of string * ic * oc
+    (** Wrap in a TLS channel over an existing [Lwt_io.channel] connection,
+        [hostname,input_channel,output_channel] *) ]
+[@@deriving sexp]
 
-val endp_to_client : ctx:ctx -> Conduit.endp -> client io
+val endp_of_flow : flow -> endp
+(** [endp_of_flow flow] retrieves the original {!endp} from the established
+    [flow] *)
+
+val endp_to_client : ctx:ctx -> [< endp ] -> client io
 (** [endp_to_client ~ctx endp] converts an [endp] into a a concrete connection
     mechanism of type [client] *)
 

@@ -2,24 +2,34 @@ open! Import
 
 include (
 struct
-  type 'a t = 'a ref [@@deriving_inline compare, equal, sexp, sexp_grammar]
+  type 'a t = 'a ref [@@deriving_inline compare, equal, globalize, sexp, sexp_grammar]
 
   let compare : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int = compare_ref
   let equal : 'a. ('a -> 'a -> bool) -> 'a t -> 'a t -> bool = equal_ref
+
+  let globalize : 'a. (('a[@ocaml.local]) -> 'a) -> ('a t[@ocaml.local]) -> 'a t =
+    fun (type a__009_)
+        : (((a__009_[@ocaml.local]) -> a__009_) -> (a__009_ t[@ocaml.local]) -> a__009_ t) ->
+      globalize_ref
+  ;;
+
   let t_of_sexp : 'a. (Sexplib0.Sexp.t -> 'a) -> Sexplib0.Sexp.t -> 'a t = ref_of_sexp
   let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t = sexp_of_ref
 
-  let (t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t) =
+  let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
     fun _'a_sexp_grammar -> ref_sexp_grammar _'a_sexp_grammar
   ;;
 
   [@@@end]
 end :
 sig
-  type 'a t = 'a ref [@@deriving_inline compare, equal, sexp, sexp_grammar]
+  type 'a t = 'a ref [@@deriving_inline compare, equal, globalize, sexp, sexp_grammar]
 
   include Ppx_compare_lib.Comparable.S1 with type 'a t := 'a t
   include Ppx_compare_lib.Equal.S1 with type 'a t := 'a t
+
+  val globalize : (('a[@ocaml.local]) -> 'a) -> ('a t[@ocaml.local]) -> 'a t
+
   include Sexplib0.Sexpable.S1 with type 'a t := 'a t
 
   val t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t
@@ -33,9 +43,9 @@ end)
    contents : 'a } ] which would result in different (and unwanted) behavior.  *)
 type 'a t = 'a ref = { mutable contents : 'a }
 
-external create : 'a -> 'a t = "%makemutable"
-external ( ! ) : 'a t -> 'a = "%field0"
-external ( := ) : 'a t -> 'a -> unit = "%setfield0"
+external create : 'a -> ('a t[@local_opt]) = "%makemutable"
+external ( ! ) : ('a t[@local_opt]) -> 'a = "%field0"
+external ( := ) : ('a t[@local_opt]) -> 'a -> unit = "%setfield0"
 
 let swap t1 t2 =
   let tmp = !t1 in

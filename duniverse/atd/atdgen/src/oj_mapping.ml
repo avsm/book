@@ -94,7 +94,8 @@ let rec mapping_of_expr (x : type_expr) =
            Bool (loc, Bool, Bool)
        | "int" ->
            let o = Ocaml.get_ocaml_int Json an in
-           Int (loc, Int o, Int)
+           let j = Json.get_json_int an in
+           Int (loc, Int o, Int j)
        | "float" ->
            let j = Json.get_json_float an in
            Float (loc, Float, Float j)
@@ -162,8 +163,8 @@ and mapping_of_field ocaml_field_prefix = function
 let defs_of_atd_modules l ~(target : Ocaml.target)=
   (match target with
    | Json
-   | Bucklescript -> ()
-   | t -> invalid_arg "target must be json or bucklescript");
+   | Melange -> ()
+   | t -> invalid_arg "target must be json or melange");
   List.map (fun (is_rec, l) ->
     ( is_rec
     , List.map (function Atd.Ast.Type atd ->

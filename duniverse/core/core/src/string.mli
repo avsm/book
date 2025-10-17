@@ -38,11 +38,11 @@ val nget : t -> int -> char
 
 (** [take_while s ~f] returns the longest prefix of [s] satisfying [for_all prefix ~f]
     (See [lstrip] to drop such a prefix) *)
-val take_while : t -> f:(char -> bool) -> t
+val take_while : t -> f:((char -> bool)[@local]) -> t
 
 (** [rtake_while s ~f] returns the longest suffix of [s] satisfying [for_all suffix ~f]
     (See [rstrip] to drop such a suffix) *)
-val rtake_while : t -> f:(char -> bool) -> t
+val rtake_while : t -> f:((char -> bool)[@local]) -> t
 
 include Hexdump.S with type t := t
 include Identifiable.S with type t := t and type comparator_witness := comparator_witness
@@ -72,11 +72,11 @@ module Stable : sig
     include Base.Stringable.S with type t := t
 
     include
-      Stable_comparable.V1
+      Stable_comparable.With_stable_witness.V1
       with type t := t
       with type comparator_witness = comparator_witness
 
-    include Hashable.Stable.V1.S with type key := t
+    include Hashable.Stable.V1.With_stable_witness.S with type key := t
   end
 end
 

@@ -1,6 +1,6 @@
 let library_path = []
 
-let roots : string option Install.Section.Paths.Roots.t =
+let roots : string option Install.Roots.t =
   { lib_root = None
   ; man = None
   ; doc_root = None
@@ -10,3 +10,10 @@ let roots : string option Install.Section.Paths.Roots.t =
   ; sbin = None
   ; libexec_root = None
   }
+
+let prefix : string option = None
+let toolchains = `Enabled
+let pkg_build_progress = `Disabled
+let lock_dev_tool = `Disabled
+let bin_dev_tools = `Disabled
+let portable_lock_dir = `Disabled

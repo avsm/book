@@ -42,6 +42,8 @@ module Ast_io : sig
   val write : out_channel -> t -> add_ppx_context:bool -> unit
 
   module Read_bin : sig
+    (** A small module to help read [bin-annots] generated files. *)
+
     type ast = Intf of signature | Impl of structure
     type t
 
@@ -58,3 +60,7 @@ module System : sig
     output:string ->
     (unit, string * Ast_io.input_version) result
 end
+
+val print_as_compiler_source : Stdlib.Format.formatter -> Intf_or_impl.t -> unit
+(** Migrates the given AST to the compiler version and print it as source code
+    using Pprintast. *)

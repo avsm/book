@@ -1,4 +1,19 @@
+v0.11.0 2025-07-25 Zagreb
+-------------------------
 
+* Add `Fmt.{cardinal,ordinal}` to format english 
+  plurals. Thanks to Brian Ward for suggesting (#64).
+* Export `fmt` from `fmt.tty` and `fmt.cli` libraries.
+
+v0.10.0 2025-03-10 La Forclaz (VS)
+----------------------------------
+
+* Handle `cmdliner` deprecations.
+* Install each library in its own directory.
+* Add `Fmt.if'`, thanks to Rizo for the suggestion and patch.
+
+v0.9.0 2021-10-22 Zagreb
+------------------------
 
 * Add alert messages to deprecation annotations (#47).
 * The solution using ephemerons introduced in v0.8.7 for attaching

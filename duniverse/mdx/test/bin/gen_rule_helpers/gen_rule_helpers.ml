@@ -37,9 +37,10 @@ let get_files dir =
   read_dir dir |> List.filter is_file
 
 let cwd_options_file = "test-case.opts"
-let cwd_test_file_md = "test-case.md"
-let cwd_test_file_t = "test-case.t"
-let cwd_test_file_mli = "test-case.mli"
+
+let cwd_test_files =
+  [ "test-case.md"; "test-case.t"; "test-case.mli"; "test-case.mld" ]
+
 let cwd_enabled_if_file = "test-case.enabled-if"
 
 type dir = {
@@ -52,20 +53,14 @@ type dir = {
 }
 
 let test_file ~dir_name files =
-  let is_test_file f =
-    f = cwd_test_file_md || f = cwd_test_file_t || f = cwd_test_file_mli
-  in
+  let is_test_file f = List.mem f cwd_test_files in
   match List.filter is_test_file files with
   | [ test_file ] -> test_file
-  | [] ->
-      Printf.eprintf "No test file for %s\n" dir_name;
-      Printf.eprintf "There should be one of %s, %s, or %s\n" cwd_test_file_md
-        cwd_test_file_t cwd_test_file_mli;
-      exit 1
-  | _ ->
-      Printf.eprintf "More than one test file for %s\n" dir_name;
-      Printf.eprintf "There should be only one of %s, %s, or %s\n"
-        cwd_test_file_md cwd_test_file_t cwd_test_file_mli;
+  | found_files ->
+      Format.eprintf "Invalid number of test file for %s (found %a)\n" dir_name
+        pp_string_list found_files;
+      Format.eprintf "There should be exactly one of [%a]\n" pp_string_list
+        cwd_test_files;
       exit 1
 
 let expected_file ~dir_name ~test_file files =
@@ -144,16 +139,19 @@ let run generator =
   let cmds =
     Term.
       [
-        (const (rule_gen generator `Test_expect) $ const (), info "test_expect");
-        ( const (rule_gen generator `Test_failure) $ const (),
-          info "test_failure" );
+        (let term = const (rule_gen generator `Test_expect) $ const () in
+         let info = Cmd.info "test_expect" in
+         Cmd.v info term);
+        (let term = const (rule_gen generator `Test_failure) $ const () in
+         let info = Cmd.info "test_failure" in
+         Cmd.v info term);
       ]
   in
-  let default =
+  let info =
     let doc = "Generate dune files for the binary tests." in
-    let exits = Term.default_exits in
     let man = [] in
-    Term.
-      (ret (const (`Help (`Auto, None))), info "gen_dune_rules" ~doc ~exits ~man)
+    Cmd.info "gen_dune_rules" ~doc ~man
   in
-  Term.exit (Term.eval_choice default cmds)
+  let default = Term.(ret (const (`Help (`Auto, None)))) in
+  let group = Cmd.group ~default info cmds in
+  Stdlib.exit @@ Cmd.eval group

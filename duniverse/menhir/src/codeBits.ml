@@ -97,6 +97,11 @@ let tlexbuf =
 let tobj =
   tname "Obj.t"
 
+(* The option type. *)
+
+let toption ty =
+  TypApp ("option", [ty])
+
 (* Building a type variable. *)
 
 let tvar x : typ =
@@ -316,19 +321,22 @@ let tvprefix name =
 (* Converting an interface to a structure. Only exception and type definitions
    go through. *)
 
-let interface_item_to_structure_item = function
+let rec interface_item_to_structure_item = function
   | IIExcDecls defs ->
       [ SIExcDefs defs ]
   | IITypeDecls defs ->
       [ SITypeDefs defs ]
+  | IIModule (name, MTSigEnd intf) ->
+      [ SIModuleDef (name, MStruct (interface_to_structure intf)) ]
   | IIFunctor (_, _)
   | IIValDecls _
   | IIInclude _
   | IIModule (_, _)
-  | IIComment _ ->
+  | IIComment _
+  | IIClass _ ->
       []
 
-let interface_to_structure i =
+and interface_to_structure i =
   List.flatten (List.map interface_item_to_structure_item i)
 
 (* Constructing a named module type together with a list of "with type"

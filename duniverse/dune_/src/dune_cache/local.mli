@@ -15,18 +15,17 @@
 (* In case we do run into the problem of corrupted cache: we could actually
    store the mtime in the metadata and complain if it's not what we expected. *)
 
-open Stdune
-module Restore_result := Dune_cache_storage.Restore_result
+open Import
 
 module Store_artifacts_result : sig
   (* Outcomes are ordered in the order of severity. *)
   type t =
-    | Stored of (Path.Build.t * Digest.t) list
-    | Already_present of (Path.Build.t * Digest.t) list
+    | Stored of Digest.t Targets.Produced.t
+    | Already_present of Digest.t Targets.Produced.t
     | Error of exn
-        (** [Error _] can happen due to genuine problems (cannot parse internal
-            cache files) or harmless ones (race with a concurrent change to the
-            cache). *)
+    (** [Error _] can happen due to genuine problems (cannot parse internal
+        cache files) or harmless ones (race with a concurrent change to the
+        cache). *)
     | Will_not_store_due_to_non_determinism of Sexp.t
 end
 
@@ -48,11 +47,11 @@ end
 
     The [compute_digest] function is passed explicitly because the caller might
     want to memoize and/or throttle file digest computations. *)
-val store_artifacts :
-     mode:Dune_cache_storage.Mode.t
+val store_artifacts
+  :  mode:Dune_cache_storage.Mode.t
   -> rule_digest:Digest.t
-  -> compute_digest:(executable:bool -> Path.t -> Digest.t Or_exn.t Fiber.t)
-  -> Target.t list
+  -> compute_digest:(executable:bool -> Path.t -> Digest.t Fiber.t)
+  -> Target.t Targets.Produced.t
   -> Store_artifacts_result.t Fiber.t
 
 (** Restore targets produced by a rule with a given digest. If successful, this
@@ -60,8 +59,8 @@ val store_artifacts :
     and will also return their paths and digests. The caller is responsible for
     removing stale versions of the targets, if any, before calling this
     function. *)
-val restore_artifacts :
-     mode:Dune_cache_storage.Mode.t
+val restore_artifacts
+  :  mode:Dune_cache_storage.Mode.t
   -> rule_digest:Digest.t
   -> target_dir:Path.Build.t
-  -> (Path.Build.t * Digest.t) list Restore_result.t
+  -> Digest.t Targets.Produced.t Restore_result.t

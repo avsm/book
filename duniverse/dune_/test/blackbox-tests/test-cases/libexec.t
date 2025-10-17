@@ -162,7 +162,8 @@ Testsuite for the %{libexec...} and %{libexec-private...} variable.
   > EOF
 
   $ touch external/external_library.opam
-  $ ( cd external && ../sdune build @install && ../sdune install --prefix install | dune_cmd sanitize)
+  $ ( cd external && ../sdune build @install \
+  > && ../sdune install --prefix install --display short | dune_cmd sanitize)
   Installing install/lib/external_library/META
   Installing install/lib/external_library/dune-package
   Installing install/lib/external_library/extlib.a
@@ -202,6 +203,7 @@ Testsuite for the %{libexec...} and %{libexec-private...} variable.
   Error: The variable "libexec-private" can only refer to libraries within the
   same project. The current project's name is "test-lib", but the reference is
   to an external library.
+  Leaving directory 'src'
   [1]
 
   $ export OCAMLPATH=$PWD/external/install/lib; ./sdune build @find-a-from-target --root=src --workspace=./dune-workspace
@@ -212,6 +214,7 @@ Testsuite for the %{libexec...} and %{libexec-private...} variable.
   Error: The variable "libexec-private" can only refer to libraries within the
   same project. The current project's name is "test-lib", but the reference is
   to an external library.
+  Leaving directory 'src'
   [1]
 
 ----------------------------------------------------------------------------------

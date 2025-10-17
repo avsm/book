@@ -6,6 +6,87 @@ let%expect_test ("hash coherence" [@tags "64-bits-only"]) =
   [%expect {| |}]
 ;;
 
+let%test_module "concat" =
+  (module struct
+    let test ?sep list =
+      let from_list = concat ?sep list in
+      let from_array = concat_array ?sep (Array.of_list list) in
+      require_equal [%here] (module String) from_list from_array;
+      print_s [%sexp (from_list : string)]
+    ;;
+
+    let%expect_test "empty" =
+      test [] ~sep:":";
+      [%expect {| "" |}]
+    ;;
+
+    let%expect_test "singleton" =
+      test [ "a" ];
+      [%expect {| a |}]
+    ;;
+
+    let%expect_test "empty separator" =
+      test [ "a"; "b" ];
+      [%expect {| ab |}]
+    ;;
+
+    let%expect_test "non-empty separator" =
+      test [ "a"; "b" ] ~sep:":";
+      [%expect {| a:b |}]
+    ;;
+  end)
+;;
+
+let%expect_test "to_list and to_list_rev" =
+  let test s =
+    let list = to_list s in
+    require_equal
+      [%here]
+      (module struct
+        type t = char list [@@deriving equal, sexp_of]
+      end)
+      (to_list_rev s)
+      (List.rev list);
+    print_s [%sexp (list : char list)]
+  in
+  test "";
+  [%expect {| () |}];
+  test "bladderwrack";
+  [%expect {| (b l a d d e r w r a c k) |}]
+;;
+
+let%expect_test "sub/unsafe_sub" =
+  let test ~pos ~len =
+    let string = "0123456789" in
+    match Or_error.try_with (fun () -> sub string ~pos ~len) with
+    | Ok safe_substring ->
+      let unsafe_substring = unsafe_sub string ~pos ~len in
+      require_equal [%here] (module String) safe_substring unsafe_substring;
+      print_s [%sexp (safe_substring : t)]
+    | Error e -> print_s [%sexp (e : Error.t)]
+  in
+  test ~pos:0 ~len:0;
+  [%expect {| "" |}];
+  test ~pos:0 ~len:5;
+  [%expect {| 01234 |}];
+  test ~pos:0 ~len:10;
+  [%expect {| 0123456789 |}];
+  test ~pos:0 ~len:11;
+  [%expect {| (Invalid_argument "pos + len past end: 0 + 11 > 10") |}];
+  test ~pos:1 ~len:5;
+  [%expect {| 12345 |}];
+  test ~pos:1 ~len:10;
+  [%expect {| (Invalid_argument "pos + len past end: 1 + 10 > 10") |}];
+  test ~pos:9 ~len:1;
+  [%expect {| 9 |}];
+  test ~pos:9 ~len:2;
+  [%expect {| (Invalid_argument "pos + len past end: 9 + 2 > 10") |}];
+  test ~pos:10 ~len:0;
+  [%expect {| "" |}];
+  test ~pos:10 ~len:1;
+  [%expect {| (Invalid_argument "pos + len past end: 10 + 1 > 10") |}]
+;;
+
 let%test_module "Caseless Suffix/Prefix" =
   (module struct
     let%test _ = Caseless.is_suffix "OCaml" ~suffix:"AmL"
@@ -224,7 +305,7 @@ let%test_module "Search_pattern" =
           then ""
           else (
             let b = x (k - 1) in
-            b ^ make 1 (Caml.Char.unsafe_chr (65 + k)) ^ b)
+            b ^ make 1 (Stdlib.Char.unsafe_chr (65 + k)) ^ b)
         ;;
 
         let%expect_test _ =
@@ -234,9 +315,7 @@ let%test_module "Search_pattern" =
 
         let%expect_test _ =
           List.iter [%all: bool] ~f:(fun case_sensitive ->
-            cmp_both
-              ~case_sensitive
-              (x 5 ^ "E" ^ x 4 ^ "D" ^ x 3 ^ "B" ^ x 2 ^ "C" ^ x 3))
+            cmp_both ~case_sensitive (x 5 ^ "E" ^ x 4 ^ "D" ^ x 3 ^ "B" ^ x 2 ^ "C" ^ x 3))
         ;;
 
         let%test_unit _ =
@@ -262,7 +341,6 @@ let%test_module "Search_pattern" =
     ;;
 
     let ( = ) = [%compare.equal: int option]
-
     let%test _ = index (create "") ~in_:"abababac" = Some 0
     let%test _ = index ~pos:(-1) (create "") ~in_:"abababac" = None
     let%test _ = index ~pos:1 (create "") ~in_:"abababac" = Some 1
@@ -281,9 +359,7 @@ let%test_module "Search_pattern" =
     let%test _ = index ~pos:2 (create "a") ~in_:"abc" = None
     let%test _ = index ~pos:2 (create "c") ~in_:"abc" = Some 2
     let%test _ = index ~pos:3 (create "c") ~in_:"abc" = None
-
     let ( = ) = [%compare.equal: bool]
-
     let%test _ = matches (create "") "abababac" = true
     let%test _ = matches (create "abababaca") "abababac" = false
     let%test _ = matches (create "abababac") "abababac" = true
@@ -292,9 +368,7 @@ let%test_module "Search_pattern" =
     let%test _ = matches (create "baca") "abababaca" = true
     let%test _ = matches (create "a") "abc" = true
     let%test _ = matches (create "c") "abc" = true
-
     let ( = ) = [%compare.equal: int list]
-
     let%test _ = index_all (create "") ~may_overlap:false ~in_:"abcd" = [ 0; 1; 2; 3; 4 ]
     let%test _ = index_all (create "") ~may_overlap:true ~in_:"abcd" = [ 0; 1; 2; 3; 4 ]
     let%test _ = index_all (create "abab") ~may_overlap:false ~in_:"abababab" = [ 0; 4 ]
@@ -314,7 +388,6 @@ let%test_module "Search_pattern" =
     ;;
 
     let ( = ) = [%compare.equal: string]
-
     let%test _ = replace_first (create "abab") ~in_:"abababab" ~with_:"" = "abab"
     let%test _ = replace_first (create "abab") ~in_:"abacabab" ~with_:"" = "abac"
     let%test _ = replace_first (create "abab") ~in_:"ababacab" ~with_:"A" = "Aacab"
@@ -550,16 +623,140 @@ let%test_unit _ =
   [%test_result: int option] (rfindi "bob" ~f:(fun _ -> Char.( = ) 'x')) ~expect:None
 ;;
 
-let%test_unit _ = [%test_result: string] (strip " foo bar \n") ~expect:"foo bar"
+let%test_module "strip" =
+  (module struct
+    let test ?drop s = print_s [%sexp (strip ?drop s : string)]
 
-let%test_unit _ =
-  [%test_result: string] (strip ~drop:(Char.( = ) '"') "\" foo bar ") ~expect:" foo bar "
+    let%expect_test "whitespace on both ends" =
+      test " foo bar \n";
+      [%expect {| "foo bar" |}]
+    ;;
+
+    let%expect_test "custom drop, present on end" =
+      test ~drop:(Char.( = ) '"') "\" foo bar ";
+      [%expect {| " foo bar " |}]
+    ;;
+
+    let%expect_test "custom drop, absent from end" =
+      test ~drop:(Char.( = ) '"') " \" foo bar ";
+      [%expect {| " \" foo bar " |}]
+    ;;
+
+    let%expect_test "all whitespace" =
+      test "\n\t \n";
+      [%expect {| "" |}]
+    ;;
+
+    let%expect_test "no whitespace on ends" =
+      test "as \t\ndf";
+      [%expect {| "as \t\ndf" |}]
+    ;;
+
+    let%expect_test "just one side" =
+      test " a";
+      [%expect {| a |}];
+      test "a ";
+      [%expect {| a |}]
+    ;;
+  end)
 ;;
 
-let%test_unit _ =
-  [%test_result: string]
-    (strip ~drop:(Char.( = ) '"') " \" foo bar ")
-    ~expect:" \" foo bar "
+let%test_module "lstrip" =
+  (module struct
+    let test ?drop s = print_s [%sexp (lstrip ?drop s : string)]
+
+    let%expect_test "whitespace on left" =
+      test " \t\r\n123  \t\n";
+      [%expect {| "123  \t\n" |}]
+    ;;
+
+    let%expect_test "all whitespace" =
+      test " \t \n\n\r ";
+      [%expect {| "" |}]
+    ;;
+
+    let%expect_test "no whitespace on left" =
+      test "foo Bar \n ";
+      [%expect {| "foo Bar \n " |}]
+    ;;
+  end)
+;;
+
+let%test_module "rstrip" =
+  (module struct
+    let test ?drop s = print_s [%sexp (rstrip ?drop s : string)]
+
+    let%expect_test "whitespace on right" =
+      test " \t\r\n123  \t\n\r";
+      [%expect {| " \t\r\n123" |}]
+    ;;
+
+    let%expect_test "all whitespace" =
+      test " \t \n\n\r ";
+      [%expect {| "" |}]
+    ;;
+
+    let%expect_test "no whitespace on right" =
+      test " \n foo Bar";
+      [%expect {| " \n foo Bar" |}]
+    ;;
+  end)
+;;
+
+let%test_module "map" =
+  (module struct
+    let%expect_test "empty" = require_equal [%here] (module String) (map "" ~f:Fn.id) ""
+
+    let%expect_test "non-empty" =
+      let s = "faboo" in
+      require_equal
+        [%here]
+        (module String)
+        (map s ~f:(function
+           | 'a' -> 'b'
+           | 'b' -> 'a'
+           | x -> x))
+        "fbaoo"
+    ;;
+  end)
+;;
+
+let%expect_test "split" =
+  let test s = print_s [%sexp (split s ~on:'c' : string list)] in
+  test "";
+  [%expect {| ("") |}];
+  test "c";
+  [%expect {| ("" "") |}];
+  test "fooc";
+  [%expect {| (foo "") |}];
+  test "cfoo";
+  [%expect {| ("" foo) |}];
+  test "cfooc";
+  [%expect {| ("" foo "") |}];
+  test "bocci ball";
+  [%expect {| (bo "" "i ball") |}]
+;;
+
+let%expect_test "split_on_chars" =
+  let test s ~on = print_s [%sexp (split_on_chars s ~on : string list)] in
+  test "" ~on:[ 'c' ];
+  [%expect {| ("") |}];
+  test "c" ~on:[ 'c' ];
+  [%expect {| ("" "") |}];
+  test "chr" ~on:[ 'h'; 'c'; 'r' ];
+  [%expect {| ("" "" "" "") |}];
+  test "fooc" ~on:[ 'c' ];
+  [%expect {| (foo "") |}];
+  test "fooc" ~on:[ 'c'; 'o' ];
+  [%expect {| (f "" "" "") |}];
+  test "cfoo" ~on:[ 'c' ];
+  [%expect {| ("" foo) |}];
+  test "cfoo" ~on:[ 'c'; 'f' ];
+  [%expect {| ("" "" oo) |}];
+  test "bocci ball" ~on:[ 'c' ];
+  [%expect {| (bo "" "i ball") |}];
+  test "bocci ball" ~on:[ 'c'; ' '; 'i' ];
+  [%expect {| (bo "" "" "" ball) |}]
 ;;
 
 let%test_unit _ =
@@ -595,6 +792,9 @@ let%test_unit _ =
 ;;
 
 let%test_unit _ =
+  [%test_result: char list]
+    (fold "hello" ~init:[] ~f:(fun acc ch -> ch :: acc))
+    ~expect:(List.rev [ 'h'; 'e'; 'l'; 'l'; 'o' ]);
   [%test_result: (int * char) list]
     (foldi "hello" ~init:[] ~f:(fun i acc ch -> (i, ch) :: acc))
     ~expect:(List.rev [ 0, 'h'; 1, 'e'; 2, 'l'; 3, 'l'; 4, 'o' ])
@@ -638,7 +838,7 @@ let%test_module "Hash" =
     let%test_unit _ =
       List.iter
         ~f:(fun string ->
-          assert (Int.( = ) (hash string) (Caml.Hashtbl.hash string));
+          assert (Int.( = ) (hash string) (Stdlib.Hashtbl.hash string));
           (* with 31-bit integers, the hash computed by ppx_hash overflows so it doesn't match
              polymorphic hash exactly. *)
           if Int.( > ) Int.num_bits 31
@@ -695,24 +895,198 @@ let%expect_test "is_substring_at" =
       "String.is_substring_at: invalid index -1 for string of length 26")) |}]
 ;;
 
-let%expect_test "chopping prefixes and suffixes" =
+let%expect_test "prefixes and suffixes" =
+  let s = "0123456789" in
+  require_equal [%here] (module String) (String.prefix s 0) "";
+  require_equal [%here] (module String) (String.prefix s 1) "0";
+  require_equal [%here] (module String) (String.prefix s 2) "01";
+  require_equal [%here] (module String) (String.prefix s 10) s;
+  require_equal [%here] (module String) (String.prefix s 20) s;
+  require_does_raise [%here] (fun () -> String.prefix s (-1));
+  [%expect {| (Invalid_argument "prefix expecting nonnegative argument") |}];
+  require_equal [%here] (module String) (String.suffix s 0) "";
+  require_equal [%here] (module String) (String.suffix s 1) "9";
+  require_equal [%here] (module String) (String.suffix s 2) "89";
+  require_equal [%here] (module String) (String.suffix s 10) s;
+  require_equal [%here] (module String) (String.suffix s 20) s;
+  require_does_raise [%here] (fun () -> String.suffix s (-1));
+  [%expect {| (Invalid_argument "suffix expecting nonnegative argument") |}]
+;;
+
+let%expect_test "drop prefixes and suffixes" =
+  let s = "0123456789" in
+  require_equal [%here] (module String) (String.drop_prefix s 0) s;
+  require_equal [%here] (module String) (String.drop_prefix s 1) "123456789";
+  require_equal [%here] (module String) (String.drop_prefix s 2) "23456789";
+  require_equal [%here] (module String) (String.drop_prefix s 10) "";
+  require_equal [%here] (module String) (String.drop_prefix s 20) "";
+  require_does_raise [%here] (fun () -> String.drop_prefix s (-1));
+  [%expect {| (Invalid_argument "drop_prefix expecting nonnegative argument") |}];
+  require_equal [%here] (module String) (String.drop_suffix s 0) s;
+  require_equal [%here] (module String) (String.drop_suffix s 1) "012345678";
+  require_equal [%here] (module String) (String.drop_suffix s 2) "01234567";
+  require_equal [%here] (module String) (String.drop_suffix s 10) "";
+  require_equal [%here] (module String) (String.drop_suffix s 20) "";
+  require_does_raise [%here] (fun () -> String.drop_suffix s (-1));
+  [%expect {| (Invalid_argument "drop_suffix expecting nonnegative argument") |}]
+;;
+
+let%expect_test "testing prefixes and suffixes" =
+  let test outer inner =
+    print_s
+      [%message
+        ""
+          ~is_prefix:(is_prefix outer ~prefix:inner : bool)
+          ~is_suffix:(is_suffix outer ~suffix:inner : bool)]
+  in
+  test "" "a";
+  [%expect {|
+    ((is_prefix false)
+     (is_suffix false)) |}];
+  test "" "";
+  [%expect {|
+    ((is_prefix true)
+     (is_suffix true)) |}];
+  test "Foo" "";
+  [%expect {|
+    ((is_prefix true)
+     (is_suffix true)) |}];
+  test "H" "H";
+  [%expect {|
+    ((is_prefix true)
+     (is_suffix true)) |}];
+  test "Hello" "He";
+  [%expect {|
+    ((is_prefix true)
+     (is_suffix false)) |}];
+  test "Hello" "lo";
+  [%expect {|
+    ((is_prefix false)
+     (is_suffix true)) |}];
+  test "HelloFoo" "lo";
+  [%expect {|
+    ((is_prefix false)
+     (is_suffix false)) |}]
+;;
+
+let%expect_test "chop_prefix" =
   let s = "__x__" in
-  print_s [%sexp (String.chop_suffix s ~suffix:"__" : string option)];
-  [%expect {| (__x) |}];
-  print_s [%sexp (String.chop_prefix s ~prefix:"__" : string option)];
-  [%expect {| (x__) |}];
-  print_s [%sexp (String.chop_suffix s ~suffix:"==" : string option)];
-  [%expect {| () |}];
-  print_s [%sexp (String.chop_prefix s ~prefix:"==" : string option)];
-  [%expect {| () |}];
-  print_endline (String.chop_suffix_if_exists s ~suffix:"__");
-  [%expect {| __x |}];
-  print_endline (String.chop_prefix_if_exists s ~prefix:"__");
-  [%expect {| x__ |}];
-  print_endline (String.chop_suffix_if_exists s ~suffix:"==");
-  [%expect {| __x__ |}];
-  print_endline (String.chop_prefix_if_exists s ~prefix:"==");
-  [%expect {| __x__ |}]
+  let test_prefix ~prefix =
+    let result = Or_error.try_with (fun () -> chop_prefix_exn s ~prefix) in
+    require_equal
+      [%here]
+      (module struct
+        type t = string option [@@deriving equal, sexp_of]
+      end)
+      (chop_prefix s ~prefix)
+      (Or_error.ok result);
+    require_equal
+      [%here]
+      (module String)
+      (chop_prefix_if_exists s ~prefix)
+      (result |> Or_error.ok |> Option.value ~default:s);
+    print_s [%sexp (result : string Or_error.t)]
+  in
+  test_prefix ~prefix:"";
+  [%expect {| (Ok __x__) |}];
+  test_prefix ~prefix:"__";
+  [%expect {| (Ok x__) |}];
+  test_prefix ~prefix:"==";
+  [%expect {| (Error (Invalid_argument "String.chop_prefix_exn \"__x__\" \"==\"")) |}]
+;;
+
+let%expect_test "chop_suffix" =
+  let s = "__x__" in
+  let test_suffix ~suffix =
+    let result = Or_error.try_with (fun () -> chop_suffix_exn s ~suffix) in
+    require_equal
+      [%here]
+      (module struct
+        type t = string option [@@deriving equal, sexp_of]
+      end)
+      (chop_suffix s ~suffix)
+      (Or_error.ok result);
+    require_equal
+      [%here]
+      (module String)
+      (chop_suffix_if_exists s ~suffix)
+      (result |> Or_error.ok |> Option.value ~default:s);
+    print_s [%sexp (result : string Or_error.t)]
+  in
+  test_suffix ~suffix:"";
+  [%expect {| (Ok __x__) |}];
+  test_suffix ~suffix:"__";
+  [%expect {| (Ok __x) |}];
+  test_suffix ~suffix:"==";
+  [%expect {| (Error (Invalid_argument "String.chop_suffix_exn \"__x__\" \"==\"")) |}]
+;;
+
+let%expect_test "String.concat_lines" =
+  let concat_lines_reference lines ~crlf =
+    String.concat (List.map lines ~f:(fun line -> line ^ if crlf then "\r\n" else "\n"))
+  in
+  quickcheck_m
+    [%here]
+    (module struct
+      type t = string list * bool [@@deriving quickcheck, sexp_of]
+    end)
+    ~f:(fun (lines, crlf) ->
+      require_equal
+        [%here]
+        (module String)
+        (String.concat_lines lines ~crlf)
+        (concat_lines_reference lines ~crlf));
+  [%expect {| |}]
+;;
+
+let%expect_test "String.concat_lines examples" =
+  let test ?crlf lines = print_s [%sexp (String.concat_lines ?crlf lines : string)] in
+  test [ "foo"; "bar" ];
+  [%expect {| "foo\nbar\n" |}];
+  test [ "foo\n"; "b\nar\n"; "x" ];
+  [%expect {| "foo\n\nb\nar\n\nx\n" |}];
+  test [];
+  [%expect {| "" |}];
+  test ~crlf:true [ "foo"; "bar" ];
+  [%expect {| "foo\r\nbar\r\n" |}]
+;;
+
+let%expect_test "pad_left and pad_right" =
+  let test ?char t ~len =
+    let padded_left = pad_left ?char t ~len in
+    require [%here] (Int.( >= ) (length padded_left) len);
+    require [%here] (String.is_suffix padded_left ~suffix:t);
+    let padded_right = pad_right ?char t ~len in
+    require [%here] (Int.( >= ) (length padded_right) len);
+    require [%here] (String.is_prefix padded_right ~prefix:t);
+    if Int.( >= ) (length t) len
+    then (
+      require [%here] (phys_equal t padded_left);
+      require [%here] (phys_equal t padded_right));
+    print_s [%message (t : string) (padded_left : string) (padded_right : string)]
+  in
+  test "" ~len:2;
+  [%expect
+    {|
+    ((t            "")
+     (padded_left  "  ")
+     (padded_right "  ")) |}];
+  test "foo" ~len:2;
+  [%expect {|
+    ((t            foo)
+     (padded_left  foo)
+     (padded_right foo)) |}];
+  test "foo" ~len:3;
+  [%expect {|
+    ((t            foo)
+     (padded_left  foo)
+     (padded_right foo)) |}];
+  test "foo" ~len:10 ~char:'_';
+  [%expect
+    {|
+    ((t            foo)
+     (padded_left  _______foo)
+     (padded_right foo_______)) |}]
 ;;
 
 let%test_module "functions that raise Not_found_s" =
@@ -820,7 +1194,18 @@ let%test_module "functions that raise Not_found_s" =
     ;;
 
     let%expect_test "lsplit2_exn" =
-      let test s = show (fun () -> lsplit2_exn s ~on:':') [%sexp_of: string * string] in
+      let test s =
+        let option_result = lsplit2 s ~on:':' in
+        let exn_result = Or_error.try_with (fun () -> lsplit2_exn s ~on:':') in
+        require_equal
+          [%here]
+          (module struct
+            type t = (string * string) option [@@deriving equal, sexp_of]
+          end)
+          option_result
+          (Or_error.ok exn_result);
+        print_s [%sexp (exn_result : (string * string) Or_error.t)]
+      in
       test "";
       [%expect {| (Error (Not_found_s "String.lsplit2_exn: not found")) |}];
       test "abc";
@@ -834,7 +1219,18 @@ let%test_module "functions that raise Not_found_s" =
     ;;
 
     let%expect_test "rsplit2_exn" =
-      let test s = show (fun () -> rsplit2_exn s ~on:':') [%sexp_of: string * string] in
+      let test s =
+        let option_result = rsplit2 s ~on:':' in
+        let exn_result = Or_error.try_with (fun () -> rsplit2_exn s ~on:':') in
+        require_equal
+          [%here]
+          (module struct
+            type t = (string * string) option [@@deriving equal, sexp_of]
+          end)
+          option_result
+          (Or_error.ok exn_result);
+        print_s [%sexp (exn_result : (string * string) Or_error.t)]
+      in
       test "";
       [%expect {| (Error (Not_found_s "String.rsplit2_exn: not found")) |}];
       test "abc";
@@ -977,7 +1373,6 @@ let%test_module "Escaping" =
     let%test_module "escape" =
       (module struct
         let escape = unstage (escape ~escape_char:'_' ~escapeworthy:[ '_'; '%'; '^' ])
-
         let%test _ = escape "foo" = "foo"
         let%test _ = escape "_" = "__"
         let%test _ = escape "foo%bar" = "foo_%bar"
@@ -988,7 +1383,6 @@ let%test_module "Escaping" =
     let%test_module "unescape" =
       (module struct
         let unescape = unstage (unescape ~escape_char:'_')
-
         let%test _ = unescape "foo" = "foo"
         let%test _ = unescape "__" = "_"
         let%test _ = unescape "foo_%bar" = "foo%bar"
@@ -999,10 +1393,10 @@ let%test_module "Escaping" =
     let%test_module "is_char_escaping" =
       (module struct
         let is = is_char_escaping ~escape_char:'_'
-
         let%test_unit _ = [%test_result: bool] (is "___" 0) ~expect:true
         let%test_unit _ = [%test_result: bool] (is "___" 1) ~expect:false
         let%test_unit _ = [%test_result: bool] (is "___" 2) ~expect:true
+
         (* considered escaping, though there's nothing to escape *)
         let%test_unit _ = [%test_result: bool] (is "a_b__c" 0) ~expect:false
         let%test_unit _ = [%test_result: bool] (is "a_b__c" 1) ~expect:true
@@ -1016,7 +1410,6 @@ let%test_module "Escaping" =
     let%test_module "is_char_escaped" =
       (module struct
         let is = is_char_escaped ~escape_char:'_'
-
         let%test_unit _ = [%test_result: bool] (is "___" 2) ~expect:false
         let%test_unit _ = [%test_result: bool] (is "x" 0) ~expect:false
         let%test_unit _ = [%test_result: bool] (is "_x" 1) ~expect:true
@@ -1028,7 +1421,6 @@ let%test_module "Escaping" =
     let%test_module "is_char_literal" =
       (module struct
         let is_char_literal = is_char_literal ~escape_char:'_'
-
         let%test_unit _ = [%test_result: bool] (is_char_literal "123456" 4) ~expect:true
         let%test_unit _ = [%test_result: bool] (is_char_literal "12345_6" 6) ~expect:false
         let%test_unit _ = [%test_result: bool] (is_char_literal "12345_6" 5) ~expect:false
@@ -1056,7 +1448,6 @@ let%test_module "Escaping" =
     let%test_module "index_from" =
       (module struct
         let f = index_from ~escape_char:'_'
-
         let%test_unit _ = [%test_result: int option] (f "__" 0 '_') ~expect:None
         let%test_unit _ = [%test_result: int option] (f "_.." 0 '.') ~expect:(Some 2)
 
@@ -1077,7 +1468,6 @@ let%test_module "Escaping" =
     let%test_module "rindex" =
       (module struct
         let f = rindex_from ~escape_char:'_'
-
         let%test_unit _ = [%test_result: int option] (f "__" 0 '_') ~expect:None
 
         let%test_unit _ =

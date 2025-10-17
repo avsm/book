@@ -3,7 +3,9 @@
 
 open! Import
 
-type t = string [@@deriving_inline sexp, sexp_grammar]
+type t = string [@@deriving_inline globalize, sexp, sexp_grammar]
+
+val globalize : (t[@ocaml.local]) -> t
 
 include Sexplib0.Sexpable.S with type t := t
 
@@ -12,30 +14,32 @@ val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
 [@@@end]
 
 val sub : (t, t) Blit.sub
+
+(** [sub] with no bounds checking, and always returns a new copy *)
+val unsafe_sub : (t[@local]) -> pos:int -> len:int -> t
+
 val subo : (t, t) Blit.subo
 
-include Indexed_container.S0 with type t := t with type elt = char
+include Indexed_container.S0_with_creators with type t := t with type elt = char
 include Identifiable.S with type t := t
 include Invariant.S with type t := t
 
 (** Maximum length of a string. *)
 val max_length : int
 
-external length : t -> int = "%string_length"
-external get : t -> int -> char = "%string_safe_get"
+val mem : (t[@local]) -> char -> bool
+external length : (t[@local_opt]) -> int = "%string_length"
+external get : (t[@local_opt]) -> (int[@local_opt]) -> char = "%string_safe_get"
 
 (** [unsafe_get t i] is like [get t i] but does not perform bounds checking. The caller
     must ensure that it is a memory-safe operation. *)
-external unsafe_get : string -> int -> char = "%string_unsafe_get"
+external unsafe_get
+  :  (string[@local_opt])
+  -> (int[@local_opt])
+  -> char
+  = "%string_unsafe_get"
 
 val make : int -> char -> t
-
-(** Assuming you haven't passed -unsafe-string to the compiler, strings are immutable, so
-    there'd be no motivation to make a copy. *)
-val copy : t -> t
-[@@deprecated "[since 2018-03] Use [Bytes.copy] instead"]
-
-val init : int -> f:(int -> char) -> t
 
 (** String append. Also available unqualified, but re-exported here for documentation
     purposes.
@@ -104,7 +108,7 @@ end
     [Some 2].
 
     The [_exn] versions return the actual index (instead of an option) when [char] is
-    found, and raise [Caml.Not_found] or [Not_found_s] otherwise.
+    found, and raise [Stdlib.Not_found] or [Not_found_s] otherwise.
 *)
 
 val index : t -> char -> int option
@@ -233,12 +237,12 @@ val is_prefix : t -> prefix:t -> bool
 
 (** If the string [s] contains the character [on], then [lsplit2_exn s ~on] returns a pair
     containing [s] split around the first appearance of [on] (from the left). Raises
-    [Caml.Not_found] or [Not_found_s] when [on] cannot be found in [s]. *)
+    [Stdlib.Not_found] or [Not_found_s] when [on] cannot be found in [s]. *)
 val lsplit2_exn : t -> on:char -> t * t
 
 (** If the string [s] contains the character [on], then [rsplit2_exn s ~on] returns a pair
     containing [s] split around the first appearance of [on] (from the right). Raises
-    [Caml.Not_found] or [Not_found_s] when [on] cannot be found in [s]. *)
+    [Stdlib.Not_found] or [Not_found_s] when [on] cannot be found in [s]. *)
 val rsplit2_exn : t -> on:char -> t * t
 
 (** [lsplit2 s ~on] optionally returns [s] split into two strings around the
@@ -265,46 +269,32 @@ val split_lines : t -> t list
 
 (** [lfindi ?pos t ~f] returns the smallest [i >= pos] such that [f i t.[i]], if there is
     such an [i].  By default, [pos = 0]. *)
-val lfindi : ?pos:int -> t -> f:(int -> char -> bool) -> int option
+val lfindi : ?pos:int -> t -> f:((int -> char -> bool)[@local]) -> int option
 
 (** [rfindi ?pos t ~f] returns the largest [i <= pos] such that [f i t.[i]], if there is
     such an [i].  By default [pos = length t - 1]. *)
-val rfindi : ?pos:int -> t -> f:(int -> char -> bool) -> int option
+val rfindi : ?pos:int -> t -> f:((int -> char -> bool)[@local]) -> int option
 
 (** [lstrip ?drop s] returns a string with consecutive chars satisfying [drop] (by default
     white space, e.g. tabs, spaces, newlines, and carriage returns) stripped from the
     beginning of [s]. *)
-val lstrip : ?drop:(char -> bool) -> t -> t
+val lstrip : ?drop:((char -> bool)[@local]) -> t -> t
 
 (** [rstrip ?drop s] returns a string with consecutive chars satisfying [drop] (by default
     white space, e.g. tabs, spaces, newlines, and carriage returns) stripped from the end
     of [s]. *)
-val rstrip : ?drop:(char -> bool) -> t -> t
+val rstrip : ?drop:((char -> bool)[@local]) -> t -> t
 
 (** [strip ?drop s] returns a string with consecutive chars satisfying [drop] (by default
     white space, e.g. tabs, spaces, newlines, and carriage returns) stripped from the
     beginning and end of [s]. *)
-val strip : ?drop:(char -> bool) -> t -> t
-
-val map : t -> f:(char -> char) -> t
-
-(** Like [map], but passes each character's index to [f] along with the char. *)
-val mapi : t -> f:(int -> char -> char) -> t
-
-
-(** [foldi] works similarly to [fold], but also passes the index of each character to
-    [f]. *)
-val foldi : t -> init:'a -> f:(int -> 'a -> char -> 'a) -> 'a
+val strip : ?drop:((char -> bool)[@local]) -> t -> t
 
 (** Like [map], but allows the replacement of a single character with zero or two or more
     characters. *)
-val concat_map : ?sep:t -> t -> f:(char -> t) -> t
+val concat_map : ?sep:t -> t -> f:((char -> t)[@local]) -> t
 
-(** [filter s ~f:predicate] discards characters not satisfying [predicate]. *)
-val filter : t -> f:(char -> bool) -> t
-
-(** Like [filter], but passes each character's index to [f] along with the char. *)
-val filteri : t -> f:(int -> char -> bool) -> t
+val concat_mapi : ?sep:t -> t -> f:((int -> char -> t)[@local]) -> t
 
 (** [tr ~target ~replacement s] replaces every instance of [target] in [s] with
     [replacement]. *)
@@ -389,6 +379,16 @@ val common_prefix2_length : t -> t -> int
 (** [concat_array sep ar] like {!String.concat}, but operates on arrays. *)
 val concat_array : ?sep:t -> t array -> t
 
+(** Builds a multiline text from a list of lines. Each line is terminated and then
+    concatenated. Equivalent to:
+
+    {[
+      String.concat (List.map lines ~f:(fun line ->
+        line ^ if crlf then "\r\n" else "\n"))
+    ]}
+*)
+val concat_lines : ?crlf:bool (** default [false] *) -> string list -> string
+
 (** Slightly faster hash function on strings. *)
 external hash : t -> int = "Base_hash_string"
 [@@noalloc]
@@ -397,7 +397,18 @@ external hash : t -> int = "Base_hash_string"
 val equal : t -> t -> bool
 
 val of_char : char -> t
+
 val of_char_list : char list -> t
+
+(** [pad_left ?char s ~len] returns [s] padded to the length [len] by adding characters
+    [char] to the beginning of the string. If s is already longer than [len] it is
+    returned unchanged. *)
+val pad_left : ?char:char (** default is [' '] *) -> string -> len:int -> string
+
+(** [pad_right ?char ~s len] returns [s] padded to the length [len] by adding characters
+    [char] to the end of the string. If s is already longer than [len] it is returned
+    unchanged. *)
+val pad_right : ?char:char (** default is [' '] *) -> string -> len:int -> string
 
 (** Operations for escaping and unescaping strings, with parameterized escape and
     escapeworthy characters.  Escaping/unescaping using this module is more efficient than
@@ -524,8 +535,8 @@ module Escaping : sig
       escaping or escaped.  This makes sense if you're trying to get rid of junk
       whitespace (for example), because escaped whitespace seems more likely to be
       deliberate and not junk. *)
-  val lstrip_literal : ?drop:(char -> bool) -> t -> escape_char:char -> t
+  val lstrip_literal : ?drop:((char -> bool)[@local]) -> t -> escape_char:char -> t
 
-  val rstrip_literal : ?drop:(char -> bool) -> t -> escape_char:char -> t
-  val strip_literal : ?drop:(char -> bool) -> t -> escape_char:char -> t
+  val rstrip_literal : ?drop:((char -> bool)[@local]) -> t -> escape_char:char -> t
+  val strip_literal : ?drop:((char -> bool)[@local]) -> t -> escape_char:char -> t
 end

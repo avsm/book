@@ -9,16 +9,16 @@ module Test_generic (Elt : sig
   end) (Container : sig
           type 'a t [@@deriving sexp]
 
-          include Generic with type 'a t := 'a t with type 'a elt := 'a Elt.t
+          include Generic with type ('a, _) t := 'a t with type 'a elt := 'a Elt.t
 
-          val mem : 'a t -> 'a Elt.t -> equal:('a Elt.t -> 'a Elt.t -> bool) -> bool
+          val mem : 'a t -> 'a Elt.t -> equal:(('a Elt.t -> 'a Elt.t -> bool)[@local]) -> bool
           val of_list : 'a Elt.t list -> [ `Ok of 'a t | `Skip_test ]
         end) : sig
   type 'a t [@@deriving sexp]
 
-  include Generic with type 'a t := 'a t
+  include Generic with type ('a, _) t := 'a t
 
-  val mem : 'a t -> 'a Elt.t -> equal:('a Elt.t -> 'a Elt.t -> bool) -> bool
+  val mem : 'a t -> 'a Elt.t -> equal:(('a Elt.t -> 'a Elt.t -> bool)[@local]) -> bool
 end
 with type 'a t := 'a Container.t
 with type 'a elt := 'a Elt.t =
@@ -44,7 +44,7 @@ struct
   let%test_unit _ =
     let ( = ) = Poly.equal in
     let compare = Poly.compare in
-    List.iter [ 0; 1; 2; 3; 4; 8; 1024 ] ~f:(fun n ->
+    List.iter [ 0; 1; 2; 3; 4; 8; 128 ] ~f:(fun n ->
       let list = List.init n ~f:Elt.of_int in
       match Container.of_list list with
       | `Skip_test -> ()
@@ -53,8 +53,7 @@ struct
         let sorts_are_equal l1 l2 = sort l1 = sort l2 in
         assert (n = Container.length c);
         assert (n = 0 = Container.is_empty c);
-        assert (
-          sorts_are_equal list (Container.fold c ~init:[] ~f:(fun ac e -> e :: ac)));
+        assert (sorts_are_equal list (Container.fold c ~init:[] ~f:(fun ac e -> e :: ac)));
         assert (sorts_are_equal list (Container.to_list c));
         assert (sorts_are_equal list (Array.to_list (Container.to_array c)));
         assert (n > 0 = Option.is_some (Container.find c ~f:(fun e -> Elt.to_int e = 0)));
@@ -62,7 +61,7 @@ struct
           n > 0 = Option.is_some (Container.find c ~f:(fun e -> Elt.to_int e = n - 1)));
         assert (Option.is_none (Container.find c ~f:(fun e -> Elt.to_int e = n)));
         assert (n > 0 = Container.mem c (Elt.of_int 0) ~equal:( = ));
-        assert (n > 0 = Container.mem c (Elt.of_int (n - 1)) ~equal:( = ));
+        if n > 0 then assert (Container.mem c (Elt.of_int (n - 1)) ~equal:( = ));
         assert (not (Container.mem c (Elt.of_int n) ~equal:( = )));
         assert (
           n
@@ -78,8 +77,7 @@ struct
                  if Elt.to_int e = n - 1 then Some () else None)));
         assert (
           Option.is_none
-            (Container.find_map c ~f:(fun e ->
-               if Elt.to_int e = n then Some () else None)));
+            (Container.find_map c ~f:(fun e -> if Elt.to_int e = n then Some () else None)));
         let r = ref 0 in
         Container.iter c ~f:(fun e -> r := !r + Elt.to_int e);
         assert (!r = List.fold list ~init:0 ~f:(fun n e -> n + Elt.to_int e));
@@ -96,8 +94,7 @@ struct
           assert (!r = n * (n - 1) / 2);
           assert (Option.map ~f:Elt.to_int (min_elt ~compare:compare_elt c) = Some 0);
           assert (
-            Option.map ~f:Elt.to_int (max_elt ~compare:compare_elt c)
-            = Some (Int.pred n)));
+            Option.map ~f:Elt.to_int (max_elt ~compare:compare_elt c) = Some (Int.pred n)));
         let mid = Container.length c / 2 in
         (match
            Container.fold_result c ~init:0 ~f:(fun count _elt ->
@@ -175,3 +172,39 @@ module Test_S1 (Container : sig
 
     let of_list l = `Ok (of_list l)
   end)
+
+module Test_S0 (Container : sig
+    module Elt : sig
+      type t [@@deriving sexp]
+
+      val of_int : int -> t
+      val to_int : t -> int
+    end
+
+    type t [@@deriving sexp]
+
+    include Container.S0 with type t := t and type elt := Elt.t
+
+    val of_list : Elt.t list -> t
+  end) =
+struct
+  include
+    Test_generic
+      (struct
+        include Container.Elt
+
+        type 'a t = Container.Elt.t
+      end)
+      (struct
+        include Container
+
+        type 'a t = Container.t [@@deriving sexp]
+
+        let of_list l = `Ok (of_list l)
+        let mem t x ~equal:_ = Container.mem t x
+      end)
+
+  (* [mem] in the second functor argument above ignores its [~equal], so this [~equal]
+     should never be called. *)
+  let mem t x = mem t x ~equal:(fun _ _ -> assert false)
+end

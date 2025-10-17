@@ -2,7 +2,6 @@ open! Import
 module List = List0
 open Set_intf
 module Merge_to_sequence_element = Merge_to_sequence_element
-module Named = Named
 
 module type Elt_plain = Elt_plain
 module type Elt = Elt
@@ -67,14 +66,12 @@ end
 module Accessors = struct
   include (
     Set.Using_comparator :
-      Set.Accessors2
+      Set.Accessors_generic
     with type ('a, 'b) t := ('a, 'b) Set.t
     with type ('a, 'b) tree := ('a, 'b) Tree.t
-    with type ('a, 'b) named := ('a, 'b) Set.Named.t)
-
-  let to_map = Map.of_key_set
-  let quickcheck_observer = quickcheck_observer
-  let quickcheck_shrinker = quickcheck_shrinker
+    with type 'c cmp := 'c
+    with type 'a elt := 'a
+    with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Without_comparator.t)
 end
 
 type 'a cmp = 'a
@@ -92,20 +89,16 @@ sig
   type ('a, 'b) t = ('a, 'b) Set.t [@@deriving sexp_of]
 
   include
-    Set.Creators_generic
-    with type ('a, 'b, 'c) options := ('a, 'b, 'c) Set.With_first_class_module.t
+    Set.Creators_and_accessors_generic
+    with type ('a, 'b, 'c) create_options :=
+      ('a, 'b, 'c) Set.With_first_class_module.t
+    with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Set.Without_comparator.t
     with type ('a, 'b) t := ('a, 'b) t
     with type ('a, 'b) set := ('a, 'b) t
     with type ('a, 'b) tree := ('a, 'b) Tree.t
     with type 'a cmp := 'a cmp
     with type 'a elt := 'a elt
-
-  include
-    Set.Accessors2
-    with type ('a, 'b) t := ('a, 'b) t
-    with type ('a, 'b) tree := ('a, 'b) Tree.t
-    with type ('a, 'b) named := ('a, 'b) Set.Named.t
-    with module Named := Named
+    with module Named = Set.Named
 end)
 
 type ('k, 'cmp) comparator =
@@ -137,6 +130,7 @@ end
 let to_map = Map.of_key_set
 let of_map_keys = Map.key_set
 let hash_fold_direct = Using_comparator.hash_fold_direct
+let comparator_s = Using_comparator.comparator_s
 let comparator = Using_comparator.comparator
 let of_hash_set m hset = Using_comparator.of_hash_set ~comparator:(to_comparator m) hset
 
@@ -158,7 +152,7 @@ module Creators (Elt : Comparator.S1) : sig
     with type ('a, 'b) set := ('a, 'b) t
     with type ('a, 'b) tree := ('a, 'b) tree
     with type 'a elt := 'a elt_
-    with type ('a, 'b, 'c) options := ('a, 'b, 'c) Without_comparator.t
+    with type ('a, 'b, 'c) create_options := ('a, 'b, 'c) Without_comparator.t
     with type 'a cmp := 'a cmp_
 end = struct
   open Using_comparator
@@ -204,46 +198,10 @@ module Make_tree_S1 (Elt : Comparator.S1) = struct
   let comparator = Elt.comparator
   let empty = Tree.empty_without_value_restriction
   let singleton e = Tree.singleton ~comparator e
-  let invariants t = Tree.invariants t ~comparator
-  let length t = Tree.length t
-  let is_empty t = Tree.is_empty t
-  let elements t = Tree.elements t
-  let min_elt t = Tree.min_elt t
-  let min_elt_exn t = Tree.min_elt_exn t
-  let max_elt t = Tree.max_elt t
-  let max_elt_exn t = Tree.max_elt_exn t
-  let choose t = Tree.choose t
-  let choose_exn t = Tree.choose_exn t
-  let to_list t = Tree.to_list t
-  let to_array t = Tree.to_array t
-  let iter t ~f = Tree.iter t ~f
-  let iter2 a b ~f = Tree.iter2 a b ~f ~comparator
-  let exists t ~f = Tree.exists t ~f
-  let for_all t ~f = Tree.for_all t ~f
-  let count t ~f = Tree.count t ~f
-  let sum m t ~f = Tree.sum m t ~f
-  let find t ~f = Tree.find t ~f
-  let find_exn t ~f = Tree.find_exn t ~f
-  let find_map t ~f = Tree.find_map t ~f
-  let fold t ~init ~f = Tree.fold t ~init ~f
-  let fold_until t ~init ~f = Tree.fold_until t ~init ~f
-  let fold_right t ~init ~f = Tree.fold_right t ~init ~f
-  let fold_result t ~init ~f = Container.fold_result ~fold ~init ~f t
   let map t ~f = Tree.map t ~f ~comparator
-  let filter t ~f = Tree.filter t ~f ~comparator
   let filter_map t ~f = Tree.filter_map t ~f ~comparator
-  let partition_tf t ~f = Tree.partition_tf t ~f ~comparator
-  let mem t a = Tree.mem t a ~comparator
-  let add t a = Tree.add t a ~comparator
-  let remove t a = Tree.remove t a ~comparator
-  let union t1 t2 = Tree.union t1 t2 ~comparator
-  let inter t1 t2 = Tree.inter t1 t2 ~comparator
-  let diff t1 t2 = Tree.diff t1 t2 ~comparator
-  let symmetric_diff t1 t2 = Tree.symmetric_diff t1 t2 ~comparator
   let compare_direct t1 t2 = Tree.compare_direct ~comparator t1 t2
   let equal t1 t2 = Tree.equal t1 t2 ~comparator
-  let is_subset t ~of_ = Tree.is_subset t ~of_ ~comparator
-  let are_disjoint t1 t2 = Tree.are_disjoint t1 t2 ~comparator
   let of_list l = Tree.of_list l ~comparator
   let of_sequence s = Tree.of_sequence s ~comparator
   let of_hash_set h = Tree.of_hash_set h ~comparator
@@ -258,38 +216,9 @@ module Make_tree_S1 (Elt : Comparator.S1) = struct
   let of_sorted_array a = Tree.of_sorted_array a ~comparator
   let union_list l = Tree.union_list l ~comparator
   let stable_dedup_list xs = Tree.stable_dedup_list xs ~comparator
-  let group_by t ~equiv = Tree.group_by t ~equiv ~comparator
-  let split t a = Tree.split t a ~comparator
-  let nth t i = Tree.nth t i
-  let remove_index t i = Tree.remove_index t i ~comparator
-  let to_tree t = t
   let of_tree t = t
-
-  let to_sequence ?order ?greater_or_equal_to ?less_or_equal_to t =
-    Tree.to_sequence ~comparator ?order ?greater_or_equal_to ?less_or_equal_to t
-  ;;
-
-  let binary_search t ~compare how v = Tree.binary_search ~comparator t ~compare how v
-
-  let binary_search_segmented t ~segment_of how =
-    Tree.binary_search_segmented ~comparator t ~segment_of how
-  ;;
-
-  let merge_to_sequence ?order ?greater_or_equal_to ?less_or_equal_to t t' =
-    Tree.merge_to_sequence ~comparator ?order ?greater_or_equal_to ?less_or_equal_to t t'
-  ;;
-
   let of_map_keys = Tree.of_map_keys
-  let to_map t ~f = Tree.to_map ~comparator t ~f
-
-  module Named = struct
-    let is_subset t ~of_ = Tree.Named.is_subset t ~of_ ~comparator
-    let equal t1 t2 = Tree.Named.equal t1 t2 ~comparator
-  end
-
   let quickcheck_generator elt = For_quickcheck.gen_tree elt ~comparator
-  let quickcheck_observer elt = For_quickcheck.obs_tree elt
-  let quickcheck_shrinker elt = For_quickcheck.shr_tree elt ~comparator
 end
 
 module Make_tree_plain (Elt : sig
@@ -302,7 +231,6 @@ struct
   include Make_tree_S1 (Elt_S1)
 
   type t = (Elt.t, Elt.comparator_witness) Tree.t
-  type named = (Elt.t, Elt.comparator_witness) Tree.Named.t
 
   let compare t1 t2 = compare_direct t1 t2
   let sexp_of_t t = Tree.sexp_of_t Elt.sexp_of_t [%sexp_of: _] t
@@ -339,7 +267,7 @@ let init_for_bin_prot ~len ~f ~comparator =
       ~comparator
       (fold set ~init:(Tree.empty ~comparator) ~f:(fun acc elt ->
          if Tree.mem acc elt ~comparator
-         then failwith "Set.bin_read_t: duplicate element in map"
+         then failwith "Set.bin_read_t: duplicate element in set"
          else Tree.add acc elt ~comparator))
 ;;
 
@@ -348,7 +276,6 @@ module Poly = struct
   include Creators (Elt)
 
   type nonrec 'a t = ('a, Elt.comparator_witness) t
-  type 'a named = ('a, Elt.comparator_witness) Named.t
 
   include Accessors
 
@@ -382,7 +309,6 @@ module Poly = struct
     include Make_tree_S1 (Comparator.Poly)
 
     type 'elt t = ('elt, Comparator.Poly.comparator_witness) tree
-    type 'a named = ('a, Elt.comparator_witness) Tree.Named.t
 
     let sexp_of_t sexp_of_elt t = Tree.sexp_of_t sexp_of_elt [%sexp_of: _] t
 
@@ -419,6 +345,20 @@ module Provide_bin_io (Elt : Elt_bin_io.S) = Bin_prot.Utils.Make_iterable_binabl
     ;;
   end)
 
+module Provide_stable_witness (Elt : sig
+    type t [@@deriving stable_witness]
+
+    include Comparator.S with type t := t
+  end) =
+struct
+  (* The binary representation of set is used in the stable modules below, so it's
+     assumed to be stable (if the elt is stable). *)
+  let stable_witness : (Elt.t, Elt.comparator_witness) t Stable_witness.t =
+    let (_ : Elt.t Stable_witness.t) = Elt.stable_witness in
+    Stable_witness.assert_stable
+  ;;
+end
+
 module Make_plain_using_comparator (Elt : sig
     type t [@@deriving sexp_of]
 
@@ -431,7 +371,6 @@ struct
 
   type ('a, 'b) set = ('a, 'b) t
   type t = (Elt.t, Elt.comparator_witness) set
-  type named = (Elt.t, Elt.comparator_witness) Named.t
 
   include Accessors
 
@@ -465,6 +404,19 @@ struct
       include Elt
       include Elt'
     end)
+
+  module Provide_stable_witness
+      (Elt' : sig
+         type t [@@deriving stable_witness]
+       end
+       with type t := Elt.t) =
+    Provide_stable_witness (struct
+      include Elt
+      include Elt'
+    end)
+
+  let quickcheck_observer = quickcheck_observer
+  let quickcheck_shrinker = quickcheck_shrinker
 end
 
 module Make_plain (Elt : Elt_plain) = Make_plain_using_comparator (struct
@@ -552,27 +504,21 @@ module For_deriving = struct
 
   let quickcheck_generator_m__t
         (type t cmp)
-        (module Elt : Quickcheck_generator_m
-          with type t = t
-           and type comparator_witness = cmp)
+        (module Elt : Quickcheck_generator_m with type t = t and type comparator_witness = cmp)
     =
     quickcheck_generator (module Elt) Elt.quickcheck_generator
   ;;
 
   let quickcheck_observer_m__t
         (type t cmp)
-        (module Elt : Quickcheck_observer_m
-          with type t = t
-           and type comparator_witness = cmp)
+        (module Elt : Quickcheck_observer_m with type t = t and type comparator_witness = cmp)
     =
     quickcheck_observer Elt.quickcheck_observer
   ;;
 
   let quickcheck_shrinker_m__t
         (type t cmp)
-        (module Elt : Quickcheck_shrinker_m
-          with type t = t
-           and type comparator_witness = cmp)
+        (module Elt : Quickcheck_shrinker_m with type t = t and type comparator_witness = cmp)
     =
     quickcheck_shrinker Elt.quickcheck_shrinker
   ;;
@@ -580,6 +526,22 @@ module For_deriving = struct
   module type For_deriving = Set.For_deriving
 
   include (Set : For_deriving with type ('a, 'b) t := ('a, 'b) t)
+end
+
+module For_deriving_stable = struct
+  module type Stable_witness_m = sig
+    include Comparator.S
+
+    val stable_witness : t Stable_witness.t
+  end
+
+  let stable_witness_m__t
+        (type t cmp)
+        (module Elt : Stable_witness_m with type t = t and type comparator_witness = cmp)
+    =
+    let module M = Provide_stable_witness (Elt) in
+    M.stable_witness
+  ;;
 end
 
 include For_deriving
@@ -597,6 +559,20 @@ module Stable = struct
     end
 
     include For_deriving
+    include For_deriving_stable
     module Make (Elt : Stable_module_types.S0) = Make_binable_using_comparator (Elt)
+
+    module With_stable_witness = struct
+      module type S = sig
+        include S
+
+        val stable_witness : t Stable_witness.t
+      end
+
+      module Make (Elt_stable : Stable_module_types.With_stable_witness.S0) = struct
+        include Make_binable_using_comparator (Elt_stable)
+        include Provide_stable_witness (Elt_stable)
+      end
+    end
   end
 end

@@ -22,12 +22,6 @@
   foreach_version (fun suffix _ ->
       printf "module Ast_%s = Ast_%s\n" suffix suffix)
 *)
-module Ast_402 = Ast_402
-module Ast_403 = Ast_403
-module Ast_404 = Ast_404
-module Ast_405 = Ast_405
-module Ast_406 = Ast_406
-module Ast_407 = Ast_407
 module Ast_408 = Ast_408
 module Ast_409 = Ast_409
 module Ast_410 = Ast_410
@@ -36,6 +30,9 @@ module Ast_412 = Ast_412
 module Ast_413 = Ast_413
 module Ast_414 = Ast_414
 module Ast_500 = Ast_500
+module Ast_501 = Ast_501
+module Ast_502 = Ast_502
+module Ast_503 = Ast_503
 (*$*)
 
 (* Manual migration between versions *)
@@ -44,18 +41,6 @@ module Ast_500 = Ast_500
       printf "module Migrate_%s_%s = Migrate_%s_%s\n" x y x y;
       printf "module Migrate_%s_%s = Migrate_%s_%s\n" y x y x)
 *)
-module Migrate_402_403 = Migrate_402_403
-module Migrate_403_402 = Migrate_403_402
-module Migrate_403_404 = Migrate_403_404
-module Migrate_404_403 = Migrate_404_403
-module Migrate_404_405 = Migrate_404_405
-module Migrate_405_404 = Migrate_405_404
-module Migrate_405_406 = Migrate_405_406
-module Migrate_406_405 = Migrate_406_405
-module Migrate_406_407 = Migrate_406_407
-module Migrate_407_406 = Migrate_407_406
-module Migrate_407_408 = Migrate_407_408
-module Migrate_408_407 = Migrate_408_407
 module Migrate_408_409 = Migrate_408_409
 module Migrate_409_408 = Migrate_409_408
 module Migrate_409_410 = Migrate_409_410
@@ -70,6 +55,12 @@ module Migrate_413_414 = Migrate_413_414
 module Migrate_414_413 = Migrate_414_413
 module Migrate_414_500 = Migrate_414_500
 module Migrate_500_414 = Migrate_500_414
+module Migrate_500_501 = Migrate_500_501
+module Migrate_501_500 = Migrate_501_500
+module Migrate_501_502 = Migrate_501_502
+module Migrate_502_501 = Migrate_502_501
+module Migrate_502_503 = Migrate_502_503
+module Migrate_503_502 = Migrate_503_502
 (*$*)
 
 (* Compiler modules *)
@@ -80,8 +71,22 @@ module Location = Location
 module Longident = Longident
 module Parse = Parse
 module Pprintast = Pprintast
+module Compiler_pprintast = struct
+  include Ocaml_common.Pprintast
+
+  let structure_item fmt t = structure fmt [t]
+  let signature_item fmt t = signature fmt [t]
+
+  exception Unavailable
+
+  (*IF_NOT_AT_LEAST 414 let class_field _fmt _t = raise Unavailable *)
+  (*IF_NOT_AT_LEAST 414 let class_type_field _fmt _t = raise Unavailable *)
+  (*IF_NOT_AT_LEAST 414 let class_expr _fmt _t = raise Unavailable *)
+  (*IF_NOT_AT_LEAST 414 let class_type _fmt _t = raise Unavailable *)
+  (*IF_NOT_AT_LEAST 414 let module_type _fmt _t = raise Unavailable *)
+  (*IF_NOT_AT_LEAST 414 let module_expr _fmt _t = raise Unavailable *)
+end
 
 let init_error_reporting_style_using_env_vars () =
-  (*IF_AT_LEAST 408 Ocaml_common.Compmisc.read_clflags_from_env () *)
-  (*IF_NOT_AT_LEAST 408 () *)
+  Ocaml_common.Compmisc.read_clflags_from_env ()
 (** Adjust the reporting style of error messages to the environment variables OCAML_COLOR and OCAML_ERROR_STYLE. *)

@@ -111,7 +111,8 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
     test (Ok "o") (error "not okay");
     [%expect {| (Error "not okay") |}];
     test (error "no fst") (error "no snd");
-    [%expect {| (Error ("no fst" "no snd")) |}]
+    [%expect {|
+      (Error ("no fst" "no snd")) |}]
   ;;
 
   let map3 = A.map3
@@ -129,7 +130,8 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
     test (Ok "o") (Ok "k") (error "not okay");
     [%expect {| (Error "not okay") |}];
     test (error "no 1st") (error "no 2nd") (error "no 3rd");
-    [%expect {| (Error ("no 1st" "no 2nd" "no 3rd")) |}]
+    [%expect {|
+      (Error ("no 1st" "no 2nd" "no 3rd")) |}]
   ;;
 
   let all = A.all
@@ -157,7 +159,8 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
     test [ Ok "o"; Ok "kay"; error "oh no!" ];
     [%expect {| (Error "oh no!") |}];
     test [ error "oh"; error "no"; error "!" ];
-    [%expect {| (Error (oh no !)) |}]
+    [%expect {|
+      (Error (oh no !)) |}]
   ;;
 
   let all_unit = A.all_unit
@@ -185,7 +188,8 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
     test [ Ok (); Ok (); error "oh no!" ];
     [%expect {| (Error "oh no!") |}];
     test [ error "oh"; error "no"; error "!" ];
-    [%expect {| (Error (oh no !)) |}]
+    [%expect {|
+      (Error (oh no !)) |}]
   ;;
 
   module Applicative_infix = A.Applicative_infix
@@ -206,6 +210,16 @@ let%test_module "Make" =
                                 type 'a t = 'a Or_error.t
 
                                 let return = Or_error.return
+                                let map2 = Or_error.map2
+                                let map = `Define_using_map2
+                              end)))
+;;
+
+let%test_module "Make" =
+  (module Test_applicative_s (Applicative.Make_using_map2_local (struct
+                                type 'a t = 'a Or_error.t
+
+                                let return x = Ok x
                                 let map2 = Or_error.map2
                                 let map = `Define_using_map2
                               end)))

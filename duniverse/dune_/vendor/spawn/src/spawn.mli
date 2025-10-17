@@ -6,10 +6,10 @@
 
 module Working_dir : sig
   type t =
-    | Path of string  (** Path in the filesystem *)
+    | Path of string (** Path in the filesystem *)
     | Fd of Unix.file_descr
         (** File descriptor pointing to a directory. Not supported on Windows. *)
-    | Inherit  (** Inherit the working directory of the current process *)
+    | Inherit (** Inherit the working directory of the current process *)
 end
 
 module Unix_backend : sig
@@ -96,15 +96,22 @@ end
 
     {b Signals}
 
-    On Unix, the sub-process will have all its signals unblocked.
+    On Unix, by default, the sub-process will have all its signals unblocked. If
+    [sigprocmask] is passed, the sub-process will have its sigprocmask modified
+    with the given [sigprocmask_command], relative to the calling thread. At no
+    point will any OCaml function observe any intermediate signal mask.
+
+    Attempts to unblock a signal that is not blocked, to block a signal that is
+    already blocked, or to block a signal that cannot be blocked (e.g., SIGSTOP,
+    SIGKILL) are allowed and will be silently ignored.
 
     {b Implementation}
 
     [unix_backend] describes what backend to use on Unix. If set to [Default],
     [vfork] is used unless the environment variable [SPAWN_USE_FORK] is set. On
     Windows, [CreateProcess] is used. *)
-val spawn :
-     ?env:Env.t
+val spawn
+  :  ?env:Env.t
   -> ?cwd:Working_dir.t (* default: [Inherit] *)
   -> prog:string
   -> argv:string list
@@ -113,6 +120,8 @@ val spawn :
   -> ?stderr:Unix.file_descr
   -> ?unix_backend:Unix_backend.t (* default: [Unix_backend.default] *)
   -> ?setpgid:Pgid.t
+  -> ?sigprocmask:Unix.sigprocmask_command * int list
+       (** default: unblock all signals in child *)
   -> unit
   -> int
 

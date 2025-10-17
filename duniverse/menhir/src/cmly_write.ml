@@ -8,6 +8,7 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Attribute
 open BasicSyntax
 open Grammar
 open Cmly_format
@@ -38,14 +39,14 @@ let range (pos : Positions.t) : range =
 let ranges =
   List.map range
 
-let attribute (label, payload : Syntax.attribute) : attribute =
+let attribute (attr : Attribute.attribute) : attribute =
   {
-    a_label    = Positions.value label;
-    a_payload  = raw_content payload;
-    a_position = range (Positions.position label);
+    a_label    = attr.key;
+    a_payload  = attr.payload;
+    a_position = range attr.origin;
   }
 
-let attributes : Syntax.attributes -> attributes =
+let attributes : Attribute.attributes -> attributes =
   List.map attribute
 
 let terminal (t : Terminal.t) : terminal_def =
@@ -111,7 +112,7 @@ let production (prod : Production.index) : production_def =
     p_positions = ranges (Production.positions prod);
     p_action = if Production.is_start prod then None
                else Some (action (Production.action prod));
-    p_attributes = attributes (Production.lhs_attributes prod);
+    p_attributes = attributes (Production.attributes prod);
   }
 
 let item (i : Item.t) : production * int =
@@ -135,9 +136,14 @@ let lr1_state (node : Lr1.node) : lr1_state_def =
     lr1_lr0 = Lr0.core (Lr1.state node);
     lr1_transitions =
       List.map transition (SymbolMap.bindings (Lr1.transitions node));
-    lr1_reductions =
-      let add t ps rs = (Terminal.t2i t, List.map Production.p2i ps) :: rs in
+    lr1_reductions = (
+      let add t ps rs = (Terminal.t2i t, Production.p2i (List.hd ps)) :: rs in
       TerminalMap.fold_rev add (Lr1.reductions node) []
+    );
+    lr1_default_reduction =
+      Option.map
+        (fun (p, _ts) -> Production.p2i p)
+        (Default.has_default_reduction node);
   }
 
 let entry_point prod node nt _typ accu : (nonterminal * production * lr1) list =

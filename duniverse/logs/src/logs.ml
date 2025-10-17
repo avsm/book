@@ -1,32 +1,18 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2015 The logs programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
-   logs v0.7.0+dune2
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-let strf = Format.asprintf
-
-let pp_print_text ppf s =
-  (* hint spaces and new lines with Format's funs *)
-  let len = String.length s in
-  let left = ref 0 in
-  let right = ref 0 in
-  let flush () =
-    Format.pp_print_string ppf (String.sub s !left (!right - !left));
-    incr right; left := !right;
-  in
-  while (!right <> len) do
-    if s.[!right] = '\n' then (flush (); Format.pp_force_newline ppf ()) else
-    if s.[!right] = ' ' then (flush (); Format.pp_print_space ppf ()) else
-    incr right
-  done;
-  if !left <> len then flush ()
+let rec atomic_list_cons v atomic =
+  let l = Atomic.get atomic in
+  if Atomic.compare_and_set atomic l (v :: l) then () else
+  atomic_list_cons v atomic
 
 (* Reporting levels *)
 
 type level = App | Error | Warning | Info | Debug
-let _level = ref (Some Warning)
-let level () = !_level
+let level' = Atomic.make (Some Warning)
+let level () = Atomic.get level'
 let pp_level ppf = function
 | App -> ()
 | Error -> Format.pp_print_string ppf "ERROR"
@@ -45,7 +31,7 @@ let level_of_string = function
 | "warning" -> Ok (Some Warning)
 | "info" -> Ok (Some Info)
 | "debug" -> Ok (Some Debug)
-| l -> Error (`Msg (strf "%S: unknown log level" l))
+| l -> Error (`Msg (Printf.sprintf "%S: unknown log level" l))
 
 (* Sources *)
 
@@ -54,23 +40,23 @@ module Src = struct
     { uid : int;
       name : string;
       doc : string;
-      mutable level : level option }
+      level : level option Atomic.t }
 
   let uid =
-    let id = ref (-1) in
-    fun () -> incr id; !id
+    let id = Atomic.make 0 in
+    fun () -> Atomic.fetch_and_add id 1
 
-  let list = ref []
+  let list = Atomic.make []
 
   let create ?(doc = "undocumented") name =
-    let src = { uid = uid (); name; doc; level = !_level } in
-    list := src :: !list;
-    src
+    let level = Atomic.make (Atomic.get level') in
+    let src = { uid = uid (); name; doc; level } in
+    atomic_list_cons src list; src
 
   let name s = s.name
   let doc s = s.doc
-  let level s = s.level
-  let set_level s l = s.level <- l
+  let level s = Atomic.get (s.level)
+  let set_level s l = Atomic.set s.level l
   let equal src0 src1 = src0.uid = src1.uid
   let compare src0 src1 = (compare : int -> int -> int) src0.uid src1.uid
 
@@ -78,7 +64,7 @@ module Src = struct
       "@[<1>(src@ @[<1>(name %S)@]@ @[<1>(uid %d)@] @[<1>(doc %S)@])@]"
       src.name src.uid src.doc
 
-  let list () = !list
+  let list () = Atomic.get list
 end
 
 type src = Src.t
@@ -86,13 +72,15 @@ type src = Src.t
 let default = Src.create "application" ~doc:"The application log"
 
 let set_level ?(all = true) l =
-  _level := l; if all then List.iter (fun s -> Src.set_level s l) (Src.list ())
+  Atomic.set level' l;
+  if all then List.iter (fun s -> Src.set_level s l) (Src.list ())
 
 (* Message tags *)
 
 module Tag = struct
 
-  (* Universal type, see http://mlton.org/UniversalType *)
+  (* Universal type, see http://mlton.org/UniversalType.
+     Note: we can get rid of that once we have OCaml >= 5.1 *)
 
   type univ = exn
   let univ (type s) () =
@@ -111,20 +99,22 @@ module Tag = struct
 
   type def_e = Def : 'a def -> def_e
 
-  let list = ref ([] : def_e list)
+  let list = Atomic.make ([] : def_e list)
   let uid =
-    let id = ref (-1) in
-    fun () -> incr id; !id
+    let id = Atomic.make 0 in
+    fun () -> Atomic.fetch_and_add id 1
 
   let def ?(doc = "undocumented") name pp =
     let to_univ, of_univ = univ () in
-    { uid = uid (); to_univ; of_univ; name; doc; pp }
+    let tag = { uid = uid (); to_univ; of_univ; name; doc; pp } in
+    atomic_list_cons (Def tag) list;
+    tag
 
   let name d = d.name
   let doc d = d.doc
   let printer d = d.pp
   let pp_def ppf d = Format.fprintf ppf "tag:%s" d.name
-  let list () = !list
+  let list () = Atomic.get list
 
   (* Tag values *)
 
@@ -156,7 +146,7 @@ module Tag = struct
     with Not_found -> None
 
   let get k s = match find k s with
-  | None -> invalid_arg (strf "tag named %s not found in set" k.name)
+  | None -> invalid_arg (Printf.sprintf "tag named %s not found in set" k.name)
   | Some v -> v
 
   let fold f s acc = M.fold (fun _ t acc -> f t acc) s acc
@@ -179,8 +169,11 @@ type ('a, 'b) msgf =
    ('a, Format.formatter, unit, 'b) format4 -> 'a) -> 'b
 
 type reporter_mutex = { lock : unit -> unit; unlock : unit -> unit }
-let _reporter_mutex = ref { lock = (fun () -> ()); unlock = (fun () -> ()) }
-let set_reporter_mutex ~lock ~unlock = _reporter_mutex := { lock; unlock }
+let reporter_mutex' =
+  Atomic.make { lock = (fun () -> ()); unlock = (fun () -> ()) }
+
+let set_reporter_mutex ~lock ~unlock =
+  Atomic.set reporter_mutex' { lock; unlock }
 
 type reporter =
   { report :
@@ -188,31 +181,44 @@ type reporter =
       ('a, 'b) msgf -> 'b }
 
 let nop_reporter = { report = fun _ _ ~over k _ -> over (); k () }
-let _reporter = ref nop_reporter
-let set_reporter r = _reporter := r
-let reporter () = !_reporter
+let reporter' = Atomic.make nop_reporter
+let set_reporter r = Atomic.set reporter' r
+let reporter () = Atomic.get reporter'
 let report src level ~over k msgf =
-  let over () = over (); !_reporter_mutex.unlock () in
-  !_reporter_mutex.lock ();
-  !_reporter.report src level ~over k msgf
+  let mutex = Atomic.get reporter_mutex' in
+  let over () = over (); mutex.unlock () in
+  mutex.lock ();
+  (Atomic.get reporter').report src level ~over k msgf
+
+let pp_brackets pp_v ppf v =
+  Format.pp_print_char ppf '['; pp_v ppf v; Format.pp_print_char ppf ']'
 
 let pp_header ppf (l, h) = match h with
-| None -> if l = App then () else Format.fprintf ppf "[%a]" pp_level l
-| Some h -> Format.fprintf ppf "[%s]" h
+| None -> if l = App then () else pp_brackets pp_level ppf l
+| Some h -> pp_brackets Format.pp_print_string ppf h
 
 let pp_exec_header =
-  let x = match Array.length Sys.argv with
+  let exec = match Array.length Sys.argv with
   | 0 -> Filename.basename Sys.executable_name
   | n -> Filename.basename Sys.argv.(0)
   in
-  let pf = Format.fprintf in
-  let pp_header ppf (l, h) =
-    if l = App then (match h with None -> () | Some h -> pf ppf "[%s] " h) else
-    match h with
-    | None -> pf ppf "%s: [%a] " x pp_level l
-    | Some h -> pf ppf "%s: [%s] " x h
-  in
-  pp_header
+  fun ppf (l, h) ->
+    if l = App then match h with
+    | None -> ()
+    | Some h ->
+        pp_brackets Format.pp_print_string ppf h;
+        Format.pp_print_char ppf ' '
+    else match h with
+    | None ->
+        Format.pp_print_string ppf exec;
+        Format.pp_print_string ppf ": ";
+        pp_brackets pp_level ppf l;
+        Format.pp_print_char ppf ' '
+    | Some h ->
+        Format.pp_print_string ppf exec;
+        Format.pp_print_string ppf ": ";
+        pp_brackets Format.pp_print_string ppf h;
+        Format.pp_print_char ppf ' '
 
 let format_reporter
     ?(pp_header = pp_exec_header)
@@ -220,38 +226,42 @@ let format_reporter
     ?(dst = Format.err_formatter) ()
   =
   let report src level ~over k msgf =
-    let k _ = over (); k () in
+    let k ppf =
+      Format.pp_close_box ppf ();
+      Format.pp_print_newline ppf ();
+      over (); k ()
+    in
     msgf @@ fun ?header ?tags fmt ->
     let ppf = if level = App then app else dst in
-    Format.kfprintf k ppf ("%a@[" ^^ fmt ^^ "@]@.") pp_header (level, header)
+    pp_header ppf (level, header);
+    Format.pp_open_box ppf 0;
+    Format.kfprintf k ppf fmt
   in
   { report }
 
 (* Log functions *)
 
-let _err_count = ref 0
-let err_count () = !_err_count
-let incr_err_count () = incr _err_count
+let err_count' = Atomic.make 0
+let err_count () = Atomic.get err_count'
+let incr_err_count () = Atomic.incr err_count'
 
-let _warn_count = ref 0
-let warn_count () = !_warn_count
-let incr_warn_count () = incr _warn_count
+let warn_count' = Atomic.make 0
+let warn_count () = Atomic.get warn_count'
+let incr_warn_count () = Atomic.incr warn_count'
 
 type 'a log = ('a, unit) msgf -> unit
 
 let over () = ()
-let kmsg : type a b. (unit -> b) -> ?src:src -> level -> (a, b) msgf -> b =
-fun k ?(src = default) level msgf ->
-match Src.level src with
-| None -> k ()
-| Some level' when level > level' ->
-    (if level = Error then incr _err_count else
-     if level = Warning then incr _warn_count else ());
-    (k ())
-| Some _ ->
-    (if level = Error then incr _err_count else
-     if level = Warning then incr _warn_count else ());
-    report src level ~over k msgf
+let kmsg k ?(src = default) level msgf =
+  begin match level with
+  | Error -> Atomic.incr err_count'
+  | Warning -> Atomic.incr warn_count'
+  | _ -> ()
+  end;
+  match Src.level src with
+  | None -> k ()
+  | Some current_level when level > current_level -> k ()
+  | Some _ -> report src level ~over k msgf
 
 let kunit _ = ()
 let msg ?src level msgf = kmsg kunit ?src level msgf
@@ -273,7 +283,7 @@ let on_error_msg ?src ?(level = Error) ?header ?tags ~use = function
 | Ok v -> v
 | Error (`Msg msg) ->
     kmsg use ?src level @@ fun m ->
-    m ?header ?tags "@[%a@]" pp_print_text msg
+    m ?header ?tags "@[%a@]" Format.pp_print_text msg
 
 (* Source specific logging functions *)
 
@@ -312,19 +322,3 @@ let src_log src =
   end
   in
   (module Log : LOG)
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2015 The logs programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

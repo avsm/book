@@ -2,32 +2,19 @@
 
 open Import
 
-module Modules_data : sig
-  (** Various information needed about a set of modules.
-
-      This is a subset of [Compilation_context]. We don't use
-      [Compilation_context] directory as this would create a circular
-      dependency. *)
-  type t =
-    { dir : Path.Build.t
-    ; obj_dir : Path.Build.t Obj_dir.t
-    ; sctx : Super_context.t
-    ; vimpl : Vimpl.t option
-    ; modules : Modules.t
-    ; stdlib : Ocaml_stdlib.t option
-    ; sandbox : Sandbox_config.t
-    }
-end
-
-val deps_of :
-     Modules_data.t
+val deps_of
+  :  sandbox:Sandbox_config.t
+  -> modules:Modules.With_vlib.t
+  -> sctx:Super_context.t
+  -> dir:Path.Build.t
+  -> obj_dir:Path.Build.t Obj_dir.t
   -> ml_kind:Ml_kind.t
   -> Module.t
   -> Module.t list Action_builder.t Memo.t
 
-val read_deps_of :
-     obj_dir:Path.Build.t Obj_dir.t
-  -> modules:Modules.t
+val read_deps_of
+  :  obj_dir:Path.Build.t Obj_dir.t
+  -> modules:Modules.With_vlib.t
   -> ml_kind:Ml_kind.t
   -> Module.t
   -> Module.t list Action_builder.t
@@ -36,9 +23,9 @@ val read_deps_of :
     immediate dependencies found in the modules of [modules] for the file with
     kind [ml_kind] of the module [unit]. If there is no such file with kind
     [ml_kind], then an empty list of dependencies is returned. *)
-val read_immediate_deps_of :
-     obj_dir:Path.Build.t Obj_dir.t
-  -> modules:Modules.t
+val read_immediate_deps_of
+  :  obj_dir:Path.Build.t Obj_dir.t
+  -> modules:Modules.With_vlib.t
   -> ml_kind:Ml_kind.t
   -> Module.t
   -> Module.t list Action_builder.t

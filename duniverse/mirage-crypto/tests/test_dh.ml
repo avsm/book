@@ -12,8 +12,10 @@ let dh_selftest ~bits n =
     let sh1 = Dh.shared s1 m2
     and sh2 = Dh.shared s2 m1 in
     assert_equal sh1 sh2
-      ~cmp:(eq_opt Cstruct.equal)
-      ~pp_diff:(pp_diff (pp_opt Cstruct.hexdump_pp))
+      ~cmp:(eq_opt String.equal)
+      ~pp_diff:(pp_diff (fun ppf -> function
+          | None -> Format.fprintf ppf "None"
+          | Some a -> Format.fprintf ppf "Some(%a)" (Ohex.pp_hexdump ()) a))
       ~msg:"shared secret"
 
 let dh_shared_0 =
@@ -62,7 +64,7 @@ let dh_shared_0 =
     match Dh.(shared (fst (key_of_secret grp ~s)) gy) with
     | None -> assert_failure "degenerate shared secret"
     | Some shared' ->
-        assert_cs_equal ~msg:"shared secret" shared shared'
+        assert_oct_equal ~msg:"shared secret" shared shared'
 
 let suite = [
   dh_selftest ~bits:16  1000 ;

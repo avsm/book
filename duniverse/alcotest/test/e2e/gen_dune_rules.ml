@@ -53,7 +53,7 @@ let global_stanza ~libraries ~js filenames =
     (pp_sexp_list Fmt.string) bases
     Fmt.(list string)
     libraries
-    (if js then "(modes native js)" else "(modes native)")
+    (if js then "(modes exe js)" else "(modes exe)")
     (pp_sexp_list Fmt.string) bases
 
 let example_rule_stanza ~js ~expect_failure filename =
@@ -63,9 +63,9 @@ let example_rule_stanza ~js ~expect_failure filename =
   let accepted_exit_codes =
     Fmt.str "(or %s %d %d)"
       (if expect_failure then
-       (* 1 = failing test, 2 = failed assertion outside runner *)
-       "1 2"
-      else "0")
+         (* 1 = failing test, 2 = failed assertion outside runner *)
+         "1 2"
+       else "0")
       Cmdliner.Cmd.Exit.cli_error Cmdliner.Cmd.Exit.internal_error
   in
   (* Run Alcotest to get *.actual, then pass through the strip_randomness
@@ -81,7 +81,7 @@ let example_rule_stanza ~js ~expect_failure filename =
 |}
     (with_suffix base) accepted_exit_codes
     (if js then Printf.sprintf "node %%{dep:%s.bc.js}" base
-    else Printf.sprintf "%%{dep:%s.exe}" base)
+     else Printf.sprintf "%%{dep:%s.exe}" base)
     Fmt.(list string)
     options;
 
@@ -155,7 +155,7 @@ let expect_failure =
   Arg.(value & flag doc)
 
 let cmd =
-  let info = Cmd.info ~version:"1.5.0-29-g6be328d" "gen_dune_rules" in
+  let info = Cmd.info ~version:"1.9.1" "gen_dune_rules" in
   Cmd.v info Term.(const main $ package $ expect_failure $ libraries $ js)
 
 let () = exit @@ Cmd.eval cmd

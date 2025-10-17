@@ -49,20 +49,20 @@ module type S0 = sig
 
   (** [iter] must allow exceptions raised in [f] to escape, terminating the iteration
       cleanly.  The same holds for all functions below taking an [f]. *)
-  val iter : t -> f:(elt -> unit) -> unit
+  val iter : t -> f:((elt -> unit)[@local]) -> unit
 
   (** [fold t ~init ~f] returns [f (... f (f (f init e1) e2) e3 ...) en], where [e1..en]
       are the elements of [t]. *)
-  val fold : t -> init:'accum -> f:('accum -> elt -> 'accum) -> 'accum
+  val fold : t -> init:'acc -> f:(('acc -> elt -> 'acc)[@local]) -> 'acc
 
   (** [fold_result t ~init ~f] is a short-circuiting version of [fold] that runs in the
       [Result] monad.  If [f] returns an [Error _], that value is returned without any
       additional invocations of [f]. *)
   val fold_result
     :  t
-    -> init:'accum
-    -> f:('accum -> elt -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
+    -> init:'acc
+    -> f:(('acc -> elt -> ('acc, 'e) Result.t)[@local])
+    -> ('acc, 'e) Result.t
 
   (** [fold_until t ~init ~f ~finish] is a short-circuiting version of [fold]. If [f]
       returns [Stop _] the computation ceases and results in that value. If [f] returns
@@ -95,31 +95,31 @@ module type S0 = sig
       ]} *)
   val fold_until
     :  t
-    -> init:'accum
-    -> f:('accum -> elt -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
+    -> init:'acc
+    -> f:(('acc -> elt -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 'final
 
   (** Returns [true] if and only if there exists an element for which the provided
       function evaluates to [true]. This is a short-circuiting operation. *)
-  val exists : t -> f:(elt -> bool) -> bool
+  val exists : t -> f:((elt -> bool)[@local]) -> bool
 
   (** Returns [true] if and only if the provided function evaluates to [true] for all
       elements. This is a short-circuiting operation. *)
-  val for_all : t -> f:(elt -> bool) -> bool
+  val for_all : t -> f:((elt -> bool)[@local]) -> bool
 
   (** Returns the number of elements for which the provided function evaluates to true. *)
-  val count : t -> f:(elt -> bool) -> int
+  val count : t -> f:((elt -> bool)[@local]) -> int
 
   (** Returns the sum of [f i] for all [i] in the container. *)
-  val sum : (module Summable with type t = 'sum) -> t -> f:(elt -> 'sum) -> 'sum
+  val sum : (module Summable with type t = 'sum) -> t -> f:((elt -> 'sum)[@local]) -> 'sum
 
   (** Returns as an [option] the first element for which [f] evaluates to true. *)
-  val find : t -> f:(elt -> bool) -> elt option
+  val find : t -> f:((elt -> bool)[@local]) -> elt option
 
   (** Returns the first evaluation of [f] that returns [Some], and returns [None] if there
       is no such element.  *)
-  val find_map : t -> f:(elt -> 'a option) -> 'a option
+  val find_map : t -> f:((elt -> 'a option)[@local]) -> 'a option
 
   val to_list : t -> elt list
   val to_array : t -> elt array
@@ -128,9 +128,9 @@ module type S0 = sig
       function. In case of a tie, the first element encountered while traversing the
       collection is returned. The implementation uses [fold] so it has the same
       complexity as [fold]. Returns [None] iff the collection is empty. *)
-  val min_elt : t -> compare:(elt -> elt -> int) -> elt option
+  val min_elt : t -> compare:((elt -> elt -> int)[@local]) -> elt option
 
-  val max_elt : t -> compare:(elt -> elt -> int) -> elt option
+  val max_elt : t -> compare:((elt -> elt -> int)[@local]) -> elt option
 end
 
 module type S0_phantom = sig
@@ -142,20 +142,20 @@ module type S0_phantom = sig
 
   val length : _ t -> int
   val is_empty : _ t -> bool
-  val iter : _ t -> f:(elt -> unit) -> unit
+  val iter : _ t -> f:((elt -> unit)[@local]) -> unit
 
   (** [fold t ~init ~f] returns [f (... f (f (f init e1) e2) e3 ...) en], where [e1..en]
       are the elements of [t]. *)
-  val fold : _ t -> init:'accum -> f:('accum -> elt -> 'accum) -> 'accum
+  val fold : _ t -> init:'acc -> f:(('acc -> elt -> 'acc)[@local]) -> 'acc
 
   (** [fold_result t ~init ~f] is a short-circuiting version of [fold] that runs in the
       [Result] monad.  If [f] returns an [Error _], that value is returned without any
       additional invocations of [f]. *)
   val fold_result
     :  _ t
-    -> init:'accum
-    -> f:('accum -> elt -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
+    -> init:'acc
+    -> f:(('acc -> elt -> ('acc, 'e) Result.t)[@local])
+    -> ('acc, 'e) Result.t
 
   (** [fold_until t ~init ~f ~finish] is a short-circuiting version of [fold]. If [f]
       returns [Stop _] the computation ceases and results in that value. If [f] returns
@@ -188,32 +188,36 @@ module type S0_phantom = sig
       ]} *)
   val fold_until
     :  _ t
-    -> init:'accum
-    -> f:('accum -> elt -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
+    -> init:'acc
+    -> f:(('acc -> elt -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 'final
 
   (** Returns [true] if and only if there exists an element for which the provided
       function evaluates to [true].  This is a short-circuiting operation. *)
-  val exists : _ t -> f:(elt -> bool) -> bool
+  val exists : _ t -> f:((elt -> bool)[@local]) -> bool
 
   (** Returns [true] if and only if the provided function evaluates to [true] for all
       elements.  This is a short-circuiting operation. *)
-  val for_all : _ t -> f:(elt -> bool) -> bool
+  val for_all : _ t -> f:((elt -> bool)[@local]) -> bool
 
   (** Returns the number of elements for which the provided function evaluates to true. *)
-  val count : _ t -> f:(elt -> bool) -> int
+  val count : _ t -> f:((elt -> bool)[@local]) -> int
 
   (** Returns the sum of [f i] for all [i] in the container. The order in which the
       elements will be summed is unspecified. *)
-  val sum : (module Summable with type t = 'sum) -> _ t -> f:(elt -> 'sum) -> 'sum
+  val sum
+    :  (module Summable with type t = 'sum)
+    -> _ t
+    -> f:((elt -> 'sum)[@local])
+    -> 'sum
 
   (** Returns as an [option] the first element for which [f] evaluates to true. *)
-  val find : _ t -> f:(elt -> bool) -> elt option
+  val find : _ t -> f:((elt -> bool)[@local]) -> elt option
 
   (** Returns the first evaluation of [f] that returns [Some], and returns [None] if there
       is no such element.  *)
-  val find_map : _ t -> f:(elt -> 'a option) -> 'a option
+  val find_map : _ t -> f:((elt -> 'a option)[@local]) -> 'a option
 
   val to_list : _ t -> elt list
   val to_array : _ t -> elt array
@@ -221,9 +225,9 @@ module type S0_phantom = sig
   (** Returns a min (resp max) element from the collection using the provided [compare]
       function, or [None] if the collection is empty.  In case of a tie, the first element
       encountered while traversing the collection is returned. *)
-  val min_elt : _ t -> compare:(elt -> elt -> int) -> elt option
+  val min_elt : _ t -> compare:((elt -> elt -> int)[@local]) -> elt option
 
-  val max_elt : _ t -> compare:(elt -> elt -> int) -> elt option
+  val max_elt : _ t -> compare:((elt -> elt -> int)[@local]) -> elt option
 end
 
 (** Signature for polymorphic container, e.g., ['a list] or ['a array]. *)
@@ -231,24 +235,24 @@ module type S1 = sig
   type 'a t
 
   (** Checks whether the provided element is there, using [equal]. *)
-  val mem : 'a t -> 'a -> equal:('a -> 'a -> bool) -> bool
+  val mem : 'a t -> 'a -> equal:(('a -> 'a -> bool)[@local]) -> bool
 
   val length : 'a t -> int
   val is_empty : 'a t -> bool
-  val iter : 'a t -> f:('a -> unit) -> unit
+  val iter : 'a t -> f:(('a -> unit)[@local]) -> unit
 
   (** [fold t ~init ~f] returns [f (... f (f (f init e1) e2) e3 ...) en], where [e1..en]
       are the elements of [t]  *)
-  val fold : 'a t -> init:'accum -> f:('accum -> 'a -> 'accum) -> 'accum
+  val fold : 'a t -> init:'acc -> f:(('acc -> 'a -> 'acc)[@local]) -> 'acc
 
   (** [fold_result t ~init ~f] is a short-circuiting version of [fold] that runs in the
       [Result] monad.  If [f] returns an [Error _], that value is returned without any
       additional invocations of [f]. *)
   val fold_result
     :  'a t
-    -> init:'accum
-    -> f:('accum -> 'a -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'e) Result.t)[@local])
+    -> ('acc, 'e) Result.t
 
   (** [fold_until t ~init ~f ~finish] is a short-circuiting version of [fold]. If [f]
       returns [Stop _] the computation ceases and results in that value. If [f] returns
@@ -281,31 +285,35 @@ module type S1 = sig
       ]} *)
   val fold_until
     :  'a t
-    -> init:'accum
-    -> f:('accum -> 'a -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 'final
 
   (** Returns [true] if and only if there exists an element for which the provided
       function evaluates to [true].  This is a short-circuiting operation. *)
-  val exists : 'a t -> f:('a -> bool) -> bool
+  val exists : 'a t -> f:(('a -> bool)[@local]) -> bool
 
   (** Returns [true] if and only if the provided function evaluates to [true] for all
       elements.  This is a short-circuiting operation. *)
-  val for_all : 'a t -> f:('a -> bool) -> bool
+  val for_all : 'a t -> f:(('a -> bool)[@local]) -> bool
 
   (** Returns the number of elements for which the provided function evaluates to true. *)
-  val count : 'a t -> f:('a -> bool) -> int
+  val count : 'a t -> f:(('a -> bool)[@local]) -> int
 
   (** Returns the sum of [f i] for all [i] in the container. *)
-  val sum : (module Summable with type t = 'sum) -> 'a t -> f:('a -> 'sum) -> 'sum
+  val sum
+    :  (module Summable with type t = 'sum)
+    -> 'a t
+    -> f:(('a -> 'sum)[@local])
+    -> 'sum
 
   (** Returns as an [option] the first element for which [f] evaluates to true. *)
-  val find : 'a t -> f:('a -> bool) -> 'a option
+  val find : 'a t -> f:(('a -> bool)[@local]) -> 'a option
 
   (** Returns the first evaluation of [f] that returns [Some], and returns [None] if there
       is no such element.  *)
-  val find_map : 'a t -> f:('a -> 'b option) -> 'b option
+  val find_map : 'a t -> f:(('a -> 'b option)[@local]) -> 'b option
 
   val to_list : 'a t -> 'a list
   val to_array : 'a t -> 'a array
@@ -314,33 +322,33 @@ module type S1 = sig
       [compare] function, or [None] if the collection is empty. In case of a tie, the first
       element encountered while traversing the collection is returned. The implementation
       uses [fold] so it has the same complexity as [fold]. *)
-  val min_elt : 'a t -> compare:('a -> 'a -> int) -> 'a option
+  val min_elt : 'a t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
 
-  val max_elt : 'a t -> compare:('a -> 'a -> int) -> 'a option
+  val max_elt : 'a t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
 end
 
-module type S1_phantom_invariant = sig
+module type S1_phantom = sig
   type ('a, 'phantom) t
 
   (** Checks whether the provided element is there, using [equal]. *)
-  val mem : ('a, _) t -> 'a -> equal:('a -> 'a -> bool) -> bool
+  val mem : ('a, _) t -> 'a -> equal:(('a -> 'a -> bool)[@local]) -> bool
 
   val length : (_, _) t -> int
   val is_empty : (_, _) t -> bool
-  val iter : ('a, _) t -> f:('a -> unit) -> unit
+  val iter : ('a, _) t -> f:(('a -> unit)[@local]) -> unit
 
   (** [fold t ~init ~f] returns [f (... f (f (f init e1) e2) e3 ...) en], where [e1..en]
       are the elements of [t]. *)
-  val fold : ('a, _) t -> init:'accum -> f:('accum -> 'a -> 'accum) -> 'accum
+  val fold : ('a, _) t -> init:'acc -> f:(('acc -> 'a -> 'acc)[@local]) -> 'acc
 
   (** [fold_result t ~init ~f] is a short-circuiting version of [fold] that runs in the
       [Result] monad.  If [f] returns an [Error _], that value is returned without any
       additional invocations of [f]. *)
   val fold_result
     :  ('a, _) t
-    -> init:'accum
-    -> f:('accum -> 'a -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'e) Result.t)[@local])
+    -> ('acc, 'e) Result.t
 
   (** [fold_until t ~init ~f ~finish] is a short-circuiting version of [fold]. If [f]
       returns [Stop _] the computation ceases and results in that value. If [f] returns
@@ -373,31 +381,35 @@ module type S1_phantom_invariant = sig
       ]} *)
   val fold_until
     :  ('a, _) t
-    -> init:'accum
-    -> f:('accum -> 'a -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 'final
 
   (** Returns [true] if and only if there exists an element for which the provided
       function evaluates to [true].  This is a short-circuiting operation. *)
-  val exists : ('a, _) t -> f:('a -> bool) -> bool
+  val exists : ('a, _) t -> f:(('a -> bool)[@local]) -> bool
 
   (** Returns [true] if and only if the provided function evaluates to [true] for all
       elements.  This is a short-circuiting operation. *)
-  val for_all : ('a, _) t -> f:('a -> bool) -> bool
+  val for_all : ('a, _) t -> f:(('a -> bool)[@local]) -> bool
 
   (** Returns the number of elements for which the provided function evaluates to true. *)
-  val count : ('a, _) t -> f:('a -> bool) -> int
+  val count : ('a, _) t -> f:(('a -> bool)[@local]) -> int
 
   (** Returns the sum of [f i] for all [i] in the container. *)
-  val sum : (module Summable with type t = 'sum) -> ('a, _) t -> f:('a -> 'sum) -> 'sum
+  val sum
+    :  (module Summable with type t = 'sum)
+    -> ('a, _) t
+    -> f:(('a -> 'sum)[@local])
+    -> 'sum
 
   (** Returns as an [option] the first element for which [f] evaluates to true. *)
-  val find : ('a, _) t -> f:('a -> bool) -> 'a option
+  val find : ('a, _) t -> f:(('a -> bool)[@local]) -> 'a option
 
   (** Returns the first evaluation of [f] that returns [Some], and returns [None] if there
       is no such element.  *)
-  val find_map : ('a, _) t -> f:('a -> 'b option) -> 'b option
+  val find_map : ('a, _) t -> f:(('a -> 'b option)[@local]) -> 'b option
 
   val to_list : ('a, _) t -> 'a list
   val to_array : ('a, _) t -> 'a array
@@ -406,96 +418,150 @@ module type S1_phantom_invariant = sig
       function. In case of a tie, the first element encountered while traversing the
       collection is returned. The implementation uses [fold] so it has the same complexity
       as [fold]. Returns [None] iff the collection is empty. *)
-  val min_elt : ('a, _) t -> compare:('a -> 'a -> int) -> 'a option
+  val min_elt : ('a, _) t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
 
-  val max_elt : ('a, _) t -> compare:('a -> 'a -> int) -> 'a option
-end
-
-module type S1_phantom = sig
-  type ('a, +'phantom) t
-
-  include S1_phantom_invariant with type ('a, 'phantom) t := ('a, 'phantom) t
+  val max_elt : ('a, _) t -> compare:(('a -> 'a -> int)[@local]) -> 'a option
 end
 
 module type Generic = sig
-  type 'a t
-  type 'a elt
-
-  val length : _ t -> int
-  val is_empty : _ t -> bool
-  val iter : 'a t -> f:('a elt -> unit) -> unit
-  val fold : 'a t -> init:'accum -> f:('accum -> 'a elt -> 'accum) -> 'accum
-
-  val fold_result
-    :  'a t
-    -> init:'accum
-    -> f:('accum -> 'a elt -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
-
-  val fold_until
-    :  'a t
-    -> init:'accum
-    -> f:('accum -> 'a elt -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
-    -> 'final
-
-  val exists : 'a t -> f:('a elt -> bool) -> bool
-  val for_all : 'a t -> f:('a elt -> bool) -> bool
-  val count : 'a t -> f:('a elt -> bool) -> int
-  val sum : (module Summable with type t = 'sum) -> 'a t -> f:('a elt -> 'sum) -> 'sum
-  val find : 'a t -> f:('a elt -> bool) -> 'a elt option
-  val find_map : 'a t -> f:('a elt -> 'b option) -> 'b option
-  val to_list : 'a t -> 'a elt list
-  val to_array : 'a t -> 'a elt array
-  val min_elt : 'a t -> compare:('a elt -> 'a elt -> int) -> 'a elt option
-  val max_elt : 'a t -> compare:('a elt -> 'a elt -> int) -> 'a elt option
-end
-
-module type Generic_phantom = sig
   type ('a, 'phantom) t
   type 'a elt
 
   val length : (_, _) t -> int
   val is_empty : (_, _) t -> bool
-  val iter : ('a, _) t -> f:('a elt -> unit) -> unit
-  val fold : ('a, _) t -> init:'accum -> f:('accum -> 'a elt -> 'accum) -> 'accum
+  val mem : ('a, _) t -> 'a elt -> equal:(('a elt -> 'a elt -> bool)[@local]) -> bool
+  val iter : ('a, _) t -> f:(('a elt -> unit)[@local]) -> unit
+  val fold : ('a, _) t -> init:'acc -> f:(('acc -> 'a elt -> 'acc)[@local]) -> 'acc
 
   val fold_result
     :  ('a, _) t
-    -> init:'accum
-    -> f:('accum -> 'a elt -> ('accum, 'e) Result.t)
-    -> ('accum, 'e) Result.t
+    -> init:'acc
+    -> f:(('acc -> 'a elt -> ('acc, 'e) Result.t)[@local])
+    -> ('acc, 'e) Result.t
 
   val fold_until
     :  ('a, _) t
-    -> init:'accum
-    -> f:('accum -> 'a elt -> ('accum, 'final) Continue_or_stop.t)
-    -> finish:('accum -> 'final)
+    -> init:'acc
+    -> f:(('acc -> 'a elt -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 'final
 
-  val exists : ('a, _) t -> f:('a elt -> bool) -> bool
-  val for_all : ('a, _) t -> f:('a elt -> bool) -> bool
-  val count : ('a, _) t -> f:('a elt -> bool) -> int
+  val exists : ('a, _) t -> f:(('a elt -> bool)[@local]) -> bool
+  val for_all : ('a, _) t -> f:(('a elt -> bool)[@local]) -> bool
+  val count : ('a, _) t -> f:(('a elt -> bool)[@local]) -> int
 
   val sum
     :  (module Summable with type t = 'sum)
     -> ('a, _) t
-    -> f:('a elt -> 'sum)
+    -> f:(('a elt -> 'sum)[@local])
     -> 'sum
 
-  val find : ('a, _) t -> f:('a elt -> bool) -> 'a elt option
-  val find_map : ('a, _) t -> f:('a elt -> 'b option) -> 'b option
+  val find : ('a, _) t -> f:(('a elt -> bool)[@local]) -> 'a elt option
+  val find_map : ('a, _) t -> f:(('a elt -> 'b option)[@local]) -> 'b option
   val to_list : ('a, _) t -> 'a elt list
   val to_array : ('a, _) t -> 'a elt array
-  val min_elt : ('a, _) t -> compare:('a elt -> 'a elt -> int) -> 'a elt option
-  val max_elt : ('a, _) t -> compare:('a elt -> 'a elt -> int) -> 'a elt option
+  val min_elt : ('a, _) t -> compare:(('a elt -> 'a elt -> int)[@local]) -> 'a elt option
+  val max_elt : ('a, _) t -> compare:(('a elt -> 'a elt -> int)[@local]) -> 'a elt option
+end
+
+module type S0_with_creators = sig
+  include S0
+
+  val of_list : elt list -> t
+  val of_array : elt array -> t
+
+  (** E.g., [append (of_list [a; b]) (of_list [c; d; e])] is [of_list [a; b; c; d; e]] *)
+  val append : t -> t -> t
+
+  (** Concatenates a nested container. The elements of the inner containers are
+      concatenated together in order to give the result. *)
+  val concat : t list -> t
+
+  (** [map f (of_list [a1; ...; an])] applies [f] to [a1], [a2], ..., [an], in order, and
+      builds a result equivalent to [of_list [f a1; ...; f an]]. *)
+  val map : t -> f:((elt -> elt)[@local]) -> t
+
+  (** [filter t ~f] returns all the elements of [t] that satisfy the predicate [f]. *)
+  val filter : t -> f:((elt -> bool)[@local]) -> t
+
+  (** [filter_map t ~f] applies [f] to every [x] in [t]. The result contains every [y] for
+      which [f x] returns [Some y]. *)
+  val filter_map : t -> f:((elt -> elt option)[@local]) -> t
+
+  (** [concat_map t ~f] is equivalent to [concat (map t ~f)]. *)
+  val concat_map : t -> f:((elt -> t)[@local]) -> t
+
+  (** [partition_tf t ~f] returns a pair [t1, t2], where [t1] is all elements of [t] that
+      satisfy [f], and [t2] is all elements of [t] that do not satisfy [f]. The "tf"
+      suffix is mnemonic to remind readers that the result is (trues, falses). *)
+  val partition_tf : t -> f:((elt -> bool)[@local]) -> t * t
+
+  (** [partition_map t ~f] partitions [t] according to [f]. *)
+  val partition_map : t -> f:((elt -> (elt, elt) Either0.t)[@local]) -> t * t
+end
+
+module type S1_with_creators = sig
+  include S1
+
+  val of_list : 'a list -> 'a t
+  val of_array : 'a array -> 'a t
+
+  (** E.g., [append (of_list [1; 2]) (of_list [3; 4; 5])] is [of_list [1; 2; 3; 4; 5]] *)
+  val append : 'a t -> 'a t -> 'a t
+
+  (** Concatenates a nested container. The elements of the inner containers are
+      concatenated together in order to give the result. *)
+  val concat : 'a t t -> 'a t
+
+  (** [map f (of_list [a1; ...; an])] applies [f] to [a1], [a2], ..., [an], in order, and
+      builds a result equivalent to [of_list [f a1; ...; f an]]. *)
+  val map : 'a t -> f:(('a -> 'b)[@local]) -> 'b t
+
+  (** [filter t ~f] returns all the elements of [t] that satisfy the predicate [f]. *)
+  val filter : 'a t -> f:(('a -> bool)[@local]) -> 'a t
+
+  (** [filter_map t ~f] applies [f] to every [x] in [t]. The result contains every [y] for
+      which [f x] returns [Some y]. *)
+  val filter_map : 'a t -> f:(('a -> 'b option)[@local]) -> 'b t
+
+  (** [concat_map t ~f] is equivalent to [concat (map t ~f)]. *)
+  val concat_map : 'a t -> f:(('a -> 'b t)[@local]) -> 'b t
+
+  (** [partition_tf t ~f] returns a pair [t1, t2], where [t1] is all elements of [t] that
+      satisfy [f], and [t2] is all elements of [t] that do not satisfy [f]. The "tf"
+      suffix is mnemonic to remind readers that the result is (trues, falses). *)
+  val partition_tf : 'a t -> f:(('a -> bool)[@local]) -> 'a t * 'a t
+
+  (** [partition_map t ~f] partitions [t] according to [f]. *)
+  val partition_map : 'a t -> f:(('a -> ('b, 'c) Either0.t)[@local]) -> 'b t * 'c t
+end
+
+module type Generic_with_creators = sig
+  type (_, _) concat
+
+  include Generic
+
+  val of_list : 'a elt list -> ('a, _) t
+  val of_array : 'a elt array -> ('a, _) t
+  val append : ('a, 'p) t -> ('a, 'p) t -> ('a, 'p) t
+  val concat : (('a, 'p) t, 'p) concat -> ('a, 'p) t
+  val map : ('a, 'p) t -> f:(('a elt -> 'b elt)[@local]) -> ('b, 'p) t
+  val filter : ('a, 'p) t -> f:(('a elt -> bool)[@local]) -> ('a, 'p) t
+  val filter_map : ('a, 'p) t -> f:(('a elt -> 'b elt option)[@local]) -> ('b, 'p) t
+  val concat_map : ('a, 'p) t -> f:(('a elt -> ('b, 'p) t)[@local]) -> ('b, 'p) t
+  val partition_tf : ('a, 'p) t -> f:(('a elt -> bool)[@local]) -> ('a, 'p) t * ('a, 'p) t
+
+  val partition_map
+    :  ('a, 'p) t
+    -> f:(('a elt -> ('b elt, 'c elt) Either0.t)[@local])
+    -> ('b, 'p) t * ('c, 'p) t
 end
 
 module type Make_gen_arg = sig
-  type 'a t
+  type ('a, 'phantom) t
   type 'a elt
 
-  val fold : 'a t -> init:'accum -> f:('accum -> 'a elt -> 'accum) -> 'accum
+  val fold : ('a, 'phantom) t -> init:'acc -> f:(('acc -> 'a elt -> 'acc)[@local]) -> 'acc
 
   (** The [iter] argument to [Container.Make] specifies how to implement the
       container's [iter] function.  [`Define_using_fold] means to define [iter]
@@ -509,7 +575,10 @@ module type Make_gen_arg = sig
       efficient.  Several other functions returned by [Container.Make] are defined in
       terms of [iter], so passing in a more efficient [iter] will improve their efficiency
       as well. *)
-  val iter : [ `Define_using_fold | `Custom of 'a t -> f:('a elt -> unit) -> unit ]
+  val iter
+    : [ `Define_using_fold
+      | `Custom of ('a, 'phantom) t -> f:(('a elt -> unit)[@local]) -> unit
+      ]
 
   (** The [length] argument to [Container.Make] specifies how to implement the
       container's [length] function.  [`Define_using_fold] means to define
@@ -523,10 +592,14 @@ module type Make_gen_arg = sig
       efficient.  Several other functions returned by [Container.Make] are defined in
       terms of [length], so passing in a more efficient [length] will improve their
       efficiency as well. *)
-  val length : [ `Define_using_fold | `Custom of 'a t -> int ]
+  val length : [ `Define_using_fold | `Custom of ('a, 'phantom) t -> int ]
 end
 
-module type Make_arg = Make_gen_arg with type 'a elt := 'a Monad.Ident.t
+module type Make_arg = sig
+  type 'a t
+
+  include Make_gen_arg with type ('a, _) t := 'a t and type 'a elt := 'a
+end
 
 module type Make0_arg = sig
   module Elt : sig
@@ -537,44 +610,73 @@ module type Make0_arg = sig
 
   type t
 
-  include Make_gen_arg with type 'a t := t and type 'a elt := Elt.t
+  include Make_gen_arg with type ('a, _) t := t and type 'a elt := Elt.t
 end
 
-module type Container = sig
-  include module type of struct
-    include Export
+module type Make_common_with_creators_arg = sig
+  include Make_gen_arg
+
+  type (_, _) concat
+
+  val of_list : 'a elt list -> ('a, _) t
+  val of_array : 'a elt array -> ('a, _) t
+  val concat : (('a, _) t, _) concat -> ('a, _) t
+end
+
+module type Make_gen_with_creators_arg = sig
+  include Make_common_with_creators_arg
+
+  val concat_of_array : 'a array -> ('a, _) concat
+end
+
+module type Make_with_creators_arg = sig
+  type 'a t
+
+  include
+    Make_common_with_creators_arg
+    with type ('a, _) t := 'a t
+     and type 'a elt := 'a
+     and type ('a, _) concat := 'a t
+end
+
+module type Make0_with_creators_arg = sig
+  module Elt : sig
+    type t
+
+    val equal : t -> t -> bool
   end
 
-  module type S0 = S0
-  module type S0_phantom = S0_phantom
-  module type S1 = S1
-  module type S1_phantom_invariant = S1_phantom_invariant
-  module type S1_phantom = S1_phantom
-  module type Generic = Generic
-  module type Generic_phantom = Generic_phantom
-  module type Summable = Summable
+  type t
 
+  include
+    Make_common_with_creators_arg
+    with type ('a, _) t := t
+     and type 'a elt := Elt.t
+     and type ('a, _) concat := 'a list
+end
+
+module type Derived = sig
   (** Generic definitions of container operations in terms of [fold].
 
       E.g.: [iter ~fold t ~f = fold t ~init:() ~f:(fun () a -> f a)]. *)
 
-  type ('t, 'a, 'accum) fold = 't -> init:'accum -> f:('accum -> 'a -> 'accum) -> 'accum
-  type ('t, 'a) iter = 't -> f:('a -> unit) -> unit
+  type ('t, 'a, 'acc) fold = 't -> init:'acc -> f:(('acc -> 'a -> 'acc)[@local]) -> 'acc
+  type ('t, 'a) iter = 't -> f:(('a -> unit)[@local]) -> unit
   type 't length = 't -> int
 
   val iter : fold:('t, 'a, unit) fold -> ('t, 'a) iter
-  val count : fold:('t, 'a, int) fold -> 't -> f:('a -> bool) -> int
+  val count : fold:('t, 'a, int) fold -> 't -> f:(('a -> bool)[@local]) -> int
 
   val min_elt
     :  fold:('t, 'a, 'a option) fold
     -> 't
-    -> compare:('a -> 'a -> int)
+    -> compare:(('a -> 'a -> int)[@local])
     -> 'a option
 
   val max_elt
     :  fold:('t, 'a, 'a option) fold
     -> 't
-    -> compare:('a -> 'a -> int)
+    -> compare:(('a -> 'a -> int)[@local])
     -> 'a option
 
   val length : fold:('t, _, int) fold -> 't -> int
@@ -584,32 +686,52 @@ module type Container = sig
     :  fold:('t, 'a, 'sum) fold
     -> (module Summable with type t = 'sum)
     -> 't
-    -> f:('a -> 'sum)
+    -> f:(('a -> 'sum)[@local])
     -> 'sum
 
   val fold_result
-    :  fold:('t, 'a, 'b) fold
-    -> init:'b
-    -> f:('b -> 'a -> ('b, 'e) Result.t)
+    :  fold:('t, 'a, 'acc) fold
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'e) Result.t)[@local])
     -> 't
-    -> ('b, 'e) Result.t
+    -> ('acc, 'e) Result.t
 
   val fold_until
-    :  fold:('t, 'a, 'b) fold
-    -> init:'b
-    -> f:('b -> 'a -> ('b, 'final) Continue_or_stop.t)
-    -> finish:('b -> 'final)
+    :  fold:('t, 'a, 'acc) fold
+    -> init:'acc
+    -> f:(('acc -> 'a -> ('acc, 'final) Continue_or_stop.t)[@local])
+    -> finish:(('acc -> 'final)[@local])
     -> 't
     -> 'final
 
   (** Generic definitions of container operations in terms of [iter] and [length]. *)
-  val is_empty : iter:('t, 'a) iter -> 't -> bool
 
-  val exists : iter:('t, 'a) iter -> 't -> f:('a -> bool) -> bool
-  val for_all : iter:('t, 'a) iter -> 't -> f:('a -> bool) -> bool
-  val find : iter:('t, 'a) iter -> 't -> f:('a -> bool) -> 'a option
-  val find_map : iter:('t, 'a) iter -> 't -> f:('a -> 'b option) -> 'b option
+  val is_empty : iter:('t, 'a) iter -> 't -> bool
+  val mem : iter:('t, 'a) iter -> 't -> 'a -> equal:(('a -> 'a -> bool)[@local]) -> bool
+  val exists : iter:('t, 'a) iter -> 't -> f:(('a -> bool)[@local]) -> bool
+  val for_all : iter:('t, 'a) iter -> 't -> f:(('a -> bool)[@local]) -> bool
+  val find : iter:('t, 'a) iter -> 't -> f:(('a -> bool)[@local]) -> 'a option
+  val find_map : iter:('t, 'a) iter -> 't -> f:(('a -> 'b option)[@local]) -> 'b option
   val to_array : length:'t length -> iter:('t, 'a) iter -> 't -> 'a array
+end
+
+module type Container = sig
+  include module type of struct
+    include Export
+  end
+
+  module type S0 = S0
+  module type S0_phantom = S0_phantom
+  module type S0_with_creators = S0_with_creators
+  module type S1 = S1
+  module type S1_phantom = S1_phantom
+  module type S1_with_creators = S1_with_creators
+  module type Derived = Derived
+  module type Generic = Generic
+  module type Generic_with_creators = Generic_with_creators
+  module type Summable = Summable
+
+  include Derived
 
   (** The idiom for using [Container.Make] is to bind the resulting module and to
       explicitly import each of the functions that one wants:
@@ -638,5 +760,17 @@ module type Container = sig
   module Make0 (T : Make0_arg) : S0 with type t := T.t and type elt := T.Elt.t
 
   module Make_gen (T : Make_gen_arg) :
-    Generic with type 'a t := 'a T.t and type 'a elt := 'a T.elt
+    Generic with type ('a, 'phantom) t := ('a, 'phantom) T.t and type 'a elt := 'a T.elt
+
+  module Make_with_creators (T : Make_with_creators_arg) :
+    S1_with_creators with type 'a t := 'a T.t
+
+  module Make0_with_creators (T : Make0_with_creators_arg) :
+    S0_with_creators with type t := T.t and type elt := T.Elt.t
+
+  module Make_gen_with_creators (T : Make_gen_with_creators_arg) :
+    Generic_with_creators
+    with type ('a, 'phantom) t := ('a, 'phantom) T.t
+     and type 'a elt := 'a T.elt
+     and type ('a, 'phantom) concat := ('a, 'phantom) T.concat
 end

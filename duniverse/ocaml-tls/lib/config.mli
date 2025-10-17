@@ -5,7 +5,7 @@ open Core
 (** {1 Config type} *)
 
 (** certificate chain and private key of the first certificate *)
-type certchain = Cert.t list * X509.Private_key.t
+type certchain = X509.Certificate.t list * X509.Private_key.t
 
 (** polymorphic variant of own certificates *)
 type own_cert = [
@@ -18,13 +18,11 @@ type own_cert = [
 type session_cache = SessionID.t -> epoch_data option
 
 type ticket_cache = {
-  lookup : Cstruct.t -> (psk13 * epoch_data) option ;
+  lookup : string -> (psk13 * epoch_data) option ;
   ticket_granted : psk13 -> epoch_data -> unit ;
   lifetime : int32 ;
   timestamp : unit -> Ptime.t
 }
-
-type ticket_cache_opt = ticket_cache option
 
 (** configuration parameters *)
 type config = private {
@@ -37,29 +35,28 @@ type config = private {
   own_certificates : own_cert ; (** optional default certificate chain and other certificate chains *)
   acceptable_cas : X509.Distinguished_name.t list ; (** ordered list of acceptable certificate authorities *)
   session_cache : session_cache ;
-  ticket_cache : ticket_cache_opt ;
+  ticket_cache : ticket_cache option ;
   cached_session : epoch_data option ;
   cached_ticket : (psk13 * epoch_data) option ;
   alpn_protocols : string list ; (** optional ordered list of accepted alpn_protocols *)
   groups : group list ; (** the first FFDHE will be used for TLS 1.2 and below if a DHE ciphersuite is used *)
   zero_rtt : int32 ;
   ip : Ipaddr.t option ;
-} [@@deriving sexp_of]
+}
 
 (** [ciphers13 config] are the ciphersuites for TLS 1.3 in the configuration. *)
 val ciphers13 : config -> Ciphersuite.ciphersuite13 list
 
 (** opaque type of a client configuration *)
-type client [@@deriving sexp]
+type client
 
 (** opaque type of a server configuration *)
-type server [@@deriving sexp]
+type server
 
 (** {1 Constructors} *)
 
 (** [client authenticator ?peer_name ?ciphers ?version ?hashes ?reneg ?certificates ?alpn_protocols] is
-    [client] configuration with the given parameters.
-    @raise Invalid_argument if the configuration is invalid *)
+    [client] configuration with the given parameters. Returns an error if the configuration is invalid. *)
 val client :
   authenticator : X509.Authenticator.t ->
   ?peer_name : [ `host ] Domain_name.t ->
@@ -74,11 +71,10 @@ val client :
   ?alpn_protocols : string list ->
   ?groups : group list ->
   ?ip : Ipaddr.t ->
-  unit -> client
+  unit -> (client, [> `Msg of string ]) result
 
 (** [server ?ciphers ?version ?hashes ?reneg ?certificates ?acceptable_cas ?authenticator ?alpn_protocols]
-    is [server] configuration with the given parameters.
-    @raise Invalid_argument if the configuration is invalid *)
+    is [server] configuration with the given parameters. Returns an error if the configuration is invalid. *)
 val server :
   ?ciphers : Ciphersuite.ciphersuite list ->
   ?version : tls_version * tls_version ->
@@ -93,7 +89,7 @@ val server :
   ?groups : group list ->
   ?zero_rtt : int32 ->
   ?ip : Ipaddr.t ->
-  unit -> server
+  unit -> (server, [> `Msg of string ]) result
 
 (** [peer client name] is [client] with [name] as [peer_name] *)
 val peer : client -> [ `host ] Domain_name.t -> client

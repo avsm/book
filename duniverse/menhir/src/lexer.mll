@@ -14,6 +14,8 @@ open Lexing
 open Parser
 open Positions
 open Keyword
+open Attribute
+open Syntax
 
 (* ------------------------------------------------------------------------ *)
 
@@ -413,17 +415,6 @@ let directives =
     "on_error_reduce", ON_ERROR_REDUCE;
   ]
 
-(* ------------------------------------------------------------------------ *)
-
-(* Decoding escaped characters. *)
-
-let char_for_backslash = function
-  | 'n' -> '\010'
-  | 'r' -> '\013'
-  | 'b' -> '\008'
-  | 't' -> '\009'
-  | c   -> c
-
 }
 
 (* ------------------------------------------------------------------------ *)
@@ -571,18 +562,19 @@ rule main = parse
         )
       )
     }
-| ('%'? as percent) "[@" (attributechar+ as id) whitespace*
+| ('%'? as percent) "[@" (attributechar+ as key) whitespace*
     { let openingpos = lexeme_start_p lexbuf in
       let stretchpos = lexeme_end_p lexbuf in
       let closingpos = attribute openingpos lexbuf in
-      let pos = Positions.import (openingpos, lexeme_end_p lexbuf) in
-      let attr = mk_stretch stretchpos closingpos false [] in
+      let origin = Positions.import (openingpos, lexeme_end_p lexbuf) in
+      let payload = InputFile.chunk (stretchpos, closingpos) in
+      let attr : attribute = { key; payload; origin } in
       if percent = "" then
         (* No [%] sign: this is a normal attribute. *)
-        ATTRIBUTE (Positions.with_pos pos id, attr)
+        ATTRIBUTE attr
       else
         (* A [%] sign is present: this is a grammar-wide attribute. *)
-        GRAMMARATTRIBUTE (Positions.with_pos pos id, attr)
+        GRAMMARATTRIBUTE attr
     }
 | eof
     { EOF }
@@ -819,18 +811,6 @@ and record_string openingpos buffer = parse
 | _ as c
     { Buffer.add_char buffer c;
       record_string openingpos buffer lexbuf }
-
-(* Decoding a string that may contain escaped characters. *)
-
-and decode_string buffer = parse
-| '"'
-    { (* The final double quote is skipped. *) }
-| '\\' (['\\' '\'' '"' 'n' 't' 'b' 'r' ' '] as c)
-    { Buffer.add_char buffer (char_for_backslash c);
-      decode_string buffer lexbuf }
-| _ as c
-    { Buffer.add_char buffer c;
-      decode_string buffer lexbuf }
 
 (* ------------------------------------------------------------------------ *)
 

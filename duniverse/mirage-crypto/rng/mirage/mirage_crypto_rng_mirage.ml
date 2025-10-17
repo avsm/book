@@ -30,47 +30,44 @@
 let src = Logs.Src.create "mirage-crypto-rng-mirage" ~doc:"Mirage crypto RNG mirage"
 module Log = (val Logs.src_log src : Logs.LOG)
 
-module Make (T : Mirage_time.S) (M : Mirage_clock.MCLOCK) = struct
-  include Mirage_crypto_rng
+open Mirage_crypto_rng
 
-  let rdrand_task g delta =
-    match Entropy.cpu_rng with
-    | Error `Not_supported -> ()
-    | Ok cpu_rng ->
-      let open Lwt.Infix in
-      let rdrand = cpu_rng g in
-      Lwt.async (fun () ->
-          let rec one () =
-            rdrand ();
-            T.sleep_ns delta >>=
-            one
-          in
-          one ())
+let rdrand_task delta =
+  match Entropy.cpu_rng with
+  | Error `Not_supported -> ()
+  | Ok cpu_rng ->
+    let open Lwt.Infix in
+    let rdrand = cpu_rng None in
+    Lwt.async (fun () ->
+        let rec one () =
+          rdrand ();
+          Mirage_sleep.ns delta >>=
+          one
+        in
+        one ())
 
-  let bootstrap_functions () =
-    [ Entropy.bootstrap ; Entropy.bootstrap ;
-      Entropy.whirlwind_bootstrap ; Entropy.bootstrap ]
+let bootstrap_functions () =
+  Entropy.[ bootstrap ; bootstrap ; whirlwind_bootstrap ; bootstrap ]
 
-  let running = ref false
+let running = ref false
 
-  let initialize (type a) ?g ?(sleep = Duration.of_sec 1) (rng : a generator) =
-    if !running then
-      Lwt.fail_with "entropy collection already running"
-    else begin
-      (try
-         let _ = default_generator () in
-         Log.warn (fun m -> m "Mirage_crypto_rng.default_generator has already \
-                               been set, check that this call is intentional");
-       with
-         No_default_generator -> ());
-      running := true;
-      let seed =
-        List.mapi (fun i f -> f i) (bootstrap_functions ()) |> Cstruct.concat
-      in
-      let rng = create ?g ~seed ~time:M.elapsed_ns rng in
-      set_default_generator rng;
-      rdrand_task (Some rng) sleep;
-      Mirage_runtime.at_enter_iter (Entropy.timer_accumulator (Some rng));
-      Lwt.return_unit
-    end
-end
+let initialize (type a) ?g ?(sleep = Duration.of_sec 1) (rng : a generator) =
+  if !running then
+    Lwt.fail_with "entropy collection already running"
+  else begin
+    (try
+       let _ = default_generator () in
+       Log.warn (fun m -> m "Mirage_crypto_rng.default_generator has already \
+                             been set, check that this call is intentional");
+     with
+       No_default_generator -> ());
+    running := true;
+    let seed =
+      List.mapi (fun i f -> f i) (bootstrap_functions ()) |> String.concat ""
+    in
+    let rng = create ?g ~seed ~time:Mirage_mtime.elapsed_ns rng in
+    set_default_generator rng;
+    rdrand_task sleep;
+    Mirage_runtime.at_enter_iter (Entropy.timer_accumulator None);
+    Lwt.return_unit
+  end

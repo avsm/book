@@ -40,7 +40,7 @@ exception Undefined
     forced, [Lazy.force x] returns the same value again without recomputing it. If it
     raised an exception, the same exception is raised again. Raise [Undefined] if the
     forcing of [x] tries to force [x] itself recursively. *)
-external force : 'a t -> 'a = "%lazy_force"
+external force : ('a t[@local_opt]) -> 'a = "%lazy_force"
 
 (** Like [force] except that [force_val x] does not use an exception handler, so it may be
     more efficient.  However, if the computation of [x] raises an exception, it is
@@ -61,6 +61,10 @@ val from_val : 'a -> 'a t
 (** [is_val x] returns [true] if [x] has already been forced and did not raise an
     exception. *)
 val is_val : 'a t -> bool
+
+(** [peek x] returns None if [x] has never been forced or [Some v] if [x] was forced
+    to value [v] *)
+val peek : 'a t -> 'a option
 
 (** This type offers a serialization function [sexp_of_t] that won't force its argument.
     Instead, it will serialize the ['a] if it is available, or just use a custom string

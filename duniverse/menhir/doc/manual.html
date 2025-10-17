@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="hevea 2.35">
+<meta name="generator" content="hevea 2.36">
 <style type="text/css">
 .equationcontainer{position:relative;}
 .equationnumber{float:right;left:auto;position:absolute;right:0}
@@ -77,25 +77,22 @@ font-size: 1rem;
 }
 </style>
 <title>Menhir Reference Manual 
-(version 20220210)
+(version 20250912)
 </title>
 </head>
 <body >
 <!--HEVEA command line is: hevea -fix manual.tex -->
 <!--CUT STYLE article--><!--CUT DEF section 1 --><table class="title"><tr><td style="padding:1ex"><h1 class="titlemain">Menhir Reference Manual<br>
-(version 20220210)</h1><h3 class="titlerest">François Pottier and Yann Régis-Gianas<br>
+(version 20250912)</h1><h3 class="titlerest">François Pottier and Yann Régis-Gianas<br>
 INRIA<br>
 <span style="font-family:monospace">{Francois.Pottier, Yann.Regis-Gianas}@inria.fr</span></h3></td></tr>
 </table><!--TOC section id="sec1" Contents-->
-<h2 id="sec1" class="section">Contents</h2><!--SEC END --><ul class="toc"><li class="li-toc">
-<a href="#sec2">1 Foreword</a>
+<h2 id="sec1" class="section">Contents</h2><!--SEC END --><ul class="toc"><li class="li-toc"><a href="#sec2">1 Foreword</a>
 </li><li class="li-toc"><a href="#sec5">2 Usage</a>
 </li><li class="li-toc"><a href="#sec6">3 Lexical conventions</a>
 </li><li class="li-toc"><a href="#sec7">4 Syntax of grammar specifications</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec8">4.1 Declarations</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec9">4.1.1 Headers</a>
+<ul class="toc"><li class="li-toc"><a href="#sec8">4.1 Declarations</a>
+<ul class="toc"><li class="li-toc"><a href="#sec9">4.1.1 Headers</a>
 </li><li class="li-toc"><a href="#sec10">4.1.2 Parameters</a>
 </li><li class="li-toc"><a href="#sec11">4.1.3 Tokens</a>
 </li><li class="li-toc"><a href="#sec12">4.1.4 Priority and associativity</a>
@@ -105,8 +102,7 @@ INRIA<br>
 </li><li class="li-toc"><a href="#sec16">4.1.8 Extra reductions on error</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec17">4.2 Rules—old syntax</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec18">4.2.1 Production groups</a>
+<ul class="toc"><li class="li-toc"><a href="#sec18">4.2.1 Production groups</a>
 </li><li class="li-toc"><a href="#sec22">4.2.2 Productions</a>
 </li><li class="li-toc"><a href="#sec23">4.2.3 Producers</a>
 </li><li class="li-toc"><a href="#sec24">4.2.4 Actuals</a>
@@ -114,86 +110,85 @@ INRIA<br>
 </li><li class="li-toc"><a href="#sec25">4.3 Rules—new syntax</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec27">5 Advanced features</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec28">5.1 Splitting specifications over multiple files</a>
+<ul class="toc"><li class="li-toc"><a href="#sec28">5.1 Splitting specifications over multiple files</a>
 </li><li class="li-toc"><a href="#sec32">5.2 Parameterizing rules</a>
 </li><li class="li-toc"><a href="#sec37">5.3 Inlining</a>
 </li><li class="li-toc"><a href="#sec38">5.4 The standard library</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec39">6 Conflicts</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec40">6.1 When is a conflict benign?</a>
+<ul class="toc"><li class="li-toc"><a href="#sec40">6.1 When is a conflict benign?</a>
 </li><li class="li-toc"><a href="#sec41">6.2 How are severe conflicts explained?</a>
 </li><li class="li-toc"><a href="#sec47">6.3 How are severe conflicts resolved in the end?</a>
 </li><li class="li-toc"><a href="#sec48">6.4 End-of-stream conflicts</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec52">7 Positions</a>
 </li><li class="li-toc"><a href="#sec53">8 Using Menhir as an interpreter</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec54">8.1 Sentences</a>
+<ul class="toc"><li class="li-toc"><a href="#sec54">8.1 Sentences</a>
 </li><li class="li-toc"><a href="#sec55">8.2 Outcomes</a>
 </li><li class="li-toc"><a href="#sec56">8.3 Remarks</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec57">9 Generated API</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec58">9.1 Monolithic API</a>
+<ul class="toc"><li class="li-toc"><a href="#sec58">9.1 Monolithic API</a>
 </li><li class="li-toc"><a href="#sec59">9.2 Incremental API</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec60">9.2.1 Starting the parser</a>
+<ul class="toc"><li class="li-toc"><a href="#sec60">9.2.1 Starting the parser</a>
 </li><li class="li-toc"><a href="#sec61">9.2.2 Driving the parser</a>
 </li><li class="li-toc"><a href="#sec62">9.2.3 Inspecting the parser’s state</a>
 </li><li class="li-toc"><a href="#sec63">9.2.4 Updating the parser’s state</a>
 </li></ul>
 </li><li class="li-toc"><a href="#sec64">9.3 Inspection API</a>
+</li><li class="li-toc"><a href="#sec65">9.4 Unparsing API</a>
+<ul class="toc"><li class="li-toc"><a href="#sec66">9.4.1 DCST construction API</a>
+</li><li class="li-toc"><a href="#sec67">9.4.2 Settlement</a>
+</li><li class="li-toc"><a href="#sec68">9.4.3 CST deconstruction API</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec65">10 Error handling: the traditional way</a>
-</li><li class="li-toc"><a href="#sec68">11 Error handling: the new way</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec69">11.1 The <span style="font-family:monospace">.messages</span> file format</a>
-</li><li class="li-toc"><a href="#sec73">11.2 Maintaining <span style="font-family:monospace">.messages</span> files</a>
-</li><li class="li-toc"><a href="#sec78">11.3 Writing accurate diagnostic messages</a>
-</li><li class="li-toc"><a href="#sec85">11.4 A working example</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec86">12 Coq back-end</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec87">12.1 Error messaging options for Coq mode</a>
+</li><li class="li-toc"><a href="#sec69">10 Error handling: the traditional way</a>
+</li><li class="li-toc"><a href="#sec72">11 Error handling: the new way</a>
+<ul class="toc"><li class="li-toc"><a href="#sec73">11.1 The <span style="font-family:monospace">.messages</span> file format</a>
+</li><li class="li-toc"><a href="#sec77">11.2 Maintaining <span style="font-family:monospace">.messages</span> files</a>
+</li><li class="li-toc"><a href="#sec82">11.3 Writing accurate diagnostic messages</a>
+</li><li class="li-toc"><a href="#sec89">11.4 A working example</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec88">13 Building grammarware on top of Menhir</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec89">13.1 Menhir’s SDK</a>
-</li><li class="li-toc"><a href="#sec90">13.2 Attributes</a>
+</li><li class="li-toc"><a href="#sec90">12 Coq back-end</a>
+<ul class="toc"><li class="li-toc"><a href="#sec91">12.1 Error messaging options for Coq mode</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec91">14 Interaction with build systems</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec92">14.1 OCaml type inference and dependency analysis</a>
-<ul class="toc"><li class="li-toc">
-<a href="#sec93">14.1.1 Running without OCaml type information</a>
-</li><li class="li-toc"><a href="#sec94">14.1.2 Obtaining OCaml type information by calling the OCaml compiler</a>
-</li><li class="li-toc"><a href="#sec95">14.1.3 Obtaining OCaml type information without calling the OCaml compiler</a>
+</li><li class="li-toc"><a href="#sec92">13 Building grammarware on top of Menhir</a>
+<ul class="toc"><li class="li-toc"><a href="#sec93">13.1 Menhir’s SDK</a>
+</li><li class="li-toc"><a href="#sec94">13.2 Attributes</a>
+<ul class="toc"><li class="li-toc"><a href="#sec95">13.2.1 Attribute structure</a>
+</li><li class="li-toc"><a href="#sec96">13.2.2 Attribute placement</a>
+</li><li class="li-toc"><a href="#sec97">13.2.3 Syntactic sugar</a>
+</li><li class="li-toc"><a href="#sec98">13.2.4 Attribute propagation</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec96">14.2 Compilation flags</a>
 </li></ul>
-</li><li class="li-toc"><a href="#sec97">15 Comparison with <span style="font-family:monospace">ocamlyacc</span></a>
-</li><li class="li-toc"><a href="#sec98">16 Questions and Answers</a>
-</li><li class="li-toc"><a href="#sec99">17 Technical background</a>
+</li><li class="li-toc"><a href="#sec102">14 Interaction with build systems</a>
+<ul class="toc"><li class="li-toc"><a href="#sec103">14.1 OCaml type inference and dependency analysis</a>
+<ul class="toc"><li class="li-toc"><a href="#sec104">14.1.1 Running without OCaml type information</a>
+</li><li class="li-toc"><a href="#sec105">14.1.2 Obtaining OCaml type information by calling the OCaml compiler</a>
+</li><li class="li-toc"><a href="#sec106">14.1.3 Obtaining OCaml type information without calling the OCaml compiler</a>
+</li></ul>
+</li><li class="li-toc"><a href="#sec107">14.2 Compilation flags</a>
+</li></ul>
+</li><li class="li-toc"><a href="#sec108">15 Comparison with <span style="font-family:monospace">ocamlyacc</span></a>
+</li><li class="li-toc"><a href="#sec109">16 Questions and Answers</a>
+</li><li class="li-toc"><a href="#sec110">17 Technical background</a>
 </li></ul>
 <!--TOC section id="sec2" Foreword-->
 <h2 id="sec2" class="section">1 Foreword</h2><!--SEC END --><p>Menhir is a parser generator. It turns high-level grammar specifications,
 decorated with “semantic actions” (fragments of executable code), into
 parsers. It is based on Knuth’s LR(1) parser construction
-technique ‍[<a href="#knuth-lr-65">16</a>]. It is strongly inspired by its precursors:
-<span style="font-family:monospace">yacc</span> ‍[<a href="#johnson-yacc-79">12</a>], <span style="font-family:monospace">ML-Yacc</span> ‍[<a href="#tarditi-appel-00">23</a>], and
-<span style="font-family:monospace">ocamlyacc</span> ‍[<a href="#ocaml">19</a>], but offers a large number of minor and major
+technique [<a href="#knuth-lr-65">16</a>]. It is strongly inspired by its precursors:
+<span style="font-family:monospace">yacc</span> [<a href="#johnson-yacc-79">12</a>], <span style="font-family:monospace">ML-Yacc</span> [<a href="#tarditi-appel-00">24</a>], and
+<span style="font-family:monospace">ocamlyacc</span> [<a href="#ocaml">19</a>], but offers a large number of minor and major
 improvements that make it a more modern tool.</p><p>This brief reference manual explains how to use Menhir. It does not attempt to
 explain context-free grammars, parsing, or the LR technique. Readers who have
 never used a parser generator are encouraged to read about these ideas
-first ‍[<a href="#aho-86">1</a>,<a href="#appel-tiger-98">2</a>,<a href="#hopcroft-motwani-ullman-00">9</a>]. They are also
+first [<a href="#aho-86">1</a>,<a href="#appel-tiger-98">2</a>,<a href="#hopcroft-motwani-ullman-00">9</a>]. They are also
 invited to have a look at the <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos"><span style="font-family:monospace">demos</span></a> directory in Menhir’s
 distribution.</p><!--TOC paragraph id="sec3" Back-ends-->
 <h4 id="sec3" class="paragraph">Back-ends</h4><!--SEC END --><p>
 Menhir currently offers a choice between several “back-ends”:
-</p><ul class="itemize"><li class="li-itemize">
-When the “code” back-end is used,
+</p><ul class="itemize"><li class="li-itemize">When the “code” back-end is used,
 the semantic actions are fragments of OCaml code,
 and the parser produced by Menhir is a stand-alone piece of OCaml code.
 The grammar must be placed in a file whose name ends with <span style="font-family:monospace">.mly</span>,
@@ -261,14 +256,14 @@ file <span style="font-style:italic">filename</span>, which must obey the <span 
 it to an OCaml function that maps a state number to a message. The OCaml code
 is sent to the standard output channel. At the same time, Menhir checks that
 the collection of input sentences in the file <span style="font-style:italic">filename</span> is correct and
-irredundant. For more information, see §<a href="#sec%3Aerrors%3Anew">11</a>.</p><p><span style="font-family:monospace">--coq</span>.   This switch causes Menhir to produce Coq code. See §<a href="#sec%3Acoq">12</a>.</p><p><span style="font-family:monospace">--coq-lib-path</span> <span style="font-style:italic">path</span>.   This switch allows specifying under what
+irredundant. For more information, see §<a href="#sec%3Aerrors%3Anew">11</a>.</p><p><span style="font-family:monospace">--coq</span>.   This switch causes Menhir to produce Coq code. See §<a href="#sec%3Acoq">12</a>.</p><p><span style="font-family:monospace">--coq-lib-no-path</span>.   This switch indicates that references to the Coq
+library <span style="font-family:monospace">MenhirLib</span> should <em>not</em> be qualified. This was the default
+behavior of Menhir prior to 2018/05/30. This switch is provided for
+compatibility, but normally should not be used.</p><p><span style="font-family:monospace">--coq-lib-path</span> <span style="font-style:italic">path</span>.   This switch allows specifying under what
 name (or path) the Coq support library is known to Coq. When Menhir runs in
 <span style="font-family:monospace">--coq</span> mode, the generated parser contains references to several modules in
 this library. This path is used to qualify these references. Its default value
-is <span style="font-family:monospace">MenhirLib</span>.</p><p><span style="font-family:monospace">--coq-lib-no-path</span>.   This switch indicates that references to the Coq
-library <span style="font-family:monospace">MenhirLib</span> should <em>not</em> be qualified. This was the default
-behavior of Menhir prior to 2018/05/30. This switch is provided for
-compatibility, but normally should not be used.</p><p><span style="font-family:monospace">--coq-no-actions</span>.   (Used in conjunction with <span style="font-family:monospace">--coq</span>.) This switch
+is <span style="font-family:monospace">MenhirLib</span>.</p><p><span style="font-family:monospace">--coq-no-actions</span>.   (Used in conjunction with <span style="font-family:monospace">--coq</span>.) This switch
 causes the semantic actions present in the <span style="font-family:monospace">.vy</span> file to be ignored and
 replaced with <code class="verb">tt</code>, the unique inhabitant of Coq’s <code class="verb">unit</code> type. This
 feature can be used to test the Coq back-end with a standard grammar, that is, a
@@ -285,7 +280,13 @@ Menhir and <span style="font-family:monospace">MenhirLib</span> match.</p><p><sp
 written to the file <span style="font-style:italic">basename</span><span style="font-family:monospace">.automaton</span>. This description is written after
 benign conflicts have been resolved, before severe conflicts are resolved
 (§<a href="#sec%3Aconflicts">6</a>), and before extra reductions are introduced
-(§<a href="#sec%3Aonerrorreduce">4.1.8</a>).</p><p><span style="font-family:monospace">--dump-resolved</span>.   This command line switch causes a description of
+(§<a href="#sec%3Aonerrorreduce">4.1.8</a>).</p><p><span style="font-family:monospace">--dump-menhirLib</span> <span style="font-style:italic">directory</span>.   This command causes Menhir to
+write the source code of the runtime library <span style="font-family:monospace">MenhirLib</span> in the directory
+<span style="font-style:italic">directory</span>, and exit. The directory <span style="font-style:italic">directory</span> must exist already. Two
+files, named <span style="font-family:monospace">menhirLib.ml</span> and <span style="font-family:monospace">menhirLib.mli</span>, are created in
+it. This command can be useful to users with special needs who wish to use
+<span style="font-family:monospace">MenhirLib</span> but do not want to rely on it being installed somewhere in the file
+system.</p><p><span style="font-family:monospace">--dump-resolved</span>.   This command line switch causes a description of
 the automaton to be written to the file <span style="font-style:italic">basename</span><span style="font-family:monospace">.automaton.resolved</span>. This
 description is written after all conflicts have been resolved
 (§<a href="#sec%3Aconflicts">6</a>) and after extra reductions have been introduced
@@ -302,7 +303,8 @@ to carry an integer parameter, as follows: <span style="font-family:monospace">e
 When the parser detects a syntax error, the number of the current state is
 reported in this way. This allows the caller to select a suitable syntax error
 message, along the lines described in §<a href="#sec%3Aerrors%3Anew">11</a>. This switch is
-currently supported by the code back-end only.
+currently supported by the code back-end only. Thus, it is incompatible
+with <span style="font-family:monospace">--table</span>. It is also incompatible with <span style="font-family:monospace">--fixed-exception</span>.
 </p><p><span style="font-family:monospace">--explain</span>.   This switch causes conflict explanations to be
 written to the file <span style="font-style:italic">basename</span><span style="font-family:monospace">.conflicts</span>. See also §<a href="#sec%3Aconflicts">6</a>.</p><p><span style="font-family:monospace">--external-tokens</span> <span style="font-style:italic">T</span>.   This switch causes the definition of
 the <span style="font-family:monospace">token</span> type to be omitted in <span style="font-style:italic">basename</span><span style="font-family:monospace">.ml</span> and
@@ -314,11 +316,7 @@ out of a grammar specification using the <span style="font-family:monospace">--o
 internally defined as a synonym for <span style="font-family:monospace">Parsing.Parse_error</span>. This means
 that an exception handler that catches <span style="font-family:monospace">Parsing.Parse_error</span> will also
 catch the generated parser’s <span style="font-family:monospace">Error</span>. This helps increase Menhir’s
-compatibility with <span style="font-family:monospace">ocamlyacc</span>. There is otherwise no reason to use this switch.</p><p><span style="font-family:monospace">--graph</span>.   This switch causes a description of the grammar’s
-dependency graph to be written to the file <span style="font-style:italic">basename</span><span style="font-family:monospace">.dot</span>. The graph’s
-vertices are the grammar’s nonterminal symbols. There is a directed edge from
-vertex <span style="font-style:italic">A</span> to vertex <span style="font-style:italic">B</span> if the definition of <span style="font-style:italic">A</span> refers to <span style="font-style:italic">B</span>. The file is
-in a format that is suitable for processing by the <em>graphviz</em> toolkit.</p><p><span style="font-family:monospace">--infer</span>, <span style="font-family:monospace">--infer-write-query</span>, <span style="font-family:monospace">--infer-read-reply</span>.   See §<a href="#sec%3Abuild">14</a>.</p><p><span style="font-family:monospace">--inspection</span>.   This switch requires <span style="font-family:monospace">--table</span>. It causes Menhir to generate
+compatibility with <span style="font-family:monospace">ocamlyacc</span>. There is otherwise no reason to use this switch.</p><p><span style="font-family:monospace">--infer</span>, <span style="font-family:monospace">--infer-write-query</span>, <span style="font-family:monospace">--infer-read-reply</span>.   See §<a href="#sec%3Abuild">14</a>.</p><p><span style="font-family:monospace">--inspection</span>.   This switch requires <span style="font-family:monospace">--table</span>. It causes Menhir to generate
 not only the monolithic and incremental APIs (§<a href="#sec%3Amonolithic">9.1</a>,
 §<a href="#sec%3Aincremental">9.2</a>), but also the inspection API (§<a href="#sec%3Ainspection">9.3</a>).
 Activating this switch causes a few more tables to be produced, resulting in
@@ -377,7 +375,11 @@ produce and display a random sentence that is generated by the nonterminal
 symbol <span style="font-style:italic">symbol</span>. The sentence is displayed as a sequence of terminal
 symbols, separated with spaces. Each terminal symbol is represented by its
 token alias (§<a href="#sec%3Atokens">4.1.3</a>). This assumes that a token alias has been
-defined for every token.</p><p><span style="font-family:monospace">--raw-depend</span>.   See §<a href="#sec%3Abuild">14</a>.</p><p><span style="font-family:monospace">--require-aliases</span>.   This switch causes Menhir to check that a token
+defined for every token.</p><p><span style="font-family:monospace">--raw-depend</span>.   See §<a href="#sec%3Abuild">14</a>.</p><p><span style="font-family:monospace">--reference-graph</span>.   This switch causes a description of the grammar’s
+dependency graph to be written to the file <span style="font-style:italic">basename</span><span style="font-family:monospace">.dot</span>. The graph’s
+vertices are the grammar’s nonterminal symbols. There is a directed edge from
+vertex <span style="font-style:italic">A</span> to vertex <span style="font-style:italic">B</span> if the definition of <span style="font-style:italic">A</span> refers to <span style="font-style:italic">B</span>. The file is
+in a format that is suitable for processing by the <em>graphviz</em> toolkit.</p><p><span style="font-family:monospace">--require-aliases</span>.   This switch causes Menhir to check that a token
 alias (§<a href="#sec%3Atokens">4.1.3</a>) has been defined for every token. There is no
 requirement for this alias to be actually used; it must simply exist. A
 missing alias gives rise to a warning (and, in <span style="font-family:monospace">--strict</span> mode, to an error).</p><p><span style="font-family:monospace">--stdlib</span> <span style="font-style:italic">directory</span>.   This switch exists only for
@@ -410,7 +412,10 @@ information to be written to the file <span style="font-style:italic">filename</
 the generated parser, so that, when the parser is run, its actions are
 logged to the standard error channel. This is analogous to <span style="font-family:monospace">ocamlrun</span>’s
 <span style="font-family:monospace">p=1</span> parameter, except this switch must be enabled at compile time:
-one cannot selectively enable or disable tracing at runtime.</p><p><span style="font-family:monospace">--unused-precedence-levels</span>.   This switch suppresses all warnings about
+one cannot selectively enable or disable tracing at runtime.</p><p><span style="font-family:monospace">--unparsing</span>.   This switch requires <span style="font-family:monospace">--table</span>. It causes Menhir to
+generate the unparsing API (§<a href="#sec%3Aunparsing">9.4</a>). When this switch is
+enabled, the generated parser must be linked with the libraries
+<span style="font-family:monospace">menhirLib</span> and <span style="font-family:monospace">menhirCST</span>.</p><p><span style="font-family:monospace">--unused-precedence-levels</span>.   This switch suppresses all warnings about
 useless <span style="font-family:sans-serif"><span style="font-weight:bold">%left</span></span>, <span style="font-family:sans-serif"><span style="font-weight:bold">%right</span></span>, <span style="font-family:sans-serif"><span style="font-weight:bold">%nonassoc</span></span> and <span style="font-family:sans-serif"><span style="font-weight:bold">%prec</span></span> declarations.</p><p><span style="font-family:monospace">--unused-token</span> <span style="font-style:italic">symbol</span>.   This switch suppresses the warning that
 is normally emitted when Menhir finds that the terminal symbol <span style="font-style:italic">symbol</span> is
 unused.</p><p><span style="font-family:monospace">--unused-tokens</span>.   This switch suppresses all of the warnings that are
@@ -497,20 +502,20 @@ must be fully qualified.</p>
 <tr><td style="text-align:right;white-space:nowrap" ><span style="font-style:italic">pattern</span> </td><td style="text-align:center;white-space:nowrap" > ::= </td><td style="text-align:left;white-space:nowrap" ><span style="font-style:italic">lid</span>
   ∣  
 <span style="font-family:sans-serif"><span style="font-weight:bold">_</span></span>   ∣  
-<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div>   ∣  
+<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div>   ∣  
 <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">pattern</span> , …, <span style="font-style:italic">pattern</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span> </td></tr>
 </table>
 </div>
 <div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 1: Syntax of grammar specifications</td></tr>
 </table></div>
 <a id="fig:syntax"></a>
-<div class="center"><hr class="floatrule"></div></blockquote><p>The syntax of grammar specifications appears in Figure ‍<a href="#fig%3Asyntax">1</a>.
+<div class="center"><hr class="floatrule"></div></blockquote><p>The syntax of grammar specifications appears in Figure <a href="#fig%3Asyntax">1</a>.
 The places where attributes can be attached are not shown; they
 are documented separately (§<a href="#sec%3Aattributes">13.2</a>).
 A grammar specification begins with a sequence of declarations
 (§<a href="#sec%3Adecls">4.1</a>), ended by a mandatory <span style="font-family:sans-serif"><span style="font-weight:bold">%%</span></span> keyword.
 Following this keyword, a sequence of rules is expected.
-Each rule defines a nonterminal symbol ‍<span style="font-style:italic">lid</span>,
+Each rule defines a nonterminal symbol <span style="font-style:italic">lid</span>,
 whose name must begin with a lowercase letter.
 A rule is expressed either in the “old syntax” (§<a href="#sec%3Aold%3Arules">4.2</a>) or in the
 “new syntax” (§<a href="#sec%3Anew%3Arules">4.3</a>), which is slightly more elegant and
@@ -526,8 +531,7 @@ actions. If a single grammar specification file contains multiple headers,
 their order is preserved. However, when two headers originate in distinct
 grammar specification files, the order in which they are copied to the <span style="font-family:monospace">.ml</span> file is unspecified.</p><p>It is important to note that the header is copied by Menhir only to the <span style="font-family:monospace">.ml</span> file, <em>not</em> to the <span style="font-family:monospace">.mli</span> file. Therefore, it should not contain
 declarations that affect the meaning of the types that appear in the <span style="font-family:monospace">.mli</span> file. Here are two problems that people commonly run into:
-</p><ul class="itemize"><li class="li-itemize">
-<span style="font-weight:bold">Problem:</span> Placing an <span style="font-family:sans-serif"><span style="font-weight:bold">open</span></span> directive that is required for a
+</p><ul class="itemize"><li class="li-itemize"><span style="font-weight:bold">Problem:</span> Placing an <span style="font-family:sans-serif"><span style="font-weight:bold">open</span></span> directive that is required for a
 <span style="font-family:sans-serif"><span style="font-weight:bold">%type</span></span> declaration to make sense. For instance, writing <code class="verb">open Foo</code> in
 the header and declaring <code class="verb">%type&lt;t&gt; bar</code>, where the type <code class="verb">t</code> is
 defined in the module <code class="verb">Foo</code>, will not work.
@@ -660,22 +664,21 @@ potentially eligible for reduction when an invalid token is found.
 This may cause one or more extra reduction steps to be performed
 before the error is detected.</p><p>More precisely, this declaration affects the automaton as follows. Let us say
 that a production <span style="font-style:italic">lid</span> → … is “reducible on error” if
-its left-hand symbol ‍<span style="font-style:italic">lid</span> appears in a <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration. After
+its left-hand symbol <span style="font-style:italic">lid</span> appears in a <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration. After
 the automaton has been constructed and after any conflicts have been resolved,
-in every state ‍<span style="font-style:italic">s</span>, the following algorithm is applied:
-</p><ol class="enumerate" type=1><li class="li-enumerate">
-Construct the set of all productions that are ready to be reduced in
-state ‍<span style="font-style:italic">s</span> and are reducible on error;
+in every state <span style="font-style:italic">s</span>, the following algorithm is applied:
+</p><ol class="enumerate" type=1><li class="li-enumerate">Construct the set of all productions that are ready to be reduced in
+state <span style="font-style:italic">s</span> and are reducible on error;
 </li><li class="li-enumerate">Test if one of them, say <span style="font-style:italic">p</span>, has higher “on-error-reduce-priority”
 than every other production in this set;
-</li><li class="li-enumerate">If so, in state ‍<span style="font-style:italic">s</span>, replace every error action with a reduction of the
-production ‍<span style="font-style:italic">p</span>.
-(In other words, for every terminal symbol ‍<span style="font-style:italic">t</span>, if the action table
-says: “in state ‍<span style="font-style:italic">s</span>, when the next input symbol is ‍<span style="font-style:italic">t</span>, fail”, then this
-entry is replaced with: “in state ‍<span style="font-style:italic">s</span>, when the next input symbol
-is ‍<span style="font-style:italic">t</span>, reduce production ‍<span style="font-style:italic">p</span>”.)
-</li></ol><p>If step 3 above is executed in state ‍<span style="font-style:italic">s</span>, then an error can never be detected
-in state ‍<span style="font-style:italic">s</span>, since all error actions in state ‍<span style="font-style:italic">s</span> are replaced with reduce
+</li><li class="li-enumerate">If so, in state <span style="font-style:italic">s</span>, replace every error action with a reduction of the
+production <span style="font-style:italic">p</span>.
+(In other words, for every terminal symbol <span style="font-style:italic">t</span>, if the action table
+says: “in state <span style="font-style:italic">s</span>, when the next input symbol is <span style="font-style:italic">t</span>, fail”, then this
+entry is replaced with: “in state <span style="font-style:italic">s</span>, when the next input symbol
+is <span style="font-style:italic">t</span>, reduce production <span style="font-style:italic">p</span>”.)
+</li></ol><p>If step 3 above is executed in state <span style="font-style:italic">s</span>, then an error can never be detected
+in state <span style="font-style:italic">s</span>, since all error actions in state <span style="font-style:italic">s</span> are replaced with reduce
 actions. Error detection is deferred: at least one reduction takes place
 before the error is detected. It is a “spurious” reduction: in a canonical
 LR(1) automaton, it would not take place.</p><p>An <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration does not affect the language that is accepted
@@ -768,7 +771,7 @@ keyword (<span style="font-family:sans-serif"><span style="font-weight:bold">$1<
 §<a href="#sec%3Atemplates">5.2</a>), then it should be applied:
 <span style="font-style:italic">id</span><span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">actual</span>, …, <span style="font-style:italic">actual</span> <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span> .</p><p>An actual may be followed with a modifier (<span style="font-family:sans-serif"><span style="font-weight:bold">?</span></span>, </p><div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( 3px )))">+</div><p>, or
 <span style="font-family:sans-serif"><span style="font-weight:bold">*</span></span>). This is explained further on (see §<a href="#sec%3Atemplates">5.2</a> and
-Figure ‍<a href="#fig%3Asugar">2</a>).</p><p>An actual may also be an “anonymous rule”. In that case, one writes
+Figure <a href="#fig%3Asugar">2</a>).</p><p>An actual may also be an “anonymous rule”. In that case, one writes
 just the rule’s right-hand side, which takes the form <span style="font-style:italic">group</span> <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> 
 … <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> 
 <span style="font-style:italic">group</span>.
@@ -809,9 +812,8 @@ that is, a macro.
 A rule can be preceded with the keyword <span style="font-family:sans-serif"><span style="font-weight:bold">%public</span></span> (§<a href="#sec%3Asplit">5.1</a>)
 and can be parameterized with a tuple of formal parameters
 <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">id</span>, …, <span style="font-style:italic">id</span> <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span>  (§<a href="#sec%3Atemplates">5.2</a>).
-The various forms of expressions, listed in Figure ‍<a href="#fig%3Asyntax">1</a>, are:
-</p><ul class="itemize"><li class="li-itemize">
-A <span style="font-weight:bold">choice</span> between several expressions,
+The various forms of expressions, listed in Figure <a href="#fig%3Asyntax">1</a>, are:
+</p><ul class="itemize"><li class="li-itemize">A <span style="font-weight:bold">choice</span> between several expressions,
 [ <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> ]
 <span style="font-style:italic">expression</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> … <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <span style="font-style:italic">expression</span><sub><span style="font-style:italic">n</span></sub>.
 The leading bar is optional.</li><li class="li-itemize">A <span style="font-weight:bold">sequence</span> of two expressions,
@@ -819,7 +821,7 @@ The leading bar is optional.</li><li class="li-itemize">A <span style="font-weig
 The semantic value produced by <span style="font-style:italic">expression</span><sub>1</sub>
 is decomposed according to the pattern <span style="font-style:italic">pattern</span>.
 The OCaml variables introduced by <span style="font-style:italic">pattern</span> may appear in a semantic action
-that ends the sequence <span style="font-style:italic">expression</span><sub>2</sub>.</li><li class="li-itemize">A sequence <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">id</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">expression</span><sub>2</sub>,
+that ends the sequence <span style="font-style:italic">expression</span><sub>2</sub>.</li><li class="li-itemize">A sequence <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">id</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">expression</span><sub>2</sub>,
 which is sugar for <span style="font-style:italic">id</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">id</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">expression</span><sub>2</sub>.
 This is a <span style="font-weight:bold">pun</span>.
 </li><li class="li-itemize">A sequence <span style="font-style:italic">expression</span><sub>1</sub> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">expression</span><sub>2</sub>,
@@ -832,15 +834,15 @@ end of a sequence: <span style="font-style:italic">id</span> at the end of a seq
 <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">id</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span>
 for some fresh variable <span style="font-style:italic">x</span>.
 Thus, a sequence need not end with a semantic action.</li><li class="li-itemize">An expression followed with <span style="font-family:sans-serif"><span style="font-weight:bold">?</span></span>, <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( 3px )))">+</div>, or <span style="font-family:sans-serif"><span style="font-weight:bold">*</span></span>. This is sugar
-for the previous form: see §<a href="#sec%3Atemplates">5.2</a> and Figure ‍<a href="#fig%3Asugar">2</a>.</li><li class="li-itemize">A <span style="font-weight:bold">semantic action</span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">OCaml code</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> ,
+for the previous form: see §<a href="#sec%3Atemplates">5.2</a> and Figure <a href="#fig%3Asugar">2</a>.</li><li class="li-itemize">A <span style="font-weight:bold">semantic action</span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">OCaml code</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> ,
 possibly followed with a precedence annotation <span style="font-family:sans-serif"><span style="font-weight:bold">%prec</span></span> <span style="font-style:italic">id</span>.
 This OCaml code can refer to the variables that have been bound
 earlier in the sequence that this semantic action ends.
 These include all variables named by the user as well as all
 variables introduced by a 
-<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div>  pattern as part of a pun.
+<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div>  pattern as part of a pun.
 The notation <span style="font-family:sans-serif"><span style="font-weight:bold">$</span></span><span style="font-style:italic">i</span>, where <span style="font-style:italic">i</span> is an integer, is forbidden.</li><li class="li-itemize">A <span style="font-weight:bold">point-free semantic action</span> <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;</span></span> <span style="font-style:italic">OCaml id</span> <span style="font-family:sans-serif"><span style="font-weight:bold">&gt;</span></span>,
-possibly followed with a precedence annotation <span style="font-family:sans-serif"><span style="font-weight:bold">%prec</span></span> ‍<span style="font-style:italic">id</span>.
+possibly followed with a precedence annotation <span style="font-family:sans-serif"><span style="font-weight:bold">%prec</span></span> <span style="font-style:italic">id</span>.
 The OCaml identifier <span style="font-style:italic">id</span> must denote a function or a data
 constructor. It is applied to a tuple of the variables that have
 been bound earlier in the sequence that this semantic action ends.
@@ -849,13 +851,13 @@ Thus, <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;</
 where <span style="font-style:italic">x</span><sub>1</sub>, …, <span style="font-style:italic">x</span><sub><span style="font-style:italic">n</span></sub> are the variables bound earlier.
 These include all variables named by the user as well as all
 variables introduced by a 
-<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div>  pattern.</li><li class="li-itemize">An identity semantic action <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;&gt;</span></span>. This is sugar for
+<div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div>  pattern.</li><li class="li-itemize">An identity semantic action <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;&gt;</span></span>. This is sugar for
 <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;</span></span> <span style="font-style:italic">identity</span> <span style="font-family:sans-serif"><span style="font-weight:bold">&gt;</span></span>, where <span style="font-style:italic">identity</span> is OCaml’s
 identity function.
 Therefore, it is sugar for
 <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span>  (<span style="font-style:italic">x</span><sub>1</sub>, …, <span style="font-style:italic">x</span><sub><span style="font-style:italic">n</span></sub>)  <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> ,
 where <span style="font-style:italic">x</span><sub>1</sub>, …, <span style="font-style:italic">x</span><sub><span style="font-style:italic">n</span></sub> are the variables bound earlier.
-</li></ul><p>The syntax of expressions, as presented in Figure ‍<a href="#fig%3Asyntax">1</a>, seems more
+</li></ul><p>The syntax of expressions, as presented in Figure <a href="#fig%3Asyntax">1</a>, seems more
 permissive than it really is. In reality, a choice cannot be nested inside a
 sequence;
 a sequence cannot be nested in the left-hand side of a sequence; a semantic
@@ -868,10 +870,10 @@ Furthermore, an expression between parentheses
 To surround an expression with parentheses, one must write either
 <span style="font-style:italic">midrule</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">expression</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span>  or
 <span style="font-style:italic">endrule</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">expression</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span> ;
-see §<a href="#sec%3Alibrary">5.4</a> and Figure ‍<a href="#fig%3Astandard">3</a>.</p><p>When a complex expression (e.g., a choice or a sequence) is placed
+see §<a href="#sec%3Alibrary">5.4</a> and Figure <a href="#fig%3Astandard">3</a>.</p><p>When a complex expression (e.g., a choice or a sequence) is placed
 in parentheses, as in <span style="font-style:italic">id</span> <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">expression</span>  <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span>, this is
 equivalent to using <span style="font-style:italic">id</span> <span style="font-family:sans-serif"><span style="font-weight:bold">(</span></span>  <span style="font-style:italic">s</span> <span style="font-family:sans-serif"><span style="font-weight:bold">)</span></span> , where the fresh
-symbol ‍<span style="font-style:italic">s</span> is declared as a synonym for this expression, via the
+symbol <span style="font-style:italic">s</span> is declared as a synonym for this expression, via the
 declaration
 <span style="font-family:sans-serif"><span style="font-weight:bold">let</span></span> <span style="font-style:italic">s</span> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">==</span></span></span> <span style="font-style:italic">expression</span>.
 This idiom is also known as an anonymous rule (§<a href="#sec%3Aactual">4.2.4</a>).</p>
@@ -890,8 +892,8 @@ can be defined as follows:
 Using a pun, it can also be written as follows:
 </p><blockquote class="quote">
 <table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="text-align:left;white-space:nowrap" > <span style="font-family:sans-serif"><span style="font-weight:bold">let</span></span> <span style="font-style:italic">option</span>(<span style="font-style:italic">x</span>) <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">:=</span></span></span> </td></tr>
-<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <span class="phantom"><div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">None</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> </td></tr>
-<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">Some x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span>
+<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <span class="phantom"><div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">None</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> </td></tr>
+<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">Some x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span>
 </td></tr>
 </table>
 </blockquote><p>
@@ -899,8 +901,8 @@ Using a pun and a point-free semantic action,
 it can also be expressed as follows:
 </p><blockquote class="quote">
 <table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="text-align:left;white-space:nowrap" > <span style="font-family:sans-serif"><span style="font-weight:bold">let</span></span> <span style="font-style:italic">option</span>(<span style="font-style:italic">x</span>) <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">:=</span></span></span> </td></tr>
-<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <span class="phantom"><div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">None</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> </td></tr>
-<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;</span></span> <span style="font-style:italic">Some</span> <span style="font-family:sans-serif"><span style="font-weight:bold">&gt;</span></span>
+<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <span class="phantom"><div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">{</span></span> <span style="font-style:italic">None</span> <span style="font-family:sans-serif"><span style="font-weight:bold">}</span></span> </td></tr>
+<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;</span></span> <span style="font-style:italic">Some</span> <span style="font-family:sans-serif"><span style="font-weight:bold">&gt;</span></span>
 </td></tr>
 </table>
 </blockquote><p>
@@ -909,7 +911,7 @@ also part of Menhir’s standard library (§<a href="#sec%3Alibrary">5.4</a>),
 can be defined in the new syntax as follows:
 </p><blockquote class="quote">
 <table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="text-align:left;white-space:nowrap" > <span style="font-family:sans-serif"><span style="font-weight:bold">let</span></span> <span style="font-style:italic">delimited</span>(<span style="font-style:italic">opening</span>, <span style="font-style:italic">x</span>, <span style="font-style:italic">closing</span>) <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">==</span></span></span> </td></tr>
-<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-style:italic">opening</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> ‍</div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">closing</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;&gt;</span></span> </td></tr>
+<tr><td style="text-align:left;white-space:nowrap" >  <span style="font-style:italic">opening</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( -5px )))"> </div> <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">=</span></span></span> <span style="font-style:italic">x</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-style:italic">closing</span> <span style="font-family:sans-serif"><span style="font-weight:bold">;</span></span> <span style="font-family:sans-serif"><span style="font-weight:bold">&lt;&gt;</span></span> </td></tr>
 </table>
 </blockquote><p>
 The use of <span style="font-family:sans-serif"><span style="font-weight:bold"><span style="font-size:small">==</span></span></span>  indicates that this is a macro,
@@ -951,7 +953,7 @@ each of the two nonterminal symbols is silently renamed so as to avoid the
 clash. In other words, by default, a nonterminal symbol defined in module <span style="font-style:italic">A</span>
 is considered <em>private</em>, and cannot be defined again, or referred to, in
 module <span style="font-style:italic">B</span>.</p><p>Naturally, it is sometimes desirable to define a nonterminal symbol <span style="font-style:italic">N</span> in
-module <span style="font-style:italic">A</span> and to refer to it in module ‍<span style="font-style:italic">B</span>. This is permitted if <span style="font-style:italic">N</span> is
+module <span style="font-style:italic">A</span> and to refer to it in module <span style="font-style:italic">B</span>. This is permitted if <span style="font-style:italic">N</span> is
 public, that is, if either its definition carries the keyword <span style="font-family:sans-serif"><span style="font-weight:bold">%public</span></span> or
 <span style="font-style:italic">N</span> is declared to be a start symbol. A public nonterminal symbol is never
 renamed, so it can be referred to by modules other than its defining module.</p><p>In fact, it is permitted to split the definition of a <em>public</em> nonterminal
@@ -990,7 +992,7 @@ nonterminal symbol <span style="font-style:italic">option</span>, taken from the
 </blockquote><p>
 This definition states that <span style="font-style:italic">option</span>(<span style="font-style:italic">X</span>) expands to either the empty
 string, producing the semantic value <span style="font-style:italic">None</span>, or to the string <span style="font-style:italic">X</span>,
-producing the semantic value <span style="font-style:italic">Some</span> ‍<span style="font-style:italic">x</span>, where <span style="font-style:italic">x</span> is the
+producing the semantic value <span style="font-style:italic">Some</span> <span style="font-style:italic">x</span>, where <span style="font-style:italic">x</span> is the
 semantic value of <span style="font-style:italic">X</span>. In this definition, the symbol <span style="font-style:italic">X</span> is
 abstract: it stands for an arbitrary terminal or nonterminal symbol. The
 definition is made public, so <span style="font-style:italic">option</span> can be referred to within client
@@ -1030,7 +1032,7 @@ is produced. Things behave exactly as if one had written:</p><blockquote class="
 </table>
 </blockquote><p>
 Note that, even though <span style="font-style:italic">COMMA</span> presumably has been declared as a token
-with no semantic value, writing <span style="font-style:italic">x</span> ‍= ‍<span style="font-style:italic">COMMA</span> is legal, and binds
+with no semantic value, writing <span style="font-style:italic">x</span> = <span style="font-style:italic">COMMA</span> is legal, and binds
 <span style="font-style:italic">x</span> to the unit value. This design choice ensures that the definition
 of <span style="font-style:italic">option</span> makes sense regardless of the nature of <span style="font-style:italic">X</span>: that is, <span style="font-style:italic">X</span>
 can be instantiated with a terminal symbol, with or without a semantic value,
@@ -1040,8 +1042,7 @@ or with a nonterminal symbol.</p>
 parameterized with an arbitrary number of formal parameters. When
 <span style="font-style:italic">N</span> is referred to within a production, it must be applied
 to the same number of actuals. In general, an actual is:
-</p><ul class="itemize"><li class="li-itemize">
-either a single symbol, which can be a terminal symbol, a nonterminal symbol, or a formal parameter;
+</p><ul class="itemize"><li class="li-itemize">either a single symbol, which can be a terminal symbol, a nonterminal symbol, or a formal parameter;
 </li><li class="li-itemize">or an application of such a symbol to a number of actuals.
 </li></ul><p>For instance, here is a rule whose single production consists of a single
 producer, which contains several, nested actuals. (This example is discussed
@@ -1070,7 +1071,7 @@ again in §<a href="#sec%3Alibrary">5.4</a>.)
 Applications of the parameterized nonterminal symbols <span style="font-style:italic">option</span>,
 <span style="font-style:italic">nonempty_list</span>, and <span style="font-style:italic">list</span>, which are defined in
 the standard library (§<a href="#sec%3Alibrary">5.4</a>), can be written using
-a familiar, regular-expression like syntax (Figure ‍<a href="#fig%3Asugar">2</a>).</p>
+a familiar, regular-expression like syntax (Figure <a href="#fig%3Asugar">2</a>).</p>
 <!--TOC paragraph id="sec35" Higher-order parameters-->
 <h4 id="sec35" class="paragraph">Higher-order parameters</h4><!--SEC END --><p>A formal parameter can itself expect parameters. For instance, here is a rule
 that defines the syntax of procedures in an imaginary programming language:
@@ -1244,8 +1245,8 @@ is straightforward to propose a collection of commonly used definitions, such
 as options, sequences, lists, and so on. This <em>standard library</em> is
 joined, by default, with every grammar specification. A summary of the
 nonterminal symbols offered by the standard library appears in
-Figure ‍<a href="#fig%3Astandard">3</a>. See also the short-hands documented in
-Figure ‍<a href="#fig%3Asugar">2</a>.</p><p>By relying on the standard library, a client module can concisely define
+Figure <a href="#fig%3Astandard">3</a>. See also the short-hands documented in
+Figure <a href="#fig%3Asugar">2</a>.</p><p>By relying on the standard library, a client module can concisely define
 more elaborate notions. For instance, the following rule:
 </p><blockquote class="quote">
 <table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="text-align:left;white-space:nowrap" ><span style="font-family:sans-serif"><span style="font-weight:bold">%inline</span></span> <span style="font-style:italic">plist</span>(<span style="font-style:italic">X</span>):
@@ -1263,7 +1264,7 @@ with parentheses and comma-separated.</p><p>The standard library is stored in a 
 embedded inside Menhir when it is built.
 The command line switch <span style="font-family:monospace">--no-stdlib</span> instructs Menhir to <em>not</em> load the
 standard library.</p><p>The meaning of the symbols defined in the standard library
-(Figure ‍<a href="#fig%3Astandard">3</a>) should be clear in most cases. Yet, the
+(Figure <a href="#fig%3Astandard">3</a>) should be clear in most cases. Yet, the
 symbols <span style="font-style:italic">endrule</span>(<span style="font-style:italic">X</span>) and <span style="font-style:italic">midrule</span>(<span style="font-style:italic">X</span>) deserve an explanation.
 Both take an argument <span style="font-style:italic">X</span>, which typically will be instantiated with an
 anonymous rule (§<a href="#sec%3Aactual">4.2.4</a>). Both are defined as a synonym
@@ -1335,13 +1336,11 @@ to shift) and one or more productions (those that one might wish to
 reduce). When such a conflict is detected, the precedence level
 (§<a href="#sec%3Aassoc">4.1.4</a>, §<a href="#sec%3Aprec">4.2.1</a>) of these entities are looked up and
 compared as follows:
-</p><ol class="enumerate" type=1><li class="li-enumerate">
-if only one production is involved, and if it has higher priority
+</p><ol class="enumerate" type=1><li class="li-enumerate">if only one production is involved, and if it has higher priority
 than the token, then the conflict is resolved in favor of reduction.
 </li><li class="li-enumerate">if only one production is involved, and if it has the same priority
 as the token, then the associativity status of the token is looked up:
-<ol class="enumerate" type=a><li class="li-enumerate">
-if the token was declared nonassociative, then the conflict is
+<ol class="enumerate" type=a><li class="li-enumerate">if the token was declared nonassociative, then the conflict is
 resolved in favor of neither action, that is, a syntax error
 	 will be signaled if this token shows up when this production
 	 is about to be reduced;
@@ -1359,7 +1358,7 @@ is resolved in that way.
 In either of these cases, the conflict is considered benign. Otherwise, it is
 considered severe. Note that a reduce/reduce conflict is always considered
 severe, unless it happens to be subsumed by a benign multi-way shift/reduce
-conflict (item ‍<a href="#multiway">3</a> above).</p>
+conflict (item <a href="#multiway">3</a> above).</p>
 <!--TOC subsection id="sec41" How are severe conflicts explained?-->
 <h3 id="sec41" class="subsection">6.2 How are severe conflicts explained?</h3><!--SEC END --><p>When the <span style="font-family:monospace">--dump</span> switch is on, a description of the automaton is written to the
 <span style="font-family:monospace">.automaton</span> file. Severe conflicts are shown as part of this description.
@@ -1396,7 +1395,7 @@ explanations.</p><blockquote class="figure"><div class="center"><hr class="float
 <a id="fig:basicshiftreduce"></a>
 <div class="center"><hr class="floatrule"></div></blockquote>
 <!--TOC paragraph id="sec42" How the conflict state is reached-->
-<h4 id="sec42" class="paragraph">How the conflict state is reached</h4><!--SEC END --><p>Figure ‍<a href="#fig%3Abasicshiftreduce">4</a> shows a grammar specification
+<h4 id="sec42" class="paragraph">How the conflict state is reached</h4><!--SEC END --><p>Figure <a href="#fig%3Abasicshiftreduce">4</a> shows a grammar specification
 with a typical shift/reduce conflict.
 When this specification is analyzed, the conflict is detected, and an
 explanation is written to the <span style="font-family:monospace">.conflicts</span> file. The explanation first indicates
@@ -1464,11 +1463,11 @@ fringe of some partial derivation tree is a <em>sentential form</em>.</p>
 </td></tr>
 </table>
 </div>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 6: A textual version of the tree in Figure ‍<a href="#fig%3Ashifting%3Atree">5</a></td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 6: A textual version of the tree in Figure <a href="#fig%3Ashifting%3Atree">5</a></td></tr>
 </table></div>
 <a id="fig:shifting:text"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><p>In our example, the proof that shifting is possible is the derivation tree
-shown in Figures ‍<a href="#fig%3Ashifting%3Atree">5</a> and ‍<a href="#fig%3Ashifting%3Atext">6</a>. At the
+shown in Figures <a href="#fig%3Ashifting%3Atree">5</a> and <a href="#fig%3Ashifting%3Atext">6</a>. At the
 root of the tree is the grammar’s start symbol, <span style="font-style:italic">expression</span>. This symbol
 develops into the string <span style="font-style:italic">IF expression THEN expression</span>, which forms the
 tree’s second level. The second occurrence of <span style="font-style:italic">expression</span> in that string
@@ -1477,7 +1476,7 @@ the tree’s last level. The tree’s fringe, a sentential form, is the string
 <span style="font-style:italic">IF expression THEN IF expression THEN expression ELSE expression</span>. As
 announced earlier, it begins with the conflict string <span style="font-style:italic">IF expression THEN
 IF expression THEN expression</span>, followed with the conflict token
-<span style="font-style:italic">ELSE</span>.</p><p>In Figure ‍<a href="#fig%3Ashifting%3Atext">6</a>, the end of the conflict string is materialized
+<span style="font-style:italic">ELSE</span>.</p><p>In Figure <a href="#fig%3Ashifting%3Atext">6</a>, the end of the conflict string is materialized
 with a dot. Note that this dot does not occupy the rightmost position in the
 tree’s last level. In other words, the conflict token (<span style="font-style:italic">ELSE</span>) itself
 occurs on the tree’s last level. In practical terms, this means that, after
@@ -1507,13 +1506,13 @@ token, it makes sense for it to <em>shift</em> that token.</p>
 </td></tr>
 </table>
 </div>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 8: A textual version of the tree in Figure ‍<a href="#fig%3Areducing%3Atree">7</a></td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 8: A textual version of the tree in Figure <a href="#fig%3Areducing%3Atree">7</a></td></tr>
 </table></div>
 <a id="fig:reducing:text"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><p>In our example, the proof that reducing is possible is the derivation tree
-shown in Figures ‍<a href="#fig%3Areducing%3Atree">7</a> and ‍<a href="#fig%3Areducing%3Atext">8</a>. Again,
+shown in Figures <a href="#fig%3Areducing%3Atree">7</a> and <a href="#fig%3Areducing%3Atext">8</a>. Again,
 the sentential form found at the fringe of the tree begins with the conflict
-string, followed with the conflict token.</p><p>Again, in Figure ‍<a href="#fig%3Areducing%3Atext">8</a>, the end of the conflict string is
+string, followed with the conflict token.</p><p>Again, in Figure <a href="#fig%3Areducing%3Atext">8</a>, the end of the conflict string is
 materialized with a dot. Note that, this time, the dot occupies the rightmost
 position in the tree’s last level. In other words, the conflict token
 (<span style="font-style:italic">ELSE</span>) appeared on an earlier level (here, on the second level). This
@@ -1524,7 +1523,7 @@ it makes sense for it to <em>reduce</em> the production that corresponds to the
 tree’s last level—here, the production is <span style="font-style:italic">expression</span> →
 <span style="font-style:italic">IF</span> <span style="font-style:italic">expression</span> <span style="font-style:italic">THEN</span> <span style="font-style:italic">expression</span>.</p>
 <!--TOC paragraph id="sec45" An example of a more complex derivation tree-->
-<h4 id="sec45" class="paragraph">An example of a more complex derivation tree</h4><!--SEC END --><p>Figures ‍<a href="#fig%3Axreducing%3Atree">9</a> and ‍<a href="#fig%3Axreducing%3Atext">10</a> show a partial
+<h4 id="sec45" class="paragraph">An example of a more complex derivation tree</h4><!--SEC END --><p>Figures <a href="#fig%3Axreducing%3Atree">9</a> and <a href="#fig%3Axreducing%3Atext">10</a> show a partial
 derivation tree that justifies reduction in a more complex situation. (This
 derivation tree is relative to a grammar that is not shown.) Here, the
 conflict string is <span style="font-style:italic">DATA UIDENT EQUALS UIDENT</span>; the conflict token is
@@ -1560,13 +1559,13 @@ and </span></span></span><span style="font-style:italic"><span style="font-weigh
 </td></tr>
 </table>
 </div>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 10: A textual version of the tree in Figure ‍<a href="#fig%3Axreducing%3Atree">9</a></td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 10: A textual version of the tree in Figure <a href="#fig%3Axreducing%3Atree">9</a></td></tr>
 </table></div>
 <a id="fig:xreducing:text"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><p>First, note that <span style="font-style:italic">opt_type_exprs</span> is <em>not</em> a leaf node, even though
 it has no children. The grammar contains the production <span style="font-style:italic">opt_type_exprs</span>
 → є: the nonterminal symbol <span style="font-style:italic">opt_type_exprs</span> develops
-to the empty string. (This is made clear in Figure ‍<a href="#fig%3Axreducing%3Atext">10</a>, where a
+to the empty string. (This is made clear in Figure <a href="#fig%3Axreducing%3Atext">10</a>, where a
 single dot appears immediately below <span style="font-style:italic">opt_type_exprs</span>.) Thus,
 <span style="font-style:italic">opt_type_exprs</span> is not part of the fringe.</p><p>Next, note that <span style="font-style:italic">opt_type_exprs</span> is the rightmost symbol within its
 level. Thus, in order to find the next symbol on the fringe, we have to look
@@ -1577,8 +1576,8 @@ the rightmost symbol: next to it, we find <span style="font-style:italic">opt_se
 this mean that <span style="font-style:italic">opt_semi</span> is the next symbol on the fringe? Yes and no.
 <span style="font-style:italic">opt_semi</span> is a <em>nonterminal</em> symbol, but we are really interested in finding
 out what the next <em>terminal</em> symbol on the fringe could be. The partial
-derivation tree shown in Figures ‍<a href="#fig%3Axreducing%3Atree">9</a>
-and ‍<a href="#fig%3Axreducing%3Atext">10</a> does not explicitly answer this question. In
+derivation tree shown in Figures <a href="#fig%3Axreducing%3Atree">9</a>
+and <a href="#fig%3Axreducing%3Atext">10</a> does not explicitly answer this question. In
 order to answer it, we need to know more about <span style="font-style:italic">opt_semi</span> and <span style="font-style:italic">decls</span>.</p><p>Here, <span style="font-style:italic">opt_semi</span> stands (as one might have guessed) for an optional
 semicolon, so the grammar contains a production <span style="font-style:italic">opt_semi</span> →
 є. This is indicated by the comment
@@ -1672,8 +1671,7 @@ appears in the lookahead set, indicating that we expect to be done after
 recognizing an <span style="font-style:italic">S</span>-sentence. During the construction of the LR(1) automaton,
 this lookahead set is inherited by other items, with the effect that, in the
 end, the automaton has:
-</p><ul class="itemize"><li class="li-itemize">
-<em>shift</em> actions only on physical tokens; and
+</p><ul class="itemize"><li class="li-itemize"><em>shift</em> actions only on physical tokens; and
 </li><li class="li-itemize"><em>reduce</em> actions either on physical tokens or on the pseudo-token <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span>.
 </li></ul><p>
 A state of the automaton has a reduce action on <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span> if, in that state, an
@@ -1727,7 +1725,7 @@ expr -&gt; expr . TIMES expr [ # TIMES PLUS ]
 -- On PLUS shift to state 5
 -- On # accept expr
 </pre>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 12: Part of an LR automaton for the grammar in Figure ‍<a href="#fig%3Abasiceos">11</a></td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 12: Part of an LR automaton for the grammar in Figure <a href="#fig%3Abasiceos">11</a></td></tr>
 </table></div>
 <a id="fig:basiceosdump"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -1744,7 +1742,7 @@ expr -&gt; expr . TIMES expr [ # TIMES PLUS ]
 <tr><td style="text-align:left;white-space:nowrap" >   <span style="font-family:sans-serif"><span style="font-weight:bold">|</span></span>  …</td></tr>
 </table>
 </blockquote>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 13: Fixing the grammar specification in Figure ‍<a href="#fig%3Abasiceos">11</a></td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 13: Fixing the grammar specification in Figure <a href="#fig%3Abasiceos">11</a></td></tr>
 </table></div>
 <a id="fig:basiceos:sol"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><p>An end-of-stream conflict arises when a state has distinct actions on <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span> and
@@ -1753,10 +1751,10 @@ on at least one physical token. In short, this means that the end of an
 token. Menhir’s default behavior, in that case, is to suppress the action on
 <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span>, so that more input is <em>always</em> requested.</p>
 <!--TOC paragraph id="sec51" Example-->
-<h4 id="sec51" class="paragraph">Example</h4><!--SEC END --><p>Figure ‍<a href="#fig%3Abasiceos">11</a> shows a grammar that has end-of-stream conflicts.
+<h4 id="sec51" class="paragraph">Example</h4><!--SEC END --><p>Figure <a href="#fig%3Abasiceos">11</a> shows a grammar that has end-of-stream conflicts.
 When this grammar is processed, Menhir warns about these conflicts,
 and further warns that <span style="font-style:italic">expr</span> is never accepted. Let us explain.</p><p>Part of the corresponding automaton, as described in the <span style="font-family:monospace">.automaton</span> file, is
-shown in Figure ‍<a href="#fig%3Abasiceosdump">12</a>. Explanations at the end of the <span style="font-family:monospace">.automaton</span> file (not shown) point out that states 6 and 2 have an end-of-stream
+shown in Figure <a href="#fig%3Abasiceosdump">12</a>. Explanations at the end of the <span style="font-family:monospace">.automaton</span> file (not shown) point out that states 6 and 2 have an end-of-stream
 conflict. Indeed, both states have distinct actions on <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span> and on the
 physical token <span style="font-style:italic">TIMES</span>.
 It is interesting to note that, even though state 4 has actions on <span style="font-family:sans-serif"><span style="font-weight:bold">#</span></span> and on
@@ -1774,7 +1772,7 @@ introduce a new token, say <span style="font-style:italic">END</span>, and to us
 expressions. The <span style="font-style:italic">END</span> token could be generated by the lexical analyzer
 when it encounters the actual end of stream, or it could correspond to a piece
 of concrete syntax, say, a line feed character, a semicolon, or an
-<span style="font-family:monospace">end</span> keyword. The solution is shown in Figure ‍<a href="#fig%3Abasiceos%3Asol">13</a>.</p>
+<span style="font-family:monospace">end</span> keyword. The solution is shown in Figure <a href="#fig%3Abasiceos%3Asol">13</a>.</p>
 <!--TOC section id="sec52" Positions-->
 <h2 id="sec52" class="section">7 Positions</h2><!--SEC END --><p>
 <a id="sec:positions"></a></p><p>When an <span style="font-family:monospace">ocamllex</span>-generated lexical analyzer produces a token, it updates
@@ -1829,7 +1827,7 @@ the author of the lexical analyzer.)</p><blockquote class="figure"><div class="c
 desired, Menhir automatically extends it to nonterminal symbols as well. That
 is, it offers a mechanism for associating pairs of positions with terminal or
 nonterminal symbols. This is done by making a set of keywords available to
-semantic actions (Figure ‍<a href="#fig%3Apos">14</a>). These keywords are
+semantic actions (Figure <a href="#fig%3Apos">14</a>). These keywords are
 <em>not</em> available outside of a semantic action:
 in particular, they cannot be used within an OCaml header.</p><p>OCaml’s standard library module <span style="font-family:monospace">Parsing</span> is deprecated. The functions
 that it offers <em>can</em> be called, but will return dummy positions.</p><p>We remark that, if the current production has an empty right-hand side, then
@@ -1859,9 +1857,9 @@ positions coincide, and returns the start position of the symbol <code class="ve
 with <code class="verb">$startpos</code> is due to the asymmetry in the definition
 of <code class="verb">$startpos</code> and <code class="verb">$endpos</code> in the case of an empty right-hand
 side, and does not affect <code class="verb">$endpos</code>.</p><p>The positions computed by Menhir are exactly the same as those computed by
-<code class="verb">ocamlyacc</code><sup><a id="text1" href="#note1">1</a></sup>. More precisely, Figure ‍<a href="#fig%3Apos%3Amapping">15</a> sums up how
+<code class="verb">ocamlyacc</code><sup><a id="text1" href="#note1">1</a></sup>. More precisely, Figure <a href="#fig%3Apos%3Amapping">15</a> sums up how
 to translate a call to the <span style="font-family:monospace">Parsing</span> module, as used in an <span style="font-family:monospace">ocamlyacc</span> grammar, to a Menhir keyword.</p><p>We note that Menhir’s <code class="verb">$startpos</code> does not appear in the right-hand
-column in Figure ‍<a href="#fig%3Apos%3Amapping">15</a>. In other words, Menhir’s <code class="verb">$startpos</code>
+column in Figure <a href="#fig%3Apos%3Amapping">15</a>. In other words, Menhir’s <code class="verb">$startpos</code>
 does not correspond exactly to any of the <span style="font-family:monospace">ocamlyacc</span> function calls.
 An exact <span style="font-family:monospace">ocamlyacc</span> equivalent of <code class="verb">$startpos</code> is <code class="verb">rhs_start_pos 1</code>
 if the current production has a nonempty right-hand side and
@@ -1872,8 +1870,7 @@ regardless of where <span style="font-family:sans-serif"><span style="font-weigh
 <h2 id="sec53" class="section">8 Using Menhir as an interpreter</h2><!--SEC END --><p>
 <a id="sec:interpret"></a></p><p>When <span style="font-family:monospace">--interpret</span> is set, Menhir no longer behaves as a compiler. Instead,
 it acts as an interpreter. That is, it repeatedly:
-</p><ul class="itemize"><li class="li-itemize">
-reads a sentence off the standard input channel;
+</p><ul class="itemize"><li class="li-itemize">reads a sentence off the standard input channel;
 </li><li class="li-itemize">parses this sentence, according to the grammar;
 </li><li class="li-itemize">displays an outcome.
 </li></ul><p>
@@ -1909,8 +1906,7 @@ make sense of such a concrete notation, since it does not have a lexer for it.</
 channel (that is, as soon as it finds the newline character that ends the
 sentence), it parses the sentence according to whichever grammar was specified
 on the command line, and displays an outcome.</p><p>An outcome is one of the following:
-</p><ul class="itemize"><li class="li-itemize">
-<span style="font-family:monospace">ACCEPT</span>: a prefix of the sentence was successfully parsed;
+</p><ul class="itemize"><li class="li-itemize"><span style="font-family:monospace">ACCEPT</span>: a prefix of the sentence was successfully parsed;
 a parser generated by Menhir would successfully stop and produce
 a semantic value;
 </li><li class="li-itemize"><span style="font-family:monospace">OVERSHOOT</span>: the end of the sentence was reached before it
@@ -2108,11 +2104,11 @@ monolithic API.)</p><pre class="verbatim">  val resume:
     'a checkpoint
 </pre><p>The function <code class="verb">resume</code> allows the user to resume the parser after the
 parser has suspended itself with a checkpoint of the form
-<code class="verb">AboutToReduce (env, prod)</code> or <code class="verb">HandlingError env</code>.
+<code class="verb">Shifting _</code> or <code class="verb">AboutToReduce _</code> or <code class="verb">HandlingError _</code>.
 This function expects just the previous checkpoint <code class="verb">checkpoint</code>. It produces a new
 checkpoint. It does not raise any exception.
 The optional argument <code class="verb">strategy</code> influences the manner in which
-<code class="verb">resume</code> deals with checkpoints of the form <code class="verb">ErrorHandling _</code>. Its
+<code class="verb">resume</code> deals with checkpoints of the form <code class="verb">HandlingError _</code>. Its
 default value is <code class="verb">`Legacy</code>. For more details, see §<a href="#sec%3Aerrors">10</a>.</p><p>The incremental API subsumes the monolithic API. Indeed, <code class="verb">main</code> can be
 (and is in fact) implemented by first using
 <code class="verb">Incremental.main</code>, then calling <code class="verb">offer</code> and
@@ -2139,7 +2135,7 @@ case, it returns <code class="verb">v</code>. In the latter case, it raises the
 exception <code class="verb">Error</code>. (By the way, this is how we implement the monolithic
 API on top of the incremental API.)
 The optional argument <code class="verb">strategy</code> influences the manner in which
-<code class="verb">loop</code> deals with checkpoints of the form <code class="verb">ErrorHandling _</code>. Its
+<code class="verb">loop</code> deals with checkpoints of the form <code class="verb">HandlingError _</code>. Its
 default value is <code class="verb">`Legacy</code>. For more details, see §<a href="#sec%3Aerrors">10</a>.</p><pre class="verbatim">  val loop_handle:
     ('a -&gt; 'answer) -&gt;
     ('a checkpoint -&gt; 'answer) -&gt;
@@ -2147,7 +2143,7 @@ default value is <code class="verb">`Legacy</code>. For more details, see §<a h
 </pre><p><code class="verb">loop_handle succeed fail supplier checkpoint</code> begins parsing from
 <code class="verb">checkpoint</code>, reading tokens from <code class="verb">supplier</code>. It continues until
 it reaches a checkpoint of the form <code class="verb">Accepted v</code> or <code class="verb">HandlingError _</code>
-(or ‍<code class="verb">Rejected</code>, but that should not happen, as <code class="verb">HandlingError _</code>
+(or <code class="verb">Rejected</code>, but that should not happen, as <code class="verb">HandlingError _</code>
 will be observed first). In the former case, it calls <code class="verb">succeed v</code>. In
 the latter case, it calls <code class="verb">fail</code> with this checkpoint. It cannot
 raise <code class="verb">Error</code>.</p><p>This means that Menhir’s traditional error-handling procedure (which pops the
@@ -2199,7 +2195,7 @@ LR(1) automaton.
 If <code class="verb">s</code> is such a state, then <code class="verb">s</code> should have at least one incoming
 transition, and all of its incoming transitions carry the same (terminal or
 non-terminal) symbol, say <span style="font-style:italic">A</span>. We say that <span style="font-style:italic">A</span> is the <em>incoming symbol</em>
-of the state ‍<code class="verb">s</code>.
+of the state <code class="verb">s</code>.
 The index <code class="verb">'a</code> is the type of the semantic values associated with <span style="font-style:italic">A</span>.
 The role played by <code class="verb">'a</code> is clarified in the definition of the
 type <code class="verb">element</code>, which appears further on.</p><pre class="verbatim">  val number: _ lr1state -&gt; int
@@ -2216,15 +2212,15 @@ index.</p><pre class="verbatim">  type element =
 </pre><p>The type <code class="verb">element</code> describes one entry in the stack of the LR(1)
 automaton. In a stack element of the form <code class="verb">Element (s, v, startp, endp)</code>,
 <code class="verb">s</code> is a (non-initial) state and <code class="verb">v</code> is a semantic value. The
-value ‍<code class="verb">v</code> is associated with the incoming symbol ‍<span style="font-style:italic">A</span> of the
-state ‍<code class="verb">s</code>. In other words, the value <code class="verb">v</code> was pushed onto the stack
+value <code class="verb">v</code> is associated with the incoming symbol <span style="font-style:italic">A</span> of the
+state <code class="verb">s</code>. In other words, the value <code class="verb">v</code> was pushed onto the stack
 just before the state <code class="verb">s</code> was entered. Thus, for some type <code class="verb">'a</code>, the
-state ‍<code class="verb">s</code> has type <code class="verb">'a lr1state</code> and the value ‍<code class="verb">v</code> has
-type ‍<code class="verb">'a</code>. The positions <code class="verb">startp</code> and <code class="verb">endp</code> delimit the
+state <code class="verb">s</code> has type <code class="verb">'a lr1state</code> and the value <code class="verb">v</code> has
+type <code class="verb">'a</code>. The positions <code class="verb">startp</code> and <code class="verb">endp</code> delimit the
 fragment of the input text that was reduced to the symbol <span style="font-style:italic">A</span>.</p><p>In order to do anything useful with the value <code class="verb">v</code>, one must gain
-information about the type <code class="verb">'a</code>, by inspection of the state ‍<code class="verb">s</code>. So
+information about the type <code class="verb">'a</code>, by inspection of the state <code class="verb">s</code>. So
 far, the type <code class="verb">'a lr1state</code> is abstract, so there is no way of
-inspecting ‍<code class="verb">s</code>. The inspection API (§<a href="#sec%3Ainspection">9.3</a>) offers further
+inspecting <code class="verb">s</code>. The inspection API (§<a href="#sec%3Ainspection">9.3</a>) offers further
 tools for this purpose.</p><pre class="verbatim">  val top: 'a env -&gt; element option
 </pre><p><code class="verb">top env</code> returns the parser’s top stack element. The state contained in
 this stack element is the current state of the automaton. If the stack is
@@ -2241,7 +2237,7 @@ than or equal to the number of elements in the stack, <code class="verb">None</c
 complexity is <span style="font-style:italic">O</span>(<span style="font-style:italic">i</span>).</p><pre class="verbatim">  val current_state_number: 'a env -&gt; int
 </pre><p><code class="verb">current_state_number env</code> is the integer number of the automaton’s
 current state. Although this number might conceivably be obtained via the
-functions ‍<code class="verb">top</code> and <code class="verb">number</code>, using <code class="verb">current_state_number</code> is
+functions <code class="verb">top</code> and <code class="verb">number</code>, using <code class="verb">current_state_number</code> is
 preferable, because this method works even when the automaton’s stack is empty
 (in which case the current state is an initial state, and <code class="verb">top</code> returns
 <code class="verb">None</code>). This number can be passed as an argument to a <code class="verb">message</code>
@@ -2356,14 +2352,14 @@ comprised between 0 and <code class="verb">n</code>, inclusive.</p><pre class="v
   val compare_productions: production -&gt; production -&gt; int
   val compare_items: item -&gt; item -&gt; int
 </pre><p>The function <code class="verb">incoming_symbol</code> maps a (non-initial) LR(1)
-state ‍<code class="verb">s</code> to its incoming symbol, that is, the symbol that the parser
+state <code class="verb">s</code> to its incoming symbol, that is, the symbol that the parser
 must recognize before it enters the state <code class="verb">s</code>.
 </p><pre class="verbatim">  val incoming_symbol: 'a lr1state -&gt; 'a symbol
 </pre><p>
 This function can be used to gain access to the semantic value <code class="verb">v</code>
 in a stack element <code class="verb">Element (s, v, _, _)</code>. Indeed, by case analysis on the
 symbol <code class="verb">incoming_symbol s</code>, one gains information about the type <code class="verb">'a</code>,
-hence one obtains the ability to do something useful with the value ‍<code class="verb">v</code>.</p><p>The function <code class="verb">items</code> maps a (non-initial) LR(1) state ‍<code class="verb">s</code> to its
+hence one obtains the ability to do something useful with the value <code class="verb">v</code>.</p><p>The function <code class="verb">items</code> maps a (non-initial) LR(1) state <code class="verb">s</code> to its
 LR(0) <em>core</em>, that is, to the underlying set of LR(0) items. This set
 is represented as a list, whose elements appear in an arbitrary order. This
 set is <em>not</em> closed under є-transitions.
@@ -2399,15 +2395,209 @@ state (as determined by <code class="verb">env</code>) has an outgoing transitio
 <code class="verb">symbol</code>. Otherwise, an <code class="verb">Invalid_argument</code> exception is raised.
 </p><pre class="verbatim">  val feed: 'a symbol -&gt; position -&gt; 'a -&gt; position -&gt; 'b env -&gt; 'b env
 </pre>
-<!--TOC section id="sec65" Error handling: the traditional way-->
-<h2 id="sec65" class="section">10 Error handling: the traditional way</h2><!--SEC END --><p>
+<!--TOC subsection id="sec65" Unparsing API-->
+<h3 id="sec65" class="subsection">9.4 Unparsing API</h3><!--SEC END --><p>
+<a id="sec:unparsing"></a></p><p>The purpose of parsing is to transform a sequence of characters, or a sequence
+of tokens, into a semantic value, which typically is some kind of syntax tree.
+The purpose of <em>unparsing</em> is to perform the reverse transformation, that
+is, to transform a syntax tree back into a sequence of tokens or characters.</p><p>Although unparsing may not seem conceptually very challenging, writing an
+unparser by hand can require a significant amount of work. Furthermore,
+ensuring that an unparser is correct can be difficult. An unparser is correct
+if its output can be parsed and if this gives rise to the same syntax tree
+that one started with. In other words, it is correct if the composition
+<span style="font-style:italic">unparse</span>; <span style="font-style:italic">parse</span> is the identity. Intuitively, this means
+that the unparser must produce syntactically correct output and must insert
+enough parentheses (or other disambiguation symbols) to ensure that its output
+is correctly interpreted. If the grammar involves priority or precedence
+declarations (§<a href="#sec%3Aassoc">4.1.4</a>, §<a href="#sec%3Aprec">4.2.1</a>), enforcing this property can
+be tricky.</p><p>When the switch <span style="font-family:monospace">--unparsing</span> is supplied on the command line, Menhir generates
+code that helps implement a correct unparser. In this reference manual, we
+give a brief overview of the generated code; for more details, the reader is
+referred to the paper “Correct, Fast LR(1)
+Unparsing” [<a href="#pottier-unparsing-24">22</a>].
+Furthermore, the directory <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc-unparsing"><span style="font-family:monospace">demos/calc-unparsing</span></a>
+contains a demo that illustrates the use of the unparsing API.
+In this directory,
+the command <span style="font-family:monospace">make api</span> shows the file <span style="font-family:monospace">parser.mli</span>
+generated by Menhir.</p><p>The unparsing API involves two distinct data structures, namely
+<em>disjunctive concrete syntax trees</em>
+and
+<em>concrete syntax trees</em>.
+</p><ul class="itemize"><li class="li-itemize">A <em>concrete syntax tree</em> (CST) is
+a tree where every node is either
+a <em>terminal node</em>,
+labeled with a token,
+or
+a <em>nonterminal node</em>,
+labeled with a production.
+A terminal node has no children.
+A nonterminal node has children
+whose number and types must match
+the right-hand side of the production.
+</li><li class="li-itemize">A <em>disjunctive concrete syntax tree</em> (DCST)
+contains terminal nodes, nonterminal nodes,
+and <em>disjunction nodes</em>.
+A disjunction node has two children.
+It represents a choice between two possible descriptions of a subtree:
+for example, without or with surrounding parentheses.
+</li></ul><p>
+The unparsing API expects the unparsing process to be performed in three
+steps, as follows:
+</p><ol class="enumerate" type=1><li class="li-enumerate"><a id="step:describe"></a>
+an abstract syntax tree (or, more generally, a semantic value)
+is transformed into a DCST;
+</li><li class="li-enumerate"><a id="step:settle"></a>
+the DCST is transformed into a CST;
+</li><li class="li-enumerate"><a id="step:format"></a>
+the CST is transformed into text,
+either directly,
+or by going through some form of structured document.
+</li></ol><p>The facilities provided by the unparsing API are:
+</p><ul class="itemize"><li class="li-itemize">a DCST construction API (a set of constructor functions) ;
+</li><li class="li-itemize">a <em>settlement</em> algorithm, which converts a DCST to a CST;
+</li><li class="li-itemize">a CST deconstruction API (a visitor class).
+</li></ul><p>The settlement algorithm performs step <a href="#step%3Asettle">2</a> automatically. It is
+up to you, the user, to implement steps <a href="#step%3Adescribe">1</a> and
+<a href="#step%3Asettle">2</a>.
+In step <a href="#step%3Asettle">2</a>, you use the DCST construction API.
+In step <a href="#step%3Aformat">3</a>, you use the CST deconstruction API.</p>
+<!--TOC subsubsection id="sec66" DCST construction API-->
+<h4 id="sec66" class="subsubsection">9.4.1 DCST construction API</h4><!--SEC END --><p>The DST construction API is found in the sub-module <span style="font-family:monospace">DCST</span>. It offers a
+set of constructor functions that you can use to construct DCSTs. OCaml’s type
+discipline ensures that only well-formed DCSTs can be constructed; this rules
+out a class of mistakes that would lead to syntactically incorrect output.</p><ul class="itemize"><li class="li-itemize">For each nonterminal symbol, say <span style="font-family:monospace">expr</span>,
+there is an abstract type of DCSTs, also named <span style="font-family:monospace">expr</span>.
+<pre class="verbatim">  type expr
+</pre>
+</li><li class="li-itemize">For each production,
+there is a constructor function,
+whose name is determined by the production’s <span style="font-family:monospace">@name</span> attribute.
+This constructor function
+takes parameters whose number and types
+match the right-hand side of the production.
+If a parameter corresponds to a terminal symbol
+that does not carry a semantic value,
+then this parameter is omitted.
+For instance, if the grammar includes a production of the form
+<pre class="verbatim">  expr:
+    LPAREN; e = expr; RPAREN { e } [@name paren]
+</pre>
+then the sub-module <span style="font-family:monospace">DCST</span> includes a constructor function
+<pre class="verbatim">  val paren: expr -&gt; expr
+</pre></li><li class="li-itemize">For each nonterminal symbol, say <span style="font-family:monospace">expr</span>,
+there is a constructor function,
+named <span style="font-family:monospace">expr_choice</span>,
+that constructs a disjunction node.
+<pre class="verbatim">  val expr_choice: expr -&gt; expr -&gt; expr
+</pre>
+</li></ul>
+<!--TOC subsubsection id="sec67" Settlement-->
+<h4 id="sec67" class="subsubsection">9.4.2 Settlement</h4><!--SEC END --><p>For each start nonterminal symbol, say <span style="font-family:monospace">main</span>,
+there is a function,
+named <span style="font-family:monospace">Settle.main</span>,
+which transforms a DCST to a CST.
+</p><pre class="verbatim">  val main: DCST.main -&gt; CST.main option
+</pre><p>
+This transformation eliminates all disjunction nodes. In other words, whenever
+there is a choice between several ways of displaying a subtree (for example,
+without or with surrounding parentheses), this choice is resolved. The
+settlement algorithm is left-biased: if the left-hand alternative leads to a
+viable tree (that is, a tree that can be printed and parsed again, without
+confusion) then this alternative is chosen; otherwise, the right-hand
+alternative is chosen.</p><p>If the algorithm is unable to find a viable tree, then it fails: it returns
+<span style="font-family:monospace">None</span>. If you encounter this situation, first make sure that in the
+previous step (step <a href="#step%3Adescribe">1</a>) you have inserted enough parentheses,
+or constructed enough disjunction nodes that offer a possibility of inserting
+parentheses. If you think that you have done so, and if the algorithm still
+fails, please contact Menhir’s developers. As explained in the
+paper [<a href="#pottier-unparsing-24">22</a>], the settlement algorithm is fast but
+incomplete. When faced with a disjunction node, it commits early to the
+left-hand alternative. If this alternative later turns out to fail, then the
+algorithm does not backtrack; the right-hand alternative is never tried.</p>
+<!--TOC subsubsection id="sec68" CST deconstruction API-->
+<h4 id="sec68" class="subsubsection">9.4.3 CST deconstruction API</h4><!--SEC END --><p>The CST deconstruction API is found in the sub-module <span style="font-family:monospace">CST</span>. It offers
+a visitor class, named <span style="font-family:monospace">reduce</span>, which allows traversing a CST and
+transforming it into a printable form. This printable form could be text, or
+could be a document in a a structured document description language; it is up
+to the user to choose it.</p><p>For each nonterminal symbol, say <span style="font-family:monospace">expr</span>,
+there is an abstract type of CSTs, also named <span style="font-family:monospace">expr</span>.
+</p><pre class="verbatim">  type expr
+</pre><p>Then, there is a single visitor class:
+</p><pre class="verbatim">  class virtual ['r] reduce : object
+    method virtual zero : 'r
+    method virtual cat : 'r -&gt; 'r -&gt; 'r
+    method virtual text : string -&gt; 'r
+    (* one method per terminal symbol *)
+    (* one method per nonterminal symbol *)
+    (* one method per production *)
+  end
+</pre><p>This class is parameterized by a type <span style="font-family:monospace">’r</span>,
+which is the result type of every method:
+it is the type of the printable form
+to which every tree must be reduced.</p><p>The user is expected to provide implementations
+for the three virtual methods <span style="font-family:monospace">zero</span>,
+<span style="font-family:monospace">cat</span>, and <span style="font-family:monospace">text</span>.
+In short,
+<span style="font-family:monospace">zero</span> is the empty printable thing;
+<span style="font-family:monospace">cat</span> concatenates two printable things;
+and
+<span style="font-family:monospace">text</span> converts a string to a printable thing.</p><p>Furthermore, the following methods exist:
+</p><ul class="itemize"><li class="li-itemize">For each terminal symbol,
+there is a visitor method.
+For example, if the token <span style="font-family:monospace">INT</span> has been declared by
+<code class="verb">%token&lt;int&gt; INT</code>
+then the following method exists:
+<pre class="verbatim">  method virtual visit_INT : int -&gt; 'r
+</pre>
+This method is normally virtual.
+However,
+if the terminal symbol carries no semantic value
+and if a token alias (§<a href="#sec%3Atokens">4.1.3</a>)
+has been provided by the user for this symbol
+then a default implementation of this method
+is generated by Menhir ;
+the method is then non-virtual.
+For example, if the token <span style="font-family:monospace">LPAREN</span> has been declared by
+<code class="verb">%token LPAREN "("</code>
+then the following non-virtual method exists:
+<pre class="verbatim">  method visit_LPAREN : 'r
+</pre>
+</li><li class="li-itemize">For each nonterminal symbol, say <span style="font-family:monospace">expr</span>,
+there is a visitor method,
+named <span style="font-family:monospace">visit_expr</span>.
+This method is not virtual: Menhir generates code for it.
+This method expects a CST of type <span style="font-family:monospace">expr</span>
+as an argument,
+performs a case analysis of the root node,
+and applies a suitable <span style="font-family:monospace">case</span> method
+to the children of the root node.
+<pre class="verbatim">  method visit_expr : expr -&gt; 'r
+</pre>
+</li><li class="li-itemize">For each production,
+there is a visitor method.
+This method is not virtual: Menhir generates code for it.
+This method expects zero, one, or more arguments.
+First, each argument is reduced to a printable thing
+via recursive calls to suitable <span style="font-family:monospace">visit</span> methods;
+then these printable things are concatenated
+using <span style="font-family:monospace">zero</span> and <span style="font-family:monospace">cat</span>.
+For instance, if the grammar includes a production of the form
+<pre class="verbatim">  expr:
+    LPAREN; e = expr; RPAREN { e } [@name paren]
+</pre>
+then the following method exists:
+<pre class="verbatim">  method case_paren : expr -&gt; 'r
+</pre>
+</li></ul>
+<!--TOC section id="sec69" Error handling: the traditional way-->
+<h2 id="sec69" class="section">10 Error handling: the traditional way</h2><!--SEC END --><p>
 <a id="sec:errors"></a></p><p>Menhir’s traditional error-handling mechanism is considered deprecated:
 although it is still supported for the time being, it is likely to be removed
 in the future.
 We recommend setting up an error-handling mechanism using the new tools
 offered by Menhir (§<a href="#sec%3Aerrors%3Anew">11</a>).</p>
-<!--TOC paragraph id="sec66" Error handling-->
-<h4 id="sec66" class="paragraph">Error handling</h4><!--SEC END --><p>Menhir’s error traditional handling mechanism is inspired by that of <span style="font-family:monospace">yacc</span> and
+<!--TOC paragraph id="sec70" Error handling-->
+<h4 id="sec70" class="paragraph">Error handling</h4><!--SEC END --><p>Menhir’s error traditional handling mechanism is inspired by that of <span style="font-family:monospace">yacc</span> and
 <span style="font-family:monospace">ocamlyacc</span>, but is not identical. A special <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is made available
 for use within productions. The LR automaton is constructed exactly as if
 <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> was a regular terminal symbol. However, <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> is never produced
@@ -2416,8 +2606,7 @@ lookahead token is discarded and replaced with the <span style="font-family:sans
 the current lookahead token. At this point, the parser enters <em>error
 handling</em> mode.
 In error-handling mode, the parser behaves as follows:
-</p><ul class="itemize"><li class="li-itemize">
-If the current state has a shift action on the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token, then this
+</p><ul class="itemize"><li class="li-itemize">If the current state has a shift action on the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token, then this
 action takes place. Under the <span style="font-family:monospace">legacy</span> strategy, the parser then
 reads the next token and returns to normal mode. Under the
 simplified strategy, it does <em>not</em> request the next token, so
@@ -2441,8 +2630,7 @@ the incremental API, the parser rejects the input by returning the checkpoint
 between the strategies <span style="font-family:monospace">legacy</span> and <span style="font-family:monospace">simplified</span> matters only if the grammar
 uses the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token. The following rule of thumb can be used to select
 between them:
-</p><ul class="itemize"><li class="li-itemize">
-If the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is used only to catch an error and stop, then the
+</p><ul class="itemize"><li class="li-itemize">If the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is used only to catch an error and stop, then the
 <span style="font-family:monospace">simplified</span> strategy should be preferred. When this strategy is selected,
 the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token should always appear at the end of a production, whose
 semantic action should abort the parser by raising an exception. (Menhir
@@ -2452,13 +2640,13 @@ but it may insert a runtime check.)
 </li><li class="li-itemize">If the <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is used to survive an error and continue parsing,
 then the legacy strategy should be selected.
 </li></ul>
-<!--TOC paragraph id="sec67" Error recovery-->
-<h4 id="sec67" class="paragraph">Error recovery</h4><!--SEC END --><p><span style="font-family:monospace">ocamlyacc</span> offers an error recovery mode, which is entered immediately after
+<!--TOC paragraph id="sec71" Error recovery-->
+<h4 id="sec71" class="paragraph">Error recovery</h4><!--SEC END --><p><span style="font-family:monospace">ocamlyacc</span> offers an error recovery mode, which is entered immediately after
 an <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token was successfully shifted. In this mode, tokens are repeatedly
 taken off the input stream and discarded until an acceptable token is found.
 This feature is no longer offered by Menhir.</p>
-<!--TOC section id="sec68" Error handling: the new way-->
-<h2 id="sec68" class="section">11 Error handling: the new way</h2><!--SEC END --><p>
+<!--TOC section id="sec72" Error handling: the new way-->
+<h2 id="sec72" class="section">11 Error handling: the new way</h2><!--SEC END --><p>
 <a id="sec:errors:new"></a></p><p>Menhir’s incremental API (§<a href="#sec%3Aincremental">9.2</a>) allows taking control when
 an error is detected. Indeed, as soon as an invalid token is detected, the
 parser produces a checkpoint of the form <code class="verb">HandlingError _</code>. At this
@@ -2470,8 +2658,8 @@ instance, build and display a diagnostic message, based on the automaton’s
 current stack and/or state. Or, one could modify the input stream, by
 inserting or deleting tokens, so as to suppress the error, and resume normal
 parsing. In principle, the possibilities are endless.</p><p>An apparently simple-minded approach to error reporting,
-proposed by Jeffery ‍[<a href="#jeffery-03">11</a>] and further explored by
-Pottier ‍[<a href="#pottier-reachability-cc-2016">21</a>], consists in selecting a diagnostic
+proposed by Jeffery [<a href="#jeffery-03">11</a>] and further explored by
+Pottier [<a href="#pottier-reachability-cc-2016">21</a>], consists in selecting a diagnostic
 message (or a template for a diagnostic message) based purely on the current
 state of the automaton.</p><p>In this approach, one determines, ahead of time, which are the “error
 states” (that is, the states in which an error can be detected), and one
@@ -2490,22 +2678,22 @@ might think (§<a href="#sec%3Aerrors%3Adiagnostics">11.3</a>), and to glue ever
 understand exactly when (that is, in which states) errors are detected.
 This in turn requires understanding how the automaton is constructed.
 Menhir’s construction technique is not Knuth’s canonical LR(1)
-technique ‍[<a href="#knuth-lr-65">16</a>], which is usually too expensive to be practical.
-Instead, Menhir <em>merges</em> states ‍[<a href="#pager-77">20</a>] and introduces so-called <em>default
+technique [<a href="#knuth-lr-65">16</a>], which is usually too expensive to be practical.
+Instead, Menhir <em>merges</em> states [<a href="#pager-77">20</a>] and introduces so-called <em>default
 reductions</em>. These techniques <em>defer</em> error detection by allowing
 extra reductions to take place before an error is detected.
 The impact of these alterations must be taken into account when writing
 diagnostic messages (§<a href="#sec%3Aerrors%3Adiagnostics">11.3</a>).</p><p>In this approach to error handling, the special <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is not used. It
 should not appear in the grammar.</p>
-<!--TOC subsection id="sec69" The <span style="font-family:monospace">.messages</span> file format-->
-<h3 id="sec69" class="subsection">11.1 The <span style="font-family:monospace">.messages</span> file format</h3><!--SEC END --><p>
+<!--TOC subsection id="sec73" The <span style="font-family:monospace">.messages</span> file format-->
+<h3 id="sec73" class="subsection">11.1 The <span style="font-family:monospace">.messages</span> file format</h3><!--SEC END --><p>
 <a id="sec:messages:format"></a></p>
-<!--TOC paragraph id="sec70" Definition-->
-<h4 id="sec70" class="paragraph">Definition</h4><!--SEC END --><p>A <span style="font-family:monospace">.messages</span> file is a text file. It is composed of a list of entries. Each
+<!--TOC paragraph id="sec74" Definition-->
+<h4 id="sec74" class="paragraph">Definition</h4><!--SEC END --><p>A <span style="font-family:monospace">.messages</span> file is a text file. It is composed of a list of entries. Each
 entry consists of one or more input sentences, followed with one or more blank
 lines, followed with a message. Two entries are separated by one or more blank
 lines. The syntax of an input sentence is described in §<a href="#sec%3Asentences">8.1</a>.
-A ‍message is an arbitrary piece of text, but cannot cannot a blank line.</p><p>Blank lines are significant: they are used as separators, both between
+A message is an arbitrary piece of text, but cannot cannot a blank line.</p><p>Blank lines are significant: they are used as separators, both between
 entries, and (within an entry) between the sentences and the message. Thus,
 there cannot be a blank line between two sentences. (If there is one, Menhir becomes confused and may complain about some word not being “a known
 non-terminal symbol”). There also cannot be a blank line inside a message.</p><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -2562,17 +2750,16 @@ Examples of well-formed declarations:
 <div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 17: An entry in a <span style="font-family:monospace">.messages</span> file, decorated with auto-generated comments</td></tr>
 </table></div>
 <a id="fig:messages:entry:decorated"></a>
-<div class="center"><hr class="floatrule"></div></blockquote><p>As an example, Figure ‍<a href="#fig%3Amessages%3Aentry">16</a> shows a valid entry, taken
+<div class="center"><hr class="floatrule"></div></blockquote><p>As an example, Figure <a href="#fig%3Amessages%3Aentry">16</a> shows a valid entry, taken
 from Menhir’s own <span style="font-family:monospace">.messages</span> file. This entry contains two input sentences,
 which lead to errors in two distinct states. A single message is associated
 with these two error states.</p>
-<!--TOC paragraph id="sec71" Comments-->
-<h4 id="sec71" class="paragraph">Comments</h4><!--SEC END --><p>Comment lines, which begin with a <code class="verb">#</code> character, are ignored everywhere.
+<!--TOC paragraph id="sec75" Comments-->
+<h4 id="sec75" class="paragraph">Comments</h4><!--SEC END --><p>Comment lines, which begin with a <code class="verb">#</code> character, are ignored everywhere.
 However, users who wish to take advantage of Menhir’s facility for merging
 two <span style="font-family:monospace">.messages</span> files (§<a href="#sec%3Amessages%3Amerge">11.2</a>) should follow certain
 conventions regarding the placement of comments:
-</p><ul class="itemize"><li class="li-itemize">
-If a comment concerns a specific sentence and should remain attached
+</p><ul class="itemize"><li class="li-itemize">If a comment concerns a specific sentence and should remain attached
 to this sentence, then it must immediately follow this sentence
 (without a blank line in between).
 </li><li class="li-itemize">If a comment concerns all sentences in an entry, then it should appear
@@ -2580,14 +2767,14 @@ between the sentences and the message, with blank lines in between.
 </li><li class="li-itemize">One should avoid placing comments between two entries, as the merging
 algorithm will not be able to handle them in a satisfactory way.
 </li></ul>
-<!--TOC paragraph id="sec72" Auto-generated comments-->
-<h4 id="sec72" class="paragraph">Auto-generated comments</h4><!--SEC END --><p>Several commands, described next (§<a href="#sec%3Amessages%3Atools">11.2</a>),
+<!--TOC paragraph id="sec76" Auto-generated comments-->
+<h4 id="sec76" class="paragraph">Auto-generated comments</h4><!--SEC END --><p>Several commands, described next (§<a href="#sec%3Amessages%3Atools">11.2</a>),
 produce <span style="font-family:monospace">.messages</span> files where each input sentence is followed with an
 auto-generated comment, marked with <code class="verb">##</code>. This special comment indicates
 in which state the error is detected, and is supposed to help the reader
 understand what it means to be in this state: What has been read so far? What
 is expected next?</p><p>As an example, the previous entry, decorated with auto-generated comments, is
-shown in Figure ‍<a href="#fig%3Amessages%3Aentry%3Adecorated">17</a>. (We have manually wrapped the
+shown in Figure <a href="#fig%3Amessages%3Aentry%3Adecorated">17</a>. (We have manually wrapped the
 lines that did not fit in this document.)</p><p>An auto-generated comment begins with the number of the error state that is
 reached via this input sentence.</p><p>Then, the auto-generated comment shows the LR(1) items that compose this
 state, in the same format as in an <span style="font-family:monospace">.automaton</span> file. these items offer a
@@ -2612,14 +2799,14 @@ cause any spurious reductions (hence, no warning appears), yet leads to an
 error state that can be reached via other sentences that do involve spurious
 reductions.
 </p>
-<!--TOC subsection id="sec73" Maintaining <span style="font-family:monospace">.messages</span> files-->
-<h3 id="sec73" class="subsection">11.2 Maintaining <span style="font-family:monospace">.messages</span> files</h3><!--SEC END --><p>
+<!--TOC subsection id="sec77" Maintaining <span style="font-family:monospace">.messages</span> files-->
+<h3 id="sec77" class="subsection">11.2 Maintaining <span style="font-family:monospace">.messages</span> files</h3><!--SEC END --><p>
 <a id="sec:messages:tools"></a></p><p>Ideally, the set of input sentences in a <span style="font-family:monospace">.messages</span> file should be correct
 (that is, every sentence causes an error on its last token), irredundant (that
 is, no two sentences lead to the same error state), and complete (that is,
 every error state is reached by some sentence).</p>
-<!--TOC paragraph id="sec74" Verifying correctness and irredundancy-->
-<h4 id="sec74" class="paragraph">Verifying correctness and irredundancy</h4><!--SEC END --><p>The correctness and irredundancy of a <span style="font-family:monospace">.messages</span> file are checked by supplying
+<!--TOC paragraph id="sec78" Verifying correctness and irredundancy-->
+<h4 id="sec78" class="paragraph">Verifying correctness and irredundancy</h4><!--SEC END --><p>The correctness and irredundancy of a <span style="font-family:monospace">.messages</span> file are checked by supplying
 <span style="font-family:monospace">--compile-errors</span> <span style="font-style:italic">filename</span> on the command line, where <span style="font-style:italic">filename</span> is the
 name of the <span style="font-family:monospace">.messages</span> file. (These arguments must be supplied in addition to
 the other usual arguments, such as the name of the <span style="font-family:monospace">.mly</span> file.) This command
@@ -2632,8 +2819,8 @@ has type <code class="verb">int -&gt; string</code>, and maps a state number to 
 raises the exception <code class="verb">Not_found</code> if its argument is not the number of
 a state for which a message has been defined. If the set of input sentences
 is complete, then it cannot raise <code class="verb">Not_found</code>.</p>
-<!--TOC paragraph id="sec75" Verifying completeness-->
-<h4 id="sec75" class="paragraph">Verifying completeness</h4><!--SEC END --><p>The completeness of a <span style="font-family:monospace">.messages</span> file is checked via the commands <span style="font-family:monospace">--list-errors</span> and <span style="font-family:monospace">--compare-errors</span>. The former produces, from scratch, a complete set of
+<!--TOC paragraph id="sec79" Verifying completeness-->
+<h4 id="sec79" class="paragraph">Verifying completeness</h4><!--SEC END --><p>The completeness of a <span style="font-family:monospace">.messages</span> file is checked via the commands <span style="font-family:monospace">--list-errors</span> and <span style="font-family:monospace">--compare-errors</span>. The former produces, from scratch, a complete set of
 input sentences, that is, a set of input sentences that reaches all error
 states. The latter compares two sets of sentences (more precisely, the two
 underlying sets of error states) for inclusion.</p><p>The command <span style="font-family:monospace">--list-errors</span> first computes all possible ways of causing an error.
@@ -2646,17 +2833,17 @@ dummy diagnostic message. The user should be warned that this algorithm may
 require large amounts of time (typically in the tens of seconds, possibly
 more) and memory (typically in the gigabytes, possibly more). It requires a
 64-bit machine. (On a 32-bit machine, it works, but quickly hits a built-in
-size limit.) At the verbosity level <span style="font-family:monospace">--log-automaton</span> ‍<span style="font-family:monospace">2</span>, it displays
+size limit.) At the verbosity level <span style="font-family:monospace">--log-automaton</span> <span style="font-family:monospace">2</span>, it displays
 some progress information and internal statistics on the standard error
 channel.</p><p>The command <span style="font-family:monospace">--compare-errors</span> <span style="font-style:italic">filename1</span> <span style="font-family:monospace">--compare-errors</span> <span style="font-style:italic">filename2</span>
 compares the <span style="font-family:monospace">.messages</span> files <span style="font-style:italic">filename1</span> and <span style="font-style:italic">filename2</span>. Each file is
 read and internally translated to a mapping of states to messages. Menhir then checks that the left-hand mapping is a subset of the right-hand mapping.
-That is, if a state ‍<span style="font-style:italic">s</span> is reached by some sentence in <span style="font-style:italic">filename1</span>, then it
+That is, if a state <span style="font-style:italic">s</span> is reached by some sentence in <span style="font-style:italic">filename1</span>, then it
 should also be reached by some sentence in <span style="font-style:italic">filename2</span>. Furthermore, if the
 message associated with <span style="font-style:italic">s</span> in <span style="font-style:italic">filename1</span> is not a dummy message, then the
 same message should be associated with <span style="font-style:italic">s</span> in <span style="font-style:italic">filename2</span>.</p><p>To check that the sentences in <span style="font-style:italic">filename2</span> cover all error states, it
-suffices to (1) ‍use <span style="font-family:monospace">--list-errors</span> to produce a complete set of sentences,
-which one stores in <span style="font-style:italic">filename1</span>, then (2) ‍use <span style="font-family:monospace">--compare-errors</span> to
+suffices to (1) use <span style="font-family:monospace">--list-errors</span> to produce a complete set of sentences,
+which one stores in <span style="font-style:italic">filename1</span>, then (2) use <span style="font-family:monospace">--compare-errors</span> to
 compare <span style="font-style:italic">filename1</span> and <span style="font-style:italic">filename2</span>.</p><p>In the case of a grammar that evolves fairly often, it can take significant
 human time and effort to update the <span style="font-family:monospace">.messages</span> file and ensure correctness,
 irredundancy, and completeness. A tempting way of reducing this effort is to abandon
@@ -2668,16 +2855,15 @@ messages, and there is no guarantee that the specific (hand-written) messages
 will appear in <em>all</em> situations where they are expected to appear.
 Instead, we recommend waiting for the grammar to become stable and enforcing
 completeness.</p>
-<!--TOC paragraph id="sec76" Merging <span style="font-family:monospace">.messages</span> files-->
-<h4 id="sec76" class="paragraph">Merging <span style="font-family:monospace">.messages</span> files</h4><!--SEC END --><p>
+<!--TOC paragraph id="sec80" Merging <span style="font-family:monospace">.messages</span> files-->
+<h4 id="sec80" class="paragraph">Merging <span style="font-family:monospace">.messages</span> files</h4><!--SEC END --><p>
 <a id="sec:messages:merge"></a></p><p>The command <span style="font-family:monospace">--merge-errors</span> <span style="font-style:italic">filename1</span> <span style="font-family:monospace">--merge-errors</span> <span style="font-style:italic">filename2</span> attempts
 to merge the <span style="font-family:monospace">.messages</span> files <span style="font-style:italic">filename1</span> and <span style="font-style:italic">filename2</span>, and prints the
 result on the standard output channel. This command can be useful if two users
 have worked independently and each of them has produced a <span style="font-family:monospace">.messages</span> file that
 covers a subset of all error states. The merging algorithm works roughly as
 follows:
-</p><ul class="itemize"><li class="li-itemize">
-All entries in <span style="font-style:italic">filename2</span> are preserved literally.
+</p><ul class="itemize"><li class="li-itemize">All entries in <span style="font-style:italic">filename2</span> are preserved literally.
 </li><li class="li-itemize">An entry in <span style="font-style:italic">filename1</span> that contains the dummy message
 <code class="verb">&lt;YOUR SYNTAX ERROR MESSAGE HERE&gt;</code> is ignored.
 </li><li class="li-itemize">An entry in <span style="font-style:italic">filename1</span> that leads to a state for which
@@ -2692,8 +2878,8 @@ appended to <span style="font-style:italic">filename2</span>. For this reason, i
 “reference” file and the other file is a small “delta”, then it is
 recommended to provide the “delta” as <span style="font-style:italic">filename1</span> and the “reference”
 as <span style="font-style:italic">filename2</span>.</p>
-<!--TOC paragraph id="sec77" Other commands-->
-<h4 id="sec77" class="paragraph">Other commands</h4><!--SEC END --><p>The command <span style="font-family:monospace">--update-errors</span> <span style="font-style:italic">filename</span> is used to update the auto-generated
+<!--TOC paragraph id="sec81" Other commands-->
+<h4 id="sec81" class="paragraph">Other commands</h4><!--SEC END --><p>The command <span style="font-family:monospace">--update-errors</span> <span style="font-style:italic">filename</span> is used to update the auto-generated
 comments in the <span style="font-family:monospace">.messages</span> file <span style="font-style:italic">filename</span>. It is typically used after a
 change in the grammar (or in the command line options that affect the
 construction of the automaton). A new <span style="font-family:monospace">.messages</span> file is produced on the
@@ -2713,21 +2899,21 @@ Menhir expects the input sentence to cause an error on its last token, and
 displays information about the state in which the error is detected, in the
 form of a <span style="font-family:monospace">.messages</span> file entry. This can be used to quickly find out exactly
 what error is caused by one particular input sentence.</p>
-<!--TOC subsection id="sec78" Writing accurate diagnostic messages-->
-<h3 id="sec78" class="subsection">11.3 Writing accurate diagnostic messages</h3><!--SEC END --><p>
+<!--TOC subsection id="sec82" Writing accurate diagnostic messages-->
+<h3 id="sec82" class="subsection">11.3 Writing accurate diagnostic messages</h3><!--SEC END --><p>
 <a id="sec:errors:diagnostics"></a></p><p>One might think that writing a diagnostic message for each error state is a
 straightforward (if lengthy) task. In reality, it is not so simple.
 </p>
-<!--TOC paragraph id="sec79" A state, not a sentence-->
-<h4 id="sec79" class="paragraph">A state, not a sentence</h4><!--SEC END --><p>The first thing to keep in mind is that a diagnostic message is associated
-with a <em>state</em> ‍<span style="font-style:italic">s</span>, as opposed to a sentence. An entry in a <span style="font-family:monospace">.messages</span> file contains a sentence ‍<span style="font-style:italic">w</span> that leads to an error in state ‍<span style="font-style:italic">s</span>. This
-sentence is just one way of causing an error in state ‍<span style="font-style:italic">s</span>; there may exist
+<!--TOC paragraph id="sec83" A state, not a sentence-->
+<h4 id="sec83" class="paragraph">A state, not a sentence</h4><!--SEC END --><p>The first thing to keep in mind is that a diagnostic message is associated
+with a <em>state</em> <span style="font-style:italic">s</span>, as opposed to a sentence. An entry in a <span style="font-family:monospace">.messages</span> file contains a sentence <span style="font-style:italic">w</span> that leads to an error in state <span style="font-style:italic">s</span>. This
+sentence is just one way of causing an error in state <span style="font-style:italic">s</span>; there may exist
 many other sentences that also cause an error in this state. The diagnostic
-message should not be specific of the sentence ‍<span style="font-style:italic">w</span>: it should make sense
-regardless of how the state ‍<span style="font-style:italic">s</span> is reached.</p><p>As a rule of thumb, when writing a diagnostic message, one should (as much as
-possible) ignore the example sentence ‍<span style="font-style:italic">w</span> altogether, and concentrate on the
-description of the state ‍<span style="font-style:italic">s</span>, which appears as part of the auto-generated
-comment.</p><p>The LR(1) items that compose the state ‍<span style="font-style:italic">s</span> offer a description of the past
+message should not be specific of the sentence <span style="font-style:italic">w</span>: it should make sense
+regardless of how the state <span style="font-style:italic">s</span> is reached.</p><p>As a rule of thumb, when writing a diagnostic message, one should (as much as
+possible) ignore the example sentence <span style="font-style:italic">w</span> altogether, and concentrate on the
+description of the state <span style="font-style:italic">s</span>, which appears as part of the auto-generated
+comment.</p><p>The LR(1) items that compose the state <span style="font-style:italic">s</span> offer a description of the past
 (that is, what has been read so far) and the future (that is, which terminal
 symbols are allowed next). A diagnostic message should be designed based on
 this description.</p><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -2756,31 +2942,31 @@ program:
 ## typ0
 ##
 </pre>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 19: A problematic error state in the grammar of Figure ‍<a href="#fig%3Adeclarations">18</a>, due to over-approximation</td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 19: A problematic error state in the grammar of Figure <a href="#fig%3Adeclarations">18</a>, due to over-approximation</td></tr>
 </table></div>
 <a id="fig:declarations:over"></a>
 <div class="center"><hr class="floatrule"></div></blockquote>
-<!--TOC paragraph id="sec80" The problem of over-approximated lookahead sets-->
-<h4 id="sec80" class="paragraph">The problem of over-approximated lookahead sets</h4><!--SEC END --><p>As pointed out earlier (§<a href="#sec%3Amessages%3Aformat">11.1</a>), in a noncanonical
+<!--TOC paragraph id="sec84" The problem of over-approximated lookahead sets-->
+<h4 id="sec84" class="paragraph">The problem of over-approximated lookahead sets</h4><!--SEC END --><p>As pointed out earlier (§<a href="#sec%3Amessages%3Aformat">11.1</a>), in a noncanonical
 automaton, the lookahead sets in the LR(1) items can be both over- and
 under-approximated. One must be aware of this phenomenon, otherwise one runs
 the risk of writing a diagnostic message that proposes too many or too few
-continuations.</p><p>As an example, let us consider the grammar in Figure ‍<a href="#fig%3Adeclarations">18</a>.
+continuations.</p><p>As an example, let us consider the grammar in Figure <a href="#fig%3Adeclarations">18</a>.
 According to this grammar, a “program” is either a declaration between
 parentheses or a declaration followed with a semicolon. A “declaration” is
 an identifier, followed with a colon, followed with a type. A “type” is an
 identifier, a type between parentheses, or a function type in the style of
-OCaml.</p><p>The (noncanonical) automaton produced by Menhir for this grammar has 17 ‍states.
+OCaml.</p><p>The (noncanonical) automaton produced by Menhir for this grammar has 17 states.
 Using <span style="font-family:monospace">--list-errors</span>, we find that an error can be detected in 10 of these
-17 ‍states. By manual inspection of the auto-generated comments, we find that
-for 9 out of these 10 ‍states, writing an accurate diagnostic message is easy. However,
-one problematic state remains, namely state ‍8,
-shown in Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a>.</p><p>In this state, a (level-0) type has just been read. One valid continuation,
-which corresponds to the second LR(1) item in Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a>,
+17 states. By manual inspection of the auto-generated comments, we find that
+for 9 out of these 10 states, writing an accurate diagnostic message is easy. However,
+one problematic state remains, namely state 8,
+shown in Figure <a href="#fig%3Adeclarations%3Aover">19</a>.</p><p>In this state, a (level-0) type has just been read. One valid continuation,
+which corresponds to the second LR(1) item in Figure <a href="#fig%3Adeclarations%3Aover">19</a>,
 is to continue this type: the terminal symbol <code class="verb">ARROW</code>, followed with a
 (level-1) type, is a valid continuation. Now, the question is, what other
 valid continuations are there? By examining the first LR(1) item
-in Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a>, it may look as if both <code class="verb">SEMICOLON</code>
+in Figure <a href="#fig%3Adeclarations%3Aover">19</a>, it may look as if both <code class="verb">SEMICOLON</code>
 and <code class="verb">RPAREN</code> are valid continuations. However, this cannot be the case. A
 moment’s thought reveals that <em>either</em> we have seen an opening
 parenthesis <code class="verb">LPAREN</code> at the very beginning of the program, in which case
@@ -2788,10 +2974,10 @@ we definitely expect a closing parenthesis <code class="verb">RPAREN</code>; <em
 not seen one, in which case we definitely expect a semicolon <code class="verb">SEMICOLON</code>.
 It is <em>never</em> the case that <em>both</em> <code class="verb">SEMICOLON</code>
 and <code class="verb">RPAREN</code> are valid continuations!</p><p>In fact, the lookahead set in the first LR(1) item
-in Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a> is over-approximated.
-State ‍8 in the noncanonical automaton results from merging two states
+in Figure <a href="#fig%3Adeclarations%3Aover">19</a> is over-approximated.
+State 8 in the noncanonical automaton results from merging two states
 in the canonical automaton.</p><p>In such a situation, one cannot write an accurate diagnostic message.
-Knowing that the automaton is in state ‍8 does not give us a
+Knowing that the automaton is in state 8 does not give us a
 precise view of the valid continuations. Some valuable information (that is,
 whether we have seen an opening parenthesis <code class="verb">LPAREN</code> at the very
 beginning of the program) is buried in the automaton’s stack.</p><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -2805,7 +2991,7 @@ program:
 | LPAREN declaration(RPAREN) RPAREN
 | declaration(SEMICOLON)  SEMICOLON            {}
 </pre>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 20: Splitting the problematic state of Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a> via selective duplication</td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 20: Splitting the problematic state of Figure <a href="#fig%3Adeclarations%3Aover">19</a> via selective duplication</td></tr>
 </table></div>
 <a id="fig:declarations:phantom"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -2820,7 +3006,7 @@ program:
 | LPAREN declaration RPAREN
 | declaration SEMICOLON       {}
 </pre>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 21: Avoiding the problematic state of Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a> via reductions on error</td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 21: Avoiding the problematic state of Figure <a href="#fig%3Adeclarations%3Aover">19</a> via reductions on error</td></tr>
 </table></div>
 <a id="fig:declarations:onerrorreduce"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><blockquote class="figure"><div class="center"><hr class="floatrule"></div>
@@ -2841,95 +3027,95 @@ program:
 ## In state 11, spurious reduction of production declaration -&gt; ID COLON typ1
 ##
 </pre>
-<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 22: A problematic error state in the grammar of Figure ‍<a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>, due to under-approximation</td></tr>
+<div class="caption"><table style="border-spacing:6px;border-collapse:separate;" class="cellpading0"><tr><td style="vertical-align:top;text-align:left;" >Figure 22: A problematic error state in the grammar of Figure <a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>, due to under-approximation</td></tr>
 </table></div>
 <a id="fig:declarations:under"></a>
 <div class="center"><hr class="floatrule"></div></blockquote><p>How can one work around this problem? Let us suggest three options.</p>
-<!--TOC paragraph id="sec81" Blind duplication of states-->
-<h4 id="sec81" class="paragraph">Blind duplication of states</h4><!--SEC END --><p>One option would be to build a canonical automaton by using the
+<!--TOC paragraph id="sec85" Blind duplication of states-->
+<h4 id="sec85" class="paragraph">Blind duplication of states</h4><!--SEC END --><p>One option would be to build a canonical automaton by using the
 <span style="font-family:monospace">--canonical</span> switch. In this example, one would
 obtain a 27-state automaton, where the problem has disappeared. However, this
 option is rarely viable, as it duplicates many states without good reason.</p>
-<!--TOC paragraph id="sec82" Selective duplication of states-->
-<h4 id="sec82" class="paragraph">Selective duplication of states</h4><!--SEC END --><p>A second option is to manually cause just enough duplication to remove the
+<!--TOC paragraph id="sec86" Selective duplication of states-->
+<h4 id="sec86" class="paragraph">Selective duplication of states</h4><!--SEC END --><p>A second option is to manually cause just enough duplication to remove the
 problematic over-approximation. In our example, we wish to distinguish two kinds
 of types and declarations, namely those that must be followed with a closing
 parenthesis, and those that must be followed with a semicolon. We create
 such a distinction by parameterizing <code class="verb">typ1</code> and <code class="verb">declaration</code> with a
 phantom parameter. The modified grammar is shown
-in Figure ‍<a href="#fig%3Adeclarations%3Aphantom">20</a>. The phantom parameter does not affect the
+in Figure <a href="#fig%3Adeclarations%3Aphantom">20</a>. The phantom parameter does not affect the
 language that is accepted: for instance, the nonterminal
 symbols <span style="font-family:monospace">declaration(SEMICOLON)</span> and
 <span style="font-family:monospace">declaration(RPAREN)</span> generate the same language as <span style="font-family:monospace">declaration</span>
-in the grammar of Figure ‍<a href="#fig%3Adeclarations">18</a>. Yet, by giving
+in the grammar of Figure <a href="#fig%3Adeclarations">18</a>. Yet, by giving
 distinct names to these two symbols, we force the construction of an
 automaton where more states are distinguished. In this example, Menhir produces
 a 23-state automaton. Using <span style="font-family:monospace">--list-errors</span>, we find that an error can be
-detected in 11 of these 23 ‍states, and by manual inspection of the
-auto-generated comments, we find that for each of these 11 ‍states, writing an
+detected in 11 of these 23 states, and by manual inspection of the
+auto-generated comments, we find that for each of these 11 states, writing an
 accurate diagnostic message is easy. In summary, we have selectively duplicated
 just enough states so as to split the problematic error state into two
 non-problematic error states.</p>
-<!--TOC paragraph id="sec83" Reductions on error-->
-<h4 id="sec83" class="paragraph">Reductions on error</h4><!--SEC END --><p>A third and last option is to introduce an <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration
+<!--TOC paragraph id="sec87" Reductions on error-->
+<h4 id="sec87" class="paragraph">Reductions on error</h4><!--SEC END --><p>A third and last option is to introduce an <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration
 (§<a href="#sec%3Aonerrorreduce">4.1.8</a>) so as to prevent the detection of an error in the
-problematic state ‍8. We see in Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a> that, in
-state ‍8, the production <span style="font-family:monospace">typ1</span> → <span style="font-family:monospace">typ0</span> is ready to
+problematic state 8. We see in Figure <a href="#fig%3Adeclarations%3Aover">19</a> that, in
+state 8, the production <span style="font-family:monospace">typ1</span> → <span style="font-family:monospace">typ0</span> is ready to
 be reduced. If we could force this reduction to take place, then the automaton
 would move to some other state where it would be clear which
 of <code class="verb">SEMICOLON</code> and <code class="verb">RPAREN</code> is expected. We
 achieve this by marking <code class="verb">typ1</code> as “reducible on error”.
 The modified grammar is shown
-in Figure ‍<a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>.
+in Figure <a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>.
 For this grammar, Menhir produces a 17-state automaton.
-(This is the exact same automaton as for the grammar of Figure ‍<a href="#fig%3Adeclarations">18</a>,
+(This is the exact same automaton as for the grammar of Figure <a href="#fig%3Adeclarations">18</a>,
 except 2 of the 17 states have received extra reduction actions.)
-Using <span style="font-family:monospace">--list-errors</span>, we find that an error can be detected in 9 of these ‍17 states.
-The problematic state, namely state ‍8, is no longer an error state!
+Using <span style="font-family:monospace">--list-errors</span>, we find that an error can be detected in 9 of these 17 states.
+The problematic state, namely state 8, is no longer an error state!
 The problem has vanished.</p>
-<!--TOC paragraph id="sec84" The problem of under-approximated lookahead sets-->
-<h4 id="sec84" class="paragraph">The problem of under-approximated lookahead sets</h4><!--SEC END --><p>The third option seems by far the simplest of all, and is recommended in many
+<!--TOC paragraph id="sec88" The problem of under-approximated lookahead sets-->
+<h4 id="sec88" class="paragraph">The problem of under-approximated lookahead sets</h4><!--SEC END --><p>The third option seems by far the simplest of all, and is recommended in many
 situations. However, it comes with a caveat. There may now exist states whose
 lookahead sets are under-approximated, in a certain sense. Because of this,
 there is a danger of writing an incomplete diagnostic message, one that does
 not list all valid continuations.</p><p>To see this, let us look again at the sentence
-<span style="font-family:monospace">ID COLON ID LPAREN</span>. In the grammar and automaton of Figure ‍<a href="#fig%3Adeclarations">18</a>,
-this sentence takes us to the problematic state ‍8, shown in
-Figure ‍<a href="#fig%3Adeclarations%3Aover">19</a>. In the grammar and automaton of
-Figure ‍<a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>, because more reduction actions are
+<span style="font-family:monospace">ID COLON ID LPAREN</span>. In the grammar and automaton of Figure <a href="#fig%3Adeclarations">18</a>,
+this sentence takes us to the problematic state 8, shown in
+Figure <a href="#fig%3Adeclarations%3Aover">19</a>. In the grammar and automaton of
+Figure <a href="#fig%3Adeclarations%3Aonerrorreduce">21</a>, because more reduction actions are
 carried out before the error is detected, this sentence takes us
-to state ‍15, shown in Figure ‍<a href="#fig%3Adeclarations%3Aunder">22</a>.</p><p>When writing a diagnostic message for state ‍15, one might be tempted to write:
+to state 15, shown in Figure <a href="#fig%3Adeclarations%3Aunder">22</a>.</p><p>When writing a diagnostic message for state 15, one might be tempted to write:
 “Up to this point, a declaration has been recognized. At this point, a
-semicolon is expected”. Indeed, by examining the sole LR(1) item in state ‍15,
+semicolon is expected”. Indeed, by examining the sole LR(1) item in state 15,
 it looks as if <code class="verb">SEMICOLON</code> is the only permitted continuation. However,
 this is not the case. Another valid continuation is <code class="verb">ARROW</code>: indeed, the
 sentence
 <span style="font-family:monospace">ID COLON ID ARROW ID SEMICOLON</span> forms a valid program. In fact, if
 the first token following <span style="font-family:monospace">ID COLON ID</span> is <span style="font-family:monospace">ARROW</span>, then in
-state ‍8 this token is shifted, so the two reductions that take us from state ‍8
-through state ‍11 to state ‍15 never take place. This is why, even though
-<span style="font-family:monospace">ARROW</span> does not appear in state ‍15 as a valid continuation, it
+state 8 this token is shifted, so the two reductions that take us from state 8
+through state 11 to state 15 never take place. This is why, even though
+<span style="font-family:monospace">ARROW</span> does not appear in state 15 as a valid continuation, it
 nevertheless is a valid continuation of <span style="font-family:monospace">ID COLON ID</span>. The warning
-produced by Menhir, shown in Figure ‍<a href="#fig%3Adeclarations%3Aunder">22</a>, is supposed to
+produced by Menhir, shown in Figure <a href="#fig%3Adeclarations%3Aunder">22</a>, is supposed to
 attract attention to this issue.</p><p>Another way to explain this issue is to point out that, by declaring
 <code class="verb">%on_error_reduce typ1</code>, we make a choice.
 When the parser reads a type and finds an invalid token, it decides that this
 type is finished, even though, in reality, this type could be continued
 with <code class="verb">ARROW</code> …. This in turn causes the parser to perform another
 reduction and consider the current declaration finished, even though, in
-reality, this declaration could be continued with <code class="verb">ARROW</code> ….</p><p>In summary, when writing a diagnostic message for state ‍15, one should take
+reality, this declaration could be continued with <code class="verb">ARROW</code> ….</p><p>In summary, when writing a diagnostic message for state 15, one should take
 into account the fact that this state can be reached via spurious reductions
 and (therefore) <code class="verb">SEMICOLON</code> may not be the only permitted continuation.
 One way of doing this, without explicitly listing all permitted continuations,
 is to write: “Up to this point, a declaration has been recognized. If this
 declaration is complete, then at this point, a semicolon is expected”.</p>
-<!--TOC subsection id="sec85" A working example-->
-<h3 id="sec85" class="subsection">11.4 A working example</h3><!--SEC END --><p>
+<!--TOC subsection id="sec89" A working example-->
+<h3 id="sec89" class="subsection">11.4 A working example</h3><!--SEC END --><p>
 <a id="sec:errors:example"></a></p><p>The demo <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc-syntax-errors"><span style="font-family:monospace">demos/calc-syntax-errors</span></a> illustrates this approach to error
 handling. It is based on the demo <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc"><span style="font-family:monospace">demos/calc</span></a>, which involves a very
 simple grammar of arithmetic expressions. Compared with <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc"><span style="font-family:monospace">demos/calc</span></a>,
 one <span style="font-family:sans-serif"><span style="font-weight:bold">%on_error_reduce</span></span> declaration is added so as to reduce the number of error
-states. There remain just 9 ‍error states, for which we write 5 ‍distinct syntax
+states. There remain just 9 error states, for which we write 5 distinct syntax
 error messages. These messages are stored in the file
 <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc-syntax-errors/parserMessages.messages"><span style="font-family:monospace">demos/calc-syntax-errors/parserMessages.messages</span></a>.
 The file <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/calc-syntax-errors/dune"><span style="font-family:monospace">demos/calc-syntax-errors/dune</span></a> instructs the build system to
@@ -2963,12 +3149,12 @@ table back-end. One can instead use Menhir’s code back-end with
 number, which can be used to select a syntax error message.
 Menhir uses this method in its own parser; see
 <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/src/stage2/Driver.ml"><span style="font-family:monospace">src/stage2/Driver.ml</span></a>.</p>
-<!--TOC section id="sec86" Coq back-end-->
-<h2 id="sec86" class="section">12 Coq back-end</h2><!--SEC END --><p>
+<!--TOC section id="sec90" Coq back-end-->
+<h2 id="sec90" class="section">12 Coq back-end</h2><!--SEC END --><p>
 <a id="sec:coq"></a></p><p>Menhir is able to generate a parser that whose correctness can be formally
-verified using the Coq proof assistant ‍[<a href="#jourdan-leroy-pottier-12">14</a>]. This
+verified using the Coq proof assistant [<a href="#jourdan-leroy-pottier-12">14</a>]. This
 feature is used to construct the parser of the CompCert verified
-compiler ‍[<a href="#compcert">18</a>].</p><p>Setting the <span style="font-family:monospace">--coq</span> switch on the command line enables the Coq back-end. When
+compiler [<a href="#compcert">18</a>].</p><p>Setting the <span style="font-family:monospace">--coq</span> switch on the command line enables the Coq back-end. When
 this switch is set, Menhir expects an input file whose name ends
 in <span style="font-family:monospace">.vy</span> and generates a Coq file whose name ends
 in <span style="font-family:monospace">.v</span>.</p><p>Like a <span style="font-family:monospace">.mly</span> file, a <span style="font-family:monospace">.vy</span> file is a grammar specification,
@@ -2978,11 +3164,10 @@ of OCaml. A <span style="font-family:monospace">.vy</span> file otherwise uses t
 a <span style="font-family:monospace">.mly</span> file. CompCert’s
 <a href="https://github.com/AbsInt/CompCert/tree/master/cparser/Parser.vy"><span style="font-family:monospace">cparser/Parser.vy</span></a>
 serves as an example.</p><p>Several restrictions are imposed when Menhir is used in <span style="font-family:monospace">--coq</span> mode:
-</p><ul class="itemize"><li class="li-itemize">
-The error-handling mechanism (§<a href="#sec%3Aerrors">10</a>) is absent.
+</p><ul class="itemize"><li class="li-itemize">The error-handling mechanism (§<a href="#sec%3Aerrors">10</a>) is absent.
 The <span style="font-family:sans-serif"><span style="font-weight:bold">error</span></span> token is not supported.
 </li><li class="li-itemize">Location information is not propagated. The <code class="verb">$start*</code> and <code class="verb">$end*</code>
-keywords (Figure ‍<a href="#fig%3Apos">14</a>) are not supported.
+keywords (Figure <a href="#fig%3Apos">14</a>) are not supported.
 </li><li class="li-itemize"><span style="font-family:sans-serif"><span style="font-weight:bold">%parameter</span></span> (§<a href="#sec%3Aparameter">4.1.2</a>) is not supported.
 </li><li class="li-itemize"><span style="font-family:sans-serif"><span style="font-weight:bold">%inline</span></span> (§<a href="#sec%3Ainline">5.3</a>) is not supported.
 </li><li class="li-itemize">The standard library (§<a href="#sec%3Alibrary">5.4</a>) is not supported, of course,
@@ -2999,24 +3184,23 @@ priority and associativity declarations (§<a href="#sec%3Aassoc">4.1.4</a>)
 is not supported.
 The reason is that there is no simple formal specification
 of how conflict resolution should work.
-</li></ul><p>The generated file contains several modules:</p><ul class="itemize"><li class="li-itemize">
-The module <code class="verb">Gram</code> defines the terminal and
+</li></ul><p>The generated file contains several modules:</p><ul class="itemize"><li class="li-itemize">The module <code class="verb">Gram</code> defines the terminal and
 non-terminal symbols, the grammar, and the semantic actions.
 </li><li class="li-itemize">The module <code class="verb">Aut</code> contains the automaton
 generated by Menhir, together with a certificate that is checked by Coq
 while establishing the soundness and completeness of the parser.
-</li></ul><p>The type ‍<code class="verb">terminal</code> of the terminal symbols is an inductive type, with
+</li></ul><p>The type <code class="verb">terminal</code> of the terminal symbols is an inductive type, with
 one constructor for each terminal symbol. A terminal symbol named <code class="verb">Foo</code>
-in the <code class="verb">.vy</code> file is named <code class="verb">Foo't</code> in Coq. A ‍terminal symbol per se
+in the <code class="verb">.vy</code> file is named <code class="verb">Foo't</code> in Coq. A terminal symbol per se
 does not carry a the semantic value.</p><p>We also define the type <code class="verb">token</code> of tokens, that is, dependent pairs of a
 terminal symbol and a semantic value of an appropriate type for this symbol.
 We model the lexer as an object of type <code class="verb">Streams.Stream token</code>, that is,
 an infinite stream of tokens.
-</p><p>The type ‍<code class="verb">nonterminal</code> of the non-terminal symbols is an inductive type,
+</p><p>The type <code class="verb">nonterminal</code> of the non-terminal symbols is an inductive type,
 with one constructor for each non-terminal symbol. A non-terminal symbol named
 <code class="verb">Bar</code> in the <code class="verb">.vy</code> file is named <code class="verb">Bar'nt</code> in Coq.</p><p>The proof of termination of an LR(1) parser in the case of invalid input seems
 far from obvious. We did not find such a proof in the literature. In an
-application such as CompCert ‍[<a href="#compcert">18</a>], this question is not considered
+application such as CompCert [<a href="#compcert">18</a>], this question is not considered
 crucial. For this reason, we did not formally establish the termination of the
 parser. Instead, in order to satisfy Coq’s termination requirements, we use
 the “fuel” technique: the parser takes an additional parameter
@@ -3026,7 +3210,7 @@ can use a value of e.g., 40 or 50 to make sure the parser will never run out
 of fuel in a reasonable time.</p><p>Parsing can have three different outcomes, represented by the type
 <code class="verb">parse_result</code>.
 (This definition is implicitly parameterized over the initial
-state ‍<code class="verb">init</code>. We omit the details here.)
+state <code class="verb">init</code>. We omit the details here.)
 </p><pre class="verbatim">  Inductive parse_result :=
   | Fail_pr_full: state -&gt; token -&gt; parse_result
   | Timeout_pr: parse_result
@@ -3059,11 +3243,11 @@ named <code class="verb">Parser.unambiguous</code>.</p><p>The parsers produced b
 library. This library can be installed via the command <code class="verb">opam install coq-menhirlib</code>.<sup><a id="text3" href="#note3">3</a></sup>
 The Coq sources of this library can be found in
 the <span style="font-family:monospace">coq-menhirlib</span> directory of the Menhir repository.</p><p>The directory <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/coq-minicalc"><span style="font-family:monospace">demos/coq-minicalc</span></a> contains a minimal example that
-shows how to set things up.</p><p>The CompCert verified compiler ‍[<a href="#compcert">18</a>,<a href="#compcert-github">17</a>] offers a
+shows how to set things up.</p><p>The CompCert verified compiler [<a href="#compcert">18</a>,<a href="#compcert-github">17</a>] offers a
 real-world example. There, see in particular the directory
 <a href="https://github.com/AbsInt/CompCert/tree/master/cparser"><span style="font-family:monospace">cparser</span></a>.</p>
-<!--TOC subsection id="sec87" Error messaging options for Coq mode-->
-<h3 id="sec87" class="subsection">12.1 Error messaging options for Coq mode</h3><!--SEC END --><p>
+<!--TOC subsection id="sec91" Error messaging options for Coq mode-->
+<h3 id="sec91" class="subsection">12.1 Error messaging options for Coq mode</h3><!--SEC END --><p>
 <a id="sec:coq:errmsg"></a>
 Users of the Coq mode have several options for providing error messages from the parser.
 If they wish, they can follow the pattern of CompCert and use Menhir’s incremental mode for
@@ -3084,10 +3268,10 @@ for convenience, but there is no proof of its correctness.</p><p>Users who wish 
 notation <code class="verb">Fail_pr</code> and <code class="verb">Fail_sr</code>. This notation is used in the
 statements of the theorems about the parser. It is available only in Coq code,
 such as in <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos/coq-minicalc"><span style="font-family:monospace">demos/coq-minicalc</span></a>, not in extracted OCaml code.</p>
-<!--TOC section id="sec88" Building grammarware on top of Menhir-->
-<h2 id="sec88" class="section">13 Building grammarware on top of Menhir</h2><!--SEC END --><p>
+<!--TOC section id="sec92" Building grammarware on top of Menhir-->
+<h2 id="sec92" class="section">13 Building grammarware on top of Menhir</h2><!--SEC END --><p>
 <a id="sec:grammarware"></a></p><p>It is possible to build a variety of grammar-processing tools,
-also known as “grammarware” ‍[<a href="#klint-laemmel-verhoef-05">15</a>],
+also known as “grammarware” [<a href="#klint-laemmel-verhoef-05">15</a>],
 on top of Menhir’s front-end. Indeed, Menhir offers a facility
 for dumping a <span style="font-family:monospace">.cmly</span> file, which contains a (binary-form) representation
 of the grammar and automaton,
@@ -3099,14 +3283,13 @@ which are ignored by Menhir’s back-ends,
 yet are written to the <span style="font-family:monospace">.cmly</span> file,
 thus can be exploited by other tools, via <span style="font-family:monospace">MenhirSdk</span>.
 Attributes are described in §<a href="#sec%3Aattributes">13.2</a>.</p>
-<!--TOC subsection id="sec89" Menhir’s SDK-->
-<h3 id="sec89" class="subsection">13.1 Menhir’s SDK</h3><!--SEC END --><p>
+<!--TOC subsection id="sec93" Menhir’s SDK-->
+<h3 id="sec93" class="subsection">13.1 Menhir’s SDK</h3><!--SEC END --><p>
 <a id="sec:sdk"></a></p><p>The command line option <span style="font-family:monospace">--cmly</span> causes Menhir to produce a <span style="font-family:monospace">.cmly</span> file in
 addition to its normal operation. This file contains a (binary-form)
 representation of the grammar and automaton. This is the grammar that
 is obtained after the following steps have been carried out:
-</p><ul class="itemize"><li class="li-itemize">
-joining multiple <span style="font-family:monospace">.mly</span> files, if necessary; </li><li class="li-itemize">eliminating anonymous rules;
+</p><ul class="itemize"><li class="li-itemize">joining multiple <span style="font-family:monospace">.mly</span> files, if necessary; </li><li class="li-itemize">eliminating anonymous rules;
 </li><li class="li-itemize">expanding away parameterized nonterminal symbols;
 </li><li class="li-itemize">removing unreachable nonterminal symbols;
 </li><li class="li-itemize">performing OCaml type inference, if the <span style="font-family:monospace">--infer</span> switch is used;
@@ -3117,17 +3300,30 @@ reads such a file and produces a module whose signature is
 <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/sdk/cmly_api.ml"><span style="font-family:monospace">MenhirSdk.Cmly_api.GRAMMAR</span></a>.
 This API is not explained in this document; for details,
 the reader is expected to follow the above links.</p>
-<!--TOC subsection id="sec90" Attributes-->
-<h3 id="sec90" class="subsection">13.2 Attributes</h3><!--SEC END --><p>
+<!--TOC subsection id="sec94" Attributes-->
+<h3 id="sec94" class="subsection">13.2 Attributes</h3><!--SEC END --><p>
 <a id="sec:attributes"></a></p><p>Attributes are decorations that can be placed in <span style="font-family:monospace">.mly</span> files.
 They are ignored by Menhir’s back-ends,
 but are written to <span style="font-family:monospace">.cmly</span> files,
-thus can be exploited by other tools, via <span style="font-family:monospace">MenhirSdk</span>.</p><p>An attribute consists of a name and a payload. An attribute name is an OCaml identifier, such as <span style="font-family:monospace">cost</span>, or a list of OCaml identifiers, separated
-with dots, such as <span style="font-family:monospace">my.name</span>. An attribute payload is an OCaml expression of arbitrary type, such as <span style="font-family:monospace">1</span> or <code class="verb">"&amp;&amp;"</code> or <code class="verb">print_int</code>.
-Following the syntax of OCaml’s attributes, an attribute’s name and payload
+thus can be exploited by other tools, via <span style="font-family:monospace">MenhirSdk</span>.</p>
+<!--TOC subsubsection id="sec95" Attribute structure-->
+<h4 id="sec95" class="subsubsection">13.2.1 Attribute structure</h4><!--SEC END --><p>An attribute consists of a label and a payload. An attribute label is an OCaml identifier, such as <span style="font-family:monospace">cost</span>, or a list of OCaml identifiers, separated
+with dots, such as <span style="font-family:monospace">my.label</span>. An attribute payload is an OCaml expression of arbitrary type, such as <span style="font-family:monospace">1</span> or <code class="verb">"&amp;&amp;"</code> or <code class="verb">print_int</code>.
+(The payload is not parsed or type-checked, but must be well-formed according
+to OCaml’s lexical conventions: that is, inside it, braces, parentheses,
+single and double quotes, and comment delimiters must be balanced.)
+Following the syntax of OCaml’s attributes, an attribute’s label and payload
 are separated with one or more spaces, and are delimited by <code class="verb">[@</code> and
-<code class="verb">]</code>. Thus, <code class="verb">[@cost 1]</code> and <code class="verb">[@printer print_int]</code> are examples
-of attributes.</p><p>An attribute can be attached at one of four levels:
+<code class="verb">]</code>. Thus,
+<code class="verb">[@name foo]</code>
+and
+<code class="verb">[@cost 1]</code>
+and
+<code class="verb">[@printer print_int]</code>
+are examples of attributes.</p>
+<!--TOC subsubsection id="sec96" Attribute placement-->
+<h4 id="sec96" class="subsubsection">13.2.2 Attribute placement</h4><!--SEC END --><p>
+<a id="sec:attributes:placement"></a></p><p>An attribute can be attached at one of five levels:
 </p><ol class="enumerate" type=1><li class="li-enumerate">An attribute can be attached with the grammar.
 Such an attribute must be preceded with a <code class="verb">%</code> sign and must appear
 in the declarations section (§<a href="#sec%3Adecls">4.1</a>). For example, the following
@@ -3158,7 +3354,24 @@ after the producer. For instance, in the following rule,
 an attribute is attached with the producer <code class="verb">expr*</code>:
 <pre class="verbatim">  exprs:
     LPAREN es = expr* [@list true] RPAREN { es }
-</pre></li></ol><p>As a convenience, it is possible to attach many attributes with many (terminal
+</pre></li><li class="li-enumerate">An attribute can be attached with a production.
+Such an attribute must appear after the semantic action
+and after the <span style="font-family:sans-serif"><span style="font-weight:bold">%prec</span></span> annotation, if there is one
+(§<a href="#sec%3Aproductiongroups">4.2.1</a>).
+If a production group contains several productions,
+then its attributes are shared by all productions.
+For instance, in the following definition,
+each of the two productions carries an attribute
+whose label is <span style="font-family:monospace">name</span>:
+<pre class="verbatim">  option(X):
+      { None   } [@name none]
+  | x = X
+      { Some x } [@name some]
+</pre></li></ol><p>If a nonterminal symbol is marked <span style="font-family:sans-serif"><span style="font-weight:bold">%inline</span></span> then it cannot carry an attribute,
+and a use of it cannot carry an attribute.
+</p>
+<!--TOC subsubsection id="sec97" Syntactic sugar-->
+<h4 id="sec97" class="subsubsection">13.2.3 Syntactic sugar</h4><!--SEC END --><p>As a convenience, it is possible to attach many attributes with many (terminal
 and nonterminal) symbols in one go, via an <span style="font-family:sans-serif"><span style="font-weight:bold">%attribute</span></span> declaration, which must
 be placed in the declarations section (§<a href="#sec%3Adecls">4.1</a>).
 For instance, the following declaration attaches both of the attributes
@@ -3168,9 +3381,15 @@ with each of the symbols
 </p><pre class="verbatim">  %attribute INT id [@cost 0] [@precious false]
 </pre><p>
 An <span style="font-family:sans-serif"><span style="font-weight:bold">%attribute</span></span> declaration can be considered syntactic sugar: it is desugared
-away in terms of the four forms of attributes presented earlier. (The command
-line switch <span style="font-family:monospace">--only-preprocess</span> can be used to see how it is desugared.)</p><p>If an attribute is attached with a parameterized nonterminal symbol, then,
-when this symbol is expanded away, the attribute is transmitted to every
+away in terms of the five forms of attributes presented earlier
+(§<a href="#sec%3Aattributes%3Aplacement">13.2.2</a>).
+The command line switch <span style="font-family:monospace">--only-preprocess</span> can be used to see how it is desugared.</p>
+<!--TOC subsubsection id="sec98" Attribute propagation-->
+<h4 id="sec98" class="subsubsection">13.2.4 Attribute propagation</h4><!--SEC END -->
+<!--TOC paragraph id="sec99" Symbol attributes / parameterized symbol expansion-->
+<h4 id="sec99" class="paragraph">Symbol attributes / parameterized symbol expansion</h4><!--SEC END --><p>If an attribute is attached with a parameterized nonterminal symbol, then,
+when this symbol is expanded away (§<a href="#sec%3Atemplates">5.2</a>),
+the attribute is transmitted to every
 instance. For instance, in an earlier example, the attribute
 <code class="verb">[@default None]</code> was attached with the parameterized symbol
 <code class="verb">option</code>. Then, every instance of <code class="verb">option</code>, such as
@@ -3180,8 +3399,68 @@ instance only, one can use an <span style="font-family:sans-serif"><span style="
 the declaration <code class="verb">%attribute option(expr) [@cost 10]</code> attaches
 an attribute with the nonterminal symbol <code class="verb">option(expr)</code>, but
 not with the symbol <code class="verb">option(COMMA)</code>.</p>
-<!--TOC section id="sec91" Interaction with build systems-->
-<h2 id="sec91" class="section">14 Interaction with build systems</h2><!--SEC END --><p>
+<!--TOC paragraph id="sec100" Production attributes / parameterized symbol expansion-->
+<h4 id="sec100" class="paragraph">Production attributes / parameterized symbol expansion</h4><!--SEC END --><p>If an attribute is attached with a production for a parameterized nonterminal
+symbol, then, when this symbol is expanded away (§<a href="#sec%3Atemplates">5.2</a>), this
+attribute is transmitted to every instance of this production.</p><p>As an exception to this general rule, <span style="font-family:monospace">@name</span> attributes receive
+special treatment: their payload is specialized. For instance, assuming that
+the parameterized symbol <code class="verb">option(X)</code> is defined as follows:
+</p><pre class="verbatim">  option(X):
+      { None   } [@name none]
+  | x = X
+      { Some x } [@name some]
+</pre><p>
+then instantiating the parameter <code class="verb">X</code> with <code class="verb">expr</code> results in the
+following definition:
+</p><pre class="verbatim">  option(expr):
+      { None   } [@name none_expr]
+  | x = expr
+      { Some x } [@name some_expr]
+</pre><p>
+The payload of each <span style="font-family:monospace">@name</span> attribute has been extended with
+an underscore character <code class="verb">_</code> followed with the actual
+parameter <code class="verb">expr</code>.
+(If the actual parameter contains parentheses or commas,
+they are replaced with underscore characters.)
+This special behavior is intended to allow each production
+to receive a unique name.</p>
+<!--TOC paragraph id="sec101" Production attributes / inlining-->
+<h4 id="sec101" class="paragraph">Production attributes / inlining</h4><!--SEC END --><p>When a production whose left-hand side is marked <span style="font-family:sans-serif"><span style="font-weight:bold">%inline</span></span> (the <em>callee</em>)
+is inlined (§<a href="#sec%3Ainline">5.3</a>)
+into another production
+(the <em>caller</em>),
+the attributes of the caller are transmitted to the new production,
+while the attributes of the callee are lost.
+(This policy may change in the future.)</p><p>As an exception to this general rule,
+<span style="font-family:monospace">@name</span> attributes receive special treatment:
+the <span style="font-family:monospace">@name</span> attributes of the callee and caller are combined, as follows.
+If the caller and the callee both carry a <span style="font-family:monospace">@name</span> attribute,
+then the attribute payloads are concatenated,
+and an underscore character <code class="verb">_</code> is
+inserted between them.
+If only the caller or only the callee carries a <span style="font-family:monospace">@name</span> attribute,
+then this attribute is preserved.
+For example, after inlining, the following definitions:
+</p><pre class="verbatim">  expr:
+  | e1 = expr; op = binop; e2 = expr
+      { EBinOp (e1, op, e2) } [@name binop]
+  %inline binop:
+  | ADD { BAdd } [@name add]
+  | SUB { BSub } [@name sub]
+</pre><p>
+give rise to the following result:
+</p><pre class="verbatim">  expr:
+  | e1 = expr; op = ADD; e2 = expr
+      { let op = BAdd in EBinOp (e1, op, e2) }
+      [@name binop_add]
+  | e1 = expr; op = SUB; e2 = expr
+      { let op = BSub in EBinOp (e1, op, e2) }
+      [@name binop_sub]
+</pre><p>
+This special behavior is intended to allow each production
+to receive a unique name.</p>
+<!--TOC section id="sec102" Interaction with build systems-->
+<h2 id="sec102" class="section">14 Interaction with build systems</h2><!--SEC END --><p>
 <a id="sec:build"></a></p><p>This section explains some details of the compilation workflow, including
 OCaml type inference and its repercussions on dependency analysis
 (§<a href="#sec%3Abuild%3Ainfer">14.1</a>) and compilation flags (§<a href="#sec%3Abuild%3Aflags">14.2</a>).
@@ -3190,14 +3469,13 @@ who wish to build support for Menhir into their system.
 Ordinary users should skip this section and use a build system that knows
 about Menhir, such as <a href="#dune"><span style="font-family:monospace">dune</span></a> (preferred; §<a href="#sec%3Adune">16</a>)
 or <span style="font-family:monospace">ocamlbuild</span>.</p>
-<!--TOC subsection id="sec92" OCaml type inference and dependency analysis-->
-<h3 id="sec92" class="subsection">14.1 OCaml type inference and dependency analysis</h3><!--SEC END --><p>
+<!--TOC subsection id="sec103" OCaml type inference and dependency analysis-->
+<h3 id="sec103" class="subsection">14.1 OCaml type inference and dependency analysis</h3><!--SEC END --><p>
 <a id="sec:build:infer"></a></p><p>In an ideal world, the semantic actions in a <span style="font-family:monospace">.mly</span> file should be well-typed
 according to the OCaml type discipline, and their types should be known to
 Menhir, which may need this knowledge. (When <span style="font-family:monospace">--inspection</span> is set, Menhir needs to know the OCaml type of every nonterminal symbol.)
 To address this problem, three approaches exist:
-</p><ol class="enumerate" type=1><li class="li-enumerate">
-Ignore the problem and let Menhir run without OCaml type information
+</p><ol class="enumerate" type=1><li class="li-enumerate">Ignore the problem and let Menhir run without OCaml type information
 (§<a href="#sec%3Abuild%3Ainfer%3Anone">14.1.1</a>).
 </li><li class="li-enumerate">Let Menhir obtain OCaml type information
 by invoking the OCaml compiler
@@ -3207,8 +3485,8 @@ without invoking the OCaml compiler
 (§<a href="#sec%3Abuild%3Ainfer%3Aindirect">14.1.3</a>).
 </li></ol><p>
 <span style="font-family:monospace">dune</span> follows the third approach behind the scenes.</p>
-<!--TOC subsubsection id="sec93" Running without OCaml type information-->
-<h4 id="sec93" class="subsubsection">14.1.1 Running without OCaml type information</h4><!--SEC END --><p>
+<!--TOC subsubsection id="sec104" Running without OCaml type information-->
+<h4 id="sec104" class="subsubsection">14.1.1 Running without OCaml type information</h4><!--SEC END --><p>
 <a id="sec:build:infer:none"></a></p><p>The simplest thing to do is to run Menhir <em>without</em> any of the flags
 described in the following (§<a href="#sec%3Abuild%3Ainfer%3Adirect">14.1.2</a>,
 §<a href="#sec%3Abuild%3Ainfer%3Aindirect">14.1.3</a>).
@@ -3216,8 +3494,7 @@ Then, the semantic actions are <em>not</em> type-checked,
 and their OCaml type is <em>not</em> inferred.
 (This is analogous to using <span style="font-family:monospace">ocamlyacc</span>.)
 The drawbacks of this approach are as follows:
-</p><ul class="itemize"><li class="li-itemize">
-A type error in a semantic action is detected only when the <span style="font-family:monospace">.ml</span> file produced by Menhir is type-checked. The location of the
+</p><ul class="itemize"><li class="li-itemize">A type error in a semantic action is detected only when the <span style="font-family:monospace">.ml</span> file produced by Menhir is type-checked. The location of the
 type error, as reported by the OCaml compiler, can be
 suboptimal.
 </li><li class="li-itemize">Unless the type of every nonterminal symbol is given
@@ -3228,8 +3505,8 @@ the code back-end
 and
 the inspection API.
 </li></ul>
-<!--TOC subsubsection id="sec94" Obtaining OCaml type information by calling the OCaml compiler-->
-<h4 id="sec94" class="subsubsection">14.1.2 Obtaining OCaml type information by calling the OCaml compiler</h4><!--SEC END --><p>
+<!--TOC subsubsection id="sec105" Obtaining OCaml type information by calling the OCaml compiler-->
+<h4 id="sec105" class="subsubsection">14.1.2 Obtaining OCaml type information by calling the OCaml compiler</h4><!--SEC END --><p>
 <a id="sec:build:infer:direct"></a></p><p>The second approach is to let Menhir invoke the OCaml compiler so as to
 type-check the semantic actions and infer their types. This is done by
 invoking Menhir with the <span style="font-family:monospace">--infer</span> switch, as follows.</p><p><span style="font-family:monospace">--infer</span>.   This switch causes the semantic actions to be checked for
@@ -3261,8 +3538,8 @@ intended for use with <span style="font-family:monospace">omake</span> or <span 
 postprocessing.</p><p><span style="font-family:monospace">--ocamldep</span> <span style="font-style:italic">command</span>.   This switch controls how <span style="font-family:monospace">ocamldep</span> is
 invoked. It allows setting both the name of the executable and the command
 line options that are passed to it.</p>
-<!--TOC subsubsection id="sec95" Obtaining OCaml type information without calling the OCaml compiler-->
-<h4 id="sec95" class="subsubsection">14.1.3 Obtaining OCaml type information without calling the OCaml compiler</h4><!--SEC END --><p>
+<!--TOC subsubsection id="sec106" Obtaining OCaml type information without calling the OCaml compiler-->
+<h4 id="sec106" class="subsubsection">14.1.3 Obtaining OCaml type information without calling the OCaml compiler</h4><!--SEC END --><p>
 <a id="sec:build:infer:indirect"></a></p><p>The third approach is to let Menhir request and receive OCaml type
 information <em>without</em> allowing Menhir to invoke the OCaml compiler.
 There is nothing magic about this: to achieve this, Menhir must be invoked
@@ -3279,8 +3556,8 @@ support it. Its existence can be tested as follows:</p><p><span style="font-fami
 Menhir immediately terminates with exit code 0. An earlier version
 of Menhir, which does not support this protocol, would display a
 help message and terminate with a nonzero exit code.</p>
-<!--TOC subsection id="sec96" Compilation flags-->
-<h3 id="sec96" class="subsection">14.2 Compilation flags</h3><!--SEC END --><p>
+<!--TOC subsection id="sec107" Compilation flags-->
+<h3 id="sec107" class="subsection">14.2 Compilation flags</h3><!--SEC END --><p>
 <a id="sec:build:flags"></a></p><p>The following switches allow querying Menhir so as to find out which
 compilation flags should be passed to the OCaml compiler and linker.</p><p><span style="font-family:monospace">--suggest-comp-flags</span>.   This switch causes Menhir to print a set of
 suggested compilation flags, and exit. These flags are intended to be passed
@@ -3300,8 +3577,8 @@ suggested? In the absence of the <span style="font-family:monospace">--table</sp
 ensure that <span style="font-family:monospace">MenhirLib</span> is linked in.</p><p><span style="font-family:monospace">--suggest-menhirLib</span>.   This switch causes Menhir to print (the
 absolute path of) the directory where <span style="font-family:monospace">MenhirLib</span> was installed.</p><p><span style="font-family:monospace">--suggest-ocamlfind</span>.   This switch is deprecated and may be removed in
 the future. It always prints <span style="font-family:monospace">false</span>.</p>
-<!--TOC section id="sec97" Comparison with <span style="font-family:monospace">ocamlyacc</span>-->
-<h2 id="sec97" class="section">15 Comparison with <span style="font-family:monospace">ocamlyacc</span></h2><!--SEC END --><p>Roughly speaking, Menhir is 90% compatible with <span style="font-family:monospace">ocamlyacc</span>. Legacy <span style="font-family:monospace">ocamlyacc</span> grammar specifications are accepted and compiled by Menhir. The resulting
+<!--TOC section id="sec108" Comparison with <span style="font-family:monospace">ocamlyacc</span>-->
+<h2 id="sec108" class="section">15 Comparison with <span style="font-family:monospace">ocamlyacc</span></h2><!--SEC END --><p>Roughly speaking, Menhir is 90% compatible with <span style="font-family:monospace">ocamlyacc</span>. Legacy <span style="font-family:monospace">ocamlyacc</span> grammar specifications are accepted and compiled by Menhir. The resulting
 parsers run and produce correct parse trees. However, parsers that explicitly
 invoke functions in the module <span style="font-family:monospace">Parsing</span> behave slightly incorrectly.
 For instance, the functions that provide access to positions return a dummy
@@ -3315,7 +3592,7 @@ with a terminal symbol, a nonterminal symbol, or an anonymous rule
 (§<a href="#sec%3Alibrary">5.4</a>), including options, sequences, and lists, is bundled
 with Menhir. EBNF syntax is supported: the modifiers <span style="font-family:sans-serif"><span style="font-weight:bold">?</span></span>, <div style="display:inline-block;height:max-content;transform:translateY(calc(0pt - ( 3px )))">+</div>, and
 <span style="font-family:sans-serif"><span style="font-weight:bold">*</span></span> are sugar for options, nonempty lists, and arbitrary lists
-(Figure ‍<a href="#fig%3Asugar">2</a>).</li><li class="li-itemize"><span style="font-family:monospace">ocamlyacc</span> only accepts LALR(1) grammars. Menhir accepts LR(1) grammars,
+(Figure <a href="#fig%3Asugar">2</a>).</li><li class="li-itemize"><span style="font-family:monospace">ocamlyacc</span> only accepts LALR(1) grammars. Menhir accepts LR(1) grammars,
 thus avoiding certain artificial conflicts.</li><li class="li-itemize">Menhir’s <span style="font-family:sans-serif"><span style="font-weight:bold">%inline</span></span> keyword (§<a href="#sec%3Ainline">5.3</a>) helps avoid or resolve some LR(1)
 conflicts without artificial modification of the grammar.</li><li class="li-itemize">Menhir explains conflicts (§<a href="#sec%3Aconflicts">6</a>) in terms of the grammar,
 not just in terms of the automaton. Menhir’s explanations are believed
@@ -3350,8 +3627,8 @@ semicolons and commas as significant, and allows them, or requires them,
 in certain well-defined places.</li><li class="li-itemize"><span style="font-family:monospace">ocamlyacc</span> allows <span style="font-family:sans-serif"><span style="font-weight:bold">%type</span></span> declarations to refer to terminal or non-terminal
 symbols, whereas Menhir requires them to refer to non-terminal symbols.
 Types can be assigned to terminal symbols with a <span style="font-family:sans-serif"><span style="font-weight:bold">%token</span></span> declaration.</li></ul>
-<!--TOC section id="sec98" Questions and Answers-->
-<h2 id="sec98" class="section">16 Questions and Answers</h2><!--SEC END --><p>
+<!--TOC section id="sec109" Questions and Answers-->
+<h2 id="sec109" class="section">16 Questions and Answers</h2><!--SEC END --><p>
 <a id="sec:qa"></a>
 <a id="sec:dune"></a></p><p>⋄ <span style="font-weight:bold">Is Menhir faster than </span><span style="font-weight:bold"><span style="font-family:monospace">ocamlyacc</span></span><span style="font-weight:bold">? What is the speed difference
 between </span><span style="font-weight:bold"><span style="font-family:monospace">menhir</span></span><span style="font-weight:bold"> and </span><span style="font-weight:bold"><span style="font-family:monospace">menhir --table</span></span><span style="font-weight:bold">?</span> A (not quite
@@ -3402,7 +3679,9 @@ your code requires, as in the following example:
    (libraries menhirLib)
 )
 </pre><p>
-The directory <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos"><span style="font-family:monospace">demos</span></a>
+If the flags <span style="font-family:monospace">--table</span> and <span style="font-family:monospace">--unparsing</span> switch are listed as part of the
+<span style="font-family:monospace">flags</span> line, then the libraries <span style="font-family:monospace">menhirLib</span> and
+<span style="font-family:monospace">menhirCST</span> is required.</p><p>The directory <a href="https://gitlab.inria.fr/fpottier/menhir/blob/master/demos"><span style="font-family:monospace">demos</span></a>
 offers several examples.
 For more details, see
 <a href="
@@ -3415,7 +3694,7 @@ Beginning with Menhir 20200525, Menhir prefers to use the types inferred by
 the OCaml compiler over the types provided by the user in <span style="font-family:sans-serif"><span style="font-weight:bold">%type</span></span> declarations. (This may sound strange, but these types can differ in some
 situations that involve polymorphic variants. Using the inferred type is
 required for type soundness.)
-In the presence of a ‍module alias declaration such as <span style="font-family:monospace">module F =
+In the presence of a module alias declaration such as <span style="font-family:monospace">module F =
 Foo</span>, OCaml can infer types that begin with <span style="font-family:monospace">F.</span> instead of
 <span style="font-family:monospace">Foo.</span>, and Menhir does not detect that <span style="font-family:monospace">F</span> is a local
 name.
@@ -3470,46 +3749,46 @@ explained in §<a href="#sec%3Apositions">7</a>. A solution may be to use
 <code class="verb">$symbolstartpos</code> instead.</p><p>⋄ <span style="font-weight:bold">Can I pretty-print a grammar in ASCII, HTML, or L<sup>A</sup>T<sub>E</sub>X format?</span>
 Yes. Have a look at <span style="font-family:monospace">obelisk</span> [<a href="#obelisk">5</a>].</p><p>⋄ <span style="font-weight:bold">Does Menhir support mid-rule actions?</span> Yes.
 See <span style="font-style:italic">midrule</span> and its explanation in §<a href="#sec%3Alibrary">5.4</a>.</p>
-<!--TOC section id="sec99" Technical background-->
-<h2 id="sec99" class="section">17 Technical background</h2><!--SEC END --><p>After experimenting with Knuth’s canonical LR(1) technique ‍[<a href="#knuth-lr-65">16</a>],
+<!--TOC section id="sec110" Technical background-->
+<h2 id="sec110" class="section">17 Technical background</h2><!--SEC END --><p>After experimenting with Knuth’s canonical LR(1) technique [<a href="#knuth-lr-65">16</a>],
 we found that it <em>really</em> is not practical, even on today’s computers.
 For this reason, Menhir implements a slightly modified version of Pager’s
-algorithm ‍[<a href="#pager-77">20</a>], which merges states on the fly if it can be proved
+algorithm [<a href="#pager-77">20</a>], which merges states on the fly if it can be proved
 that no reduce/reduce conflicts will arise as a consequence of this decision.
 This is how Menhir avoids the so-called <em>mysterious</em> conflicts created
-by LALR(1) parser generators ‍[<a href="#bison">8,  section 5.7</a>].</p><p>Menhir’s algorithm for explaining conflicts is inspired by DeRemer and
-Pennello’s ‍[<a href="#deremer-pennello-82">7</a>] and adapted for use with Pager’s
+by LALR(1) parser generators [<a href="#bison">8,  section 5.7</a>].</p><p>Menhir’s algorithm for explaining conflicts is inspired by DeRemer and
+Pennello’s [<a href="#deremer-pennello-82">7</a>] and adapted for use with Pager’s
 construction technique.</p><p>By default, Menhir produces code, as opposed to tables. This approach has
-been explored before ‍[<a href="#bhamidipaty-proebsting-98">3</a>,<a href="#horspool-faster-90">10</a>].
+been explored before [<a href="#bhamidipaty-proebsting-98">3</a>,<a href="#horspool-faster-90">10</a>].
 Menhir performs some static analysis of the automaton in order to produce
 more compact code.</p><p>When asked to produce tables, Menhir performs compression via first-fit
-row displacement, as described by Tarjan and Yao ‍[<a href="#tarjan-yao-79">24</a>].
+row displacement, as described by Tarjan and Yao [<a href="#tarjan-yao-79">25</a>].
 Double displacement is not used. The action table is made sparse by
 factoring out an error matrix, as suggested by Dencker, Dürre, and
-Heuft ‍[<a href="#dencker-84">6</a>].</p><p>The type-theoretic tricks that triggered our interest in LR
-parsers ‍[<a href="#pottier-regis-gianas-typed-lr">22</a>] are implemented
+Heuft [<a href="#dencker-84">6</a>].</p><p>The type-theoretic tricks that triggered our interest in LR
+parsers [<a href="#pottier-regis-gianas-typed-lr">23</a>] are implemented
 in Menhir’s code back-end. (It took 16 years, from the initial
 idea in 2005 to the re-implementation of the code back-end in 2021.)
 A generalized algebraic data type (GADT) is used to describe the
 shape of the stack and the relationship that exists between the
 shape of the stack and the current state of the automaton.</p><p>The main ideas behind the Coq back-end are described in a paper by Jourdan,
-Pottier and Leroy ‍[<a href="#jourdan-leroy-pottier-12">14</a>]. The C11 parser in the
-CompCert compiler ‍[<a href="#compcert">18</a>] is constructed by Menhir and verified by
+Pottier and Leroy [<a href="#jourdan-leroy-pottier-12">14</a>]. The C11 parser in the
+CompCert compiler [<a href="#compcert">18</a>] is constructed by Menhir and verified by
 Coq, following this technique. How to construct a correct C11 parser using
-Menhir is described by Jourdan and Pottier ‍[<a href="#jourdan-pottier-17">13</a>].</p><p>The approach to error reports presented in §<a href="#sec%3Aerrors%3Anew">11</a> was
-proposed by Jeffery ‍[<a href="#jeffery-03">11</a>] and further explored by
-Pottier ‍[<a href="#pottier-reachability-cc-2016">21</a>] and by
-Bour and Pottier ‍[<a href="#bour-pottier-21">4</a>].</p><!--TOC section id="sec100" References-->
-<h2 id="sec100" class="section">References</h2><!--SEC END --><dl class="thebibliography"><dt class="dt-thebibliography">
-<a id="aho-86"><span style="color:purple">[1]</span></a></dt><dd class="dd-thebibliography">
-Alfred ‍V. Aho, Ravi Sethi, and Jeffrey ‍D. Ullman.
+Menhir is described by Jourdan and Pottier [<a href="#jourdan-pottier-17">13</a>].</p><p>The approach to error reports presented in §<a href="#sec%3Aerrors%3Anew">11</a> was
+proposed by Jeffery [<a href="#jeffery-03">11</a>] and further explored by
+Pottier [<a href="#pottier-reachability-cc-2016">21</a>] and by
+Bour and Pottier [<a href="#bour-pottier-21">4</a>].</p><p>The unparsing API and the settlement algorithm were proposed
+by Pottier [<a href="#pottier-unparsing-24">22</a>].</p><!--TOC section id="sec111" References-->
+<h2 id="sec111" class="section">References</h2><!--SEC END --><dl class="thebibliography"><dt class="dt-thebibliography"><a id="aho-86"><span style="color:purple">[1]</span></a></dt><dd class="dd-thebibliography">
+Alfred V. Aho, Ravi Sethi, and Jeffrey D. Ullman.
 <em>Compilers: Principles, Techniques, and Tools</em>.
 Addison-Wesley, 1986.</dd><dt class="dt-thebibliography"><a id="appel-tiger-98"><span style="color:purple">[2]</span></a></dt><dd class="dd-thebibliography">
 Andrew Appel.
 <a href="http://www.cs.princeton.edu/~appel/modern/ml/"><em>Modern
 Compiler Implementation in </em><em>ML</em></a>.
 Cambridge University Press, 1998.</dd><dt class="dt-thebibliography"><a id="bhamidipaty-proebsting-98"><span style="color:purple">[3]</span></a></dt><dd class="dd-thebibliography">
-Achyutram Bhamidipaty and Todd ‍A. Proebsting.
+Achyutram Bhamidipaty and Todd A. Proebsting.
 <a href="http://www.cs.arizona.edu/people/todd/papers/TR95-09.ps">Very
 fast YACC-compatible parsers (for very little effort)</a>.
 <em>Software: Practice and Experience</em>, 28(2):181–190, 1998.</dd><dt class="dt-thebibliography"><a id="bour-pottier-21"><span style="color:purple">[4]</span></a></dt><dd class="dd-thebibliography">
@@ -3532,23 +3811,23 @@ of <span style="font-style:italic">LALR</span>(1) look-ahead sets</a>.
 4(4):615–649, 1982.</dd><dt class="dt-thebibliography"><a id="bison"><span style="color:purple">[8]</span></a></dt><dd class="dd-thebibliography">
 Charles Donnelly and Richard Stallman.
 <a href="http://www.gnu.org/software/bison/manual/"><em>Bison</em></a>, 2015.</dd><dt class="dt-thebibliography"><a id="hopcroft-motwani-ullman-00"><span style="color:purple">[9]</span></a></dt><dd class="dd-thebibliography">
-John ‍E. Hopcroft, Rajeev Motwani, and Jeffrey ‍D. Ullman.
+John E. Hopcroft, Rajeev Motwani, and Jeffrey D. Ullman.
 <a href="http://www-db.stanford.edu/~ullman/ialc.html"><em>Introduction
 to Automata Theory, Languages, and Computation</em></a>.
 Addison-Wesley, 2000.</dd><dt class="dt-thebibliography"><a id="horspool-faster-90"><span style="color:purple">[10]</span></a></dt><dd class="dd-thebibliography">
-R. ‍Nigel Horspool and Michael Whitney.
+R. Nigel Horspool and Michael Whitney.
 <a href="http://www.cs.uvic.ca/~nigelh/Publications/fastparse.pdf">Even
 faster LR parsing</a>.
 <em>Software: Practice and Experience</em>, 20(6):515–535, 1990.</dd><dt class="dt-thebibliography"><a id="jeffery-03"><span style="color:purple">[11]</span></a></dt><dd class="dd-thebibliography">
-Clinton ‍L. Jeffery.
+Clinton L. Jeffery.
 <a href="http://doi.acm.org/10.1145/937563.937566">Generating LR
 syntax error messages from examples</a>.
 <em>ACM Transactions on Programming Languages and Systems</em>,
 25(5):631–640, 2003.</dd><dt class="dt-thebibliography"><a id="johnson-yacc-79"><span style="color:purple">[12]</span></a></dt><dd class="dd-thebibliography">
-Steven ‍C. Johnson.
+Steven C. Johnson.
 <a href="http://dinosaur.compilertools.net/">Yacc: Yet another
 compiler compiler</a>.
-In <em>UNIX</em><em> Programmer’s Manual</em>, volume ‍2, pages 353–387. Holt,
+In <em>UNIX</em><em> Programmer’s Manual</em>, volume 2, pages 353–387. Holt,
 Rinehart, and Winston, 1979.</dd><dt class="dt-thebibliography"><a id="jourdan-pottier-17"><span style="color:purple">[13]</span></a></dt><dd class="dd-thebibliography">
 Jacques-Henri Jourdan and François Pottier.
 <a href="http://gallium.inria.fr/~fpottier/publis/jourdan-fpottier-2016.pdf">A
@@ -3563,7 +3842,7 @@ Paul Klint, Ralf Lämmel, and Chris Verhoef.
 <a href="http://www.few.vu.nl/~x/gw/gw.pdf">Toward an engineering
 discipline for grammarware</a>.
 14(3):331–380, 2005.</dd><dt class="dt-thebibliography"><a id="knuth-lr-65"><span style="color:purple">[16]</span></a></dt><dd class="dd-thebibliography">
-Donald ‍E. Knuth.
+Donald E. Knuth.
 <a href="http://www.sciencedirect.com/science/article/pii/S0019995865904262">On
 the translation of languages from left to right</a>.
 <em>Information &amp; Control</em>, 8(6):607–639, 1965.</dd><dt class="dt-thebibliography"><a id="compcert-github"><span style="color:purple">[17]</span></a></dt><dd class="dd-thebibliography">
@@ -3584,21 +3863,25 @@ method for constructing <span style="font-style:italic">LR</span>(<span style="f
 François Pottier.
 <a href="http://gallium.inria.fr/~fpottier/publis/fpottier-reachability-cc2016.pdf">Reachability
 and error diagnosis in LR(1) parsers</a>.
-In <em>Compiler Construction (CC)</em>, pages 88–98, 2016.</dd><dt class="dt-thebibliography"><a id="pottier-regis-gianas-typed-lr"><span style="color:purple">[22]</span></a></dt><dd class="dd-thebibliography">
+In <em>Compiler Construction (CC)</em>, pages 88–98, 2016.</dd><dt class="dt-thebibliography"><a id="pottier-unparsing-24"><span style="color:purple">[22]</span></a></dt><dd class="dd-thebibliography">
+François Pottier.
+<a href="http://cambium.inria.fr/~fpottier/publis/pottier-unparsing-2024.pdf">Correct,
+fast LR(1) unparsing</a>.
+In <em>Journées Francophones des Langages Applicatifs (JFLA)</em>,
+January 2024.</dd><dt class="dt-thebibliography"><a id="pottier-regis-gianas-typed-lr"><span style="color:purple">[23]</span></a></dt><dd class="dd-thebibliography">
 François Pottier and Yann Régis-Gianas.
 <a href="http://gallium.inria.fr/~fpottier/publis/fpottier-regis-gianas-typed-lr.pdf">Towards
 efficient, typed LR parsers</a>.
 <em>Electronic Notes in Theoretical Computer Science</em>,
-148(2):155–180, 2006.</dd><dt class="dt-thebibliography"><a id="tarditi-appel-00"><span style="color:purple">[23]</span></a></dt><dd class="dd-thebibliography">
-David ‍R. Tarditi and Andrew ‍W. Appel.
+148(2):155–180, 2006.</dd><dt class="dt-thebibliography"><a id="tarditi-appel-00"><span style="color:purple">[24]</span></a></dt><dd class="dd-thebibliography">
+David R. Tarditi and Andrew W. Appel.
 <a href="http://www.smlnj.org/doc/ML-Yacc/"><em>ML-Yacc</em><em> User’s
-Manual</em></a>, 2000.</dd><dt class="dt-thebibliography"><a id="tarjan-yao-79"><span style="color:purple">[24]</span></a></dt><dd class="dd-thebibliography">
-Robert ‍Endre Tarjan and Andrew Chi-Chih Yao.
+Manual</em></a>, 2000.</dd><dt class="dt-thebibliography"><a id="tarjan-yao-79"><span style="color:purple">[25]</span></a></dt><dd class="dd-thebibliography">
+Robert Endre Tarjan and Andrew Chi-Chih Yao.
 <a href="http://doi.acm.org/10.1145/359168.359175">Storing a sparse
 table</a>.
 <em>Communications of the </em><em>ACM</em>, 22(11):606–611, 1979.</dd></dl><!--BEGIN NOTES document-->
-<hr class="footnoterule"><dl class="thefootnotes"><dt class="dt-thefootnotes">
-<a id="note1" href="#text1">1</a></dt><dd class="dd-thefootnotes"><div class="footnotetext">The computation of <span style="font-family:monospace">$symbolstartpos</span> is optimized by Menhir under two assumptions about the lexer. First,
+<hr class="footnoterule"><dl class="thefootnotes"><dt class="dt-thefootnotes"><a id="note1" href="#text1">1</a></dt><dd class="dd-thefootnotes"><div class="footnotetext">The computation of <span style="font-family:monospace">$symbolstartpos</span> is optimized by Menhir under two assumptions about the lexer. First,
 Menhir assumes that the lexer never produces a token whose start and end
 positions are equal. Second, Menhir assumes that two positions produced
 by the lexer are equal if and only if they are physically equal. If the

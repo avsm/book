@@ -1,3 +1,5 @@
+(include_subdirs unqualified)
+
 (executable
  (name main)
  (public_name dune)
@@ -6,28 +8,49 @@
   (<> %{profile} dune-bootstrap))
  (libraries
   memo
+  promote
   ocaml
+  ocaml_config
   dune_lang
+  predicate_lang
   fiber
+  fiber_event_bus
   stdune
+  dune_console
   unix
+  install
+  dune_findlib
+  dune_metrics
+  dune_digest
   dune_cache
   dune_cache_storage
   dune_graph
   dune_rules
+  dune_vcs
   dune_engine
+  dune_targets
   dune_util
   dune_upgrader
+  dune_pkg
   cmdliner
+  threads
+  ; Kept to keep implicit_transitive_deps false working in 4.x
   threads.posix
   build_info
   dune_config
+  dune_config_file
   chrome_trace
   dune_stats
   csexp
   csexp_rpc
   dune_rpc_impl
-  dune_rpc_private)
+  dune_rules_rpc
+  dune_rpc_private
+  dune_rpc_client
+  dune_spawn
+  opam_format
+  source
+  xdg)
  (bootstrap_info bootstrap-info))
 
 ; Installing the dune binary depends on the kind of build:
@@ -47,7 +70,7 @@
 
 (rule
  (action
-  (copy ../dune.exe dune.exe))
+  (copy ../_boot/dune.exe dune.exe))
  (enabled_if
   (= %{profile} dune-bootstrap)))
 

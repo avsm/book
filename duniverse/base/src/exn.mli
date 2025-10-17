@@ -33,7 +33,7 @@ val raise_without_backtrace : t -> _
 (** [raise_with_original_backtrace t bt] raises the exception [exn], recording [bt]
     as the backtrace it was originally raised at. This is useful to re-raise
     exceptions annotated with extra information. *)
-val raise_with_original_backtrace : t -> Caml.Printexc.raw_backtrace -> _
+val raise_with_original_backtrace : t -> Stdlib.Printexc.raw_backtrace -> _
 
 val reraise : t -> string -> _
 
@@ -57,9 +57,9 @@ val to_string_mach : t -> string
 
 (** Executes [f] and afterwards executes [finally], whether [f] throws an exception or
     not. *)
-val protectx : f:('a -> 'b) -> 'a -> finally:('a -> unit) -> 'b
+val protectx : f:(('a -> 'b)[@local]) -> 'a -> finally:(('a -> unit)[@local]) -> 'b
 
-val protect : f:(unit -> 'a) -> finally:(unit -> unit) -> 'a
+val protect : f:((unit -> 'a)[@local]) -> finally:((unit -> unit)[@local]) -> 'a
 
 
 (** [handle_uncaught ~exit f] catches an exception escaping [f] and prints an error
@@ -68,11 +68,11 @@ val protect : f:(unit -> 'a) -> finally:(unit -> unit) -> 'a
 
     Note that since OCaml 4.02.0, you don't need to use this at the entry point of your
     program, as the OCaml runtime will do better than this function. *)
-val handle_uncaught : exit:bool -> (unit -> unit) -> unit
+val handle_uncaught : exit:bool -> ((unit -> unit)[@local]) -> unit
 
 (** [handle_uncaught_and_exit f] returns [f ()], unless that raises, in which case it
     prints the exception and exits nonzero. *)
-val handle_uncaught_and_exit : (unit -> 'a) -> 'a
+val handle_uncaught_and_exit : ((unit -> 'a)[@local]) -> 'a
 
 (** Traces exceptions passing through.  Useful because in practice, backtraces still don't
     seem to work.
@@ -84,12 +84,12 @@ val handle_uncaught_and_exit : (unit -> 'a) -> 'a
                                  traced_function ();;
     ]}
     {v : Program died with Reraised("rogue_function", Failure "foo") v} *)
-val reraise_uncaught : string -> (unit -> 'a) -> 'a
+val reraise_uncaught : string -> ((unit -> 'a)[@local]) -> 'a
 
 
 (** [does_raise f] returns [true] iff [f ()] raises, which is often useful in unit
     tests. *)
-val does_raise : (unit -> _) -> bool
+val does_raise : ((unit -> _)[@local]) -> bool
 
 (** Returns [true] if this exception is physically equal to the most recently raised one.
     If so, then [Backtrace.Exn.most_recent ()] is a backtrace corresponding to this

@@ -1,5 +1,3 @@
-(** Attribute hygiene *)
-
 (** This module provides hygiene for attributes. The goal is to report misuses
     of attributes to the user as soon as possible so that no mistyped attribute
     get silently ignored. *)
@@ -31,6 +29,7 @@ module Context : sig
     | Class_infos : _ class_infos t
     | Class_expr : class_expr t
     | Class_field : class_field t
+    | Class_type_decl : class_type_declaration t
     | Module_type : module_type t
     | Module_declaration : module_declaration t
     | Module_type_declaration : module_type_declaration t
@@ -62,6 +61,7 @@ module Context : sig
   val class_infos : _ class_infos t
   val class_expr : class_expr t
   val class_field : class_field t
+  val class_type_decl : class_type_declaration t
   val module_type : module_type t
   val module_declaration : module_declaration t
   val module_type_declaration : module_type_declaration t
@@ -99,8 +99,8 @@ val declare :
     names: "default", "bar.default" and "foo.bar.default".
 
     Additionally it is possible to prevent a suffix to be shortened by prefixing
-    it with '\@'. So for instance an attribute declared with name
-    "foo.\@bar.default" will match exactly these attribute names: "bar.default"
+    it with '@'. So for instance an attribute declared with name
+    "foo.@bar.default" will match exactly these attribute names: "bar.default"
     and "foo.bar.default".
 
     When matching against a list of attributes on an item, if several matches
@@ -108,7 +108,9 @@ val declare :
     "foo.default" declared in the previous example, on this code it will match
     the [@foo.default 0] attribute:
 
-    {[ type t = { x : int [@default 42] [@foo.default 0] } ]}
+    {[
+      type t = { x : int [@default 42] [@foo.default 0] }
+    ]}
 
     This is to allow the user to specify a [@default] attribute for all
     re-writers that use it but still put a specific one for one specific
@@ -127,6 +129,22 @@ val declare_with_name_loc :
 (** Same as [declare] but the callback receives the location of the name of the
     attribute. *)
 
+val declare_with_attr_loc :
+  string ->
+  'a Context.t ->
+  (payload, 'b, 'c) Ast_pattern.t ->
+  (attr_loc:Location.t -> 'b) ->
+  ('a, 'c) t
+(** Same as [declare] but the callback receives the location of the attribute.
+*)
+
+type 'a flag = ('a, unit) t
+(** Types for attributes without payload. *)
+
+val declare_flag : string -> 'a Context.t -> 'a flag
+(** Same as {!declare}, but the payload is expected to be empty. It is supposed
+    to be used in conjunction with {!has_flag}. *)
+
 val name : _ t -> string
 val context : ('a, _) t -> 'a Context.t
 
@@ -141,6 +159,18 @@ val get_res :
 val get :
   ('a, 'b) t -> ?mark_as_seen:bool (** default [true] *) -> 'a -> 'b option
 (** See {!get_res}. Raises a located error if the attribute is duplicated *)
+
+val has_flag_res :
+  'a flag ->
+  ?mark_as_seen:bool (** default [true] *) ->
+  'a ->
+  (bool, Location.Error.t NonEmptyList.t) result
+(** Answers whether the given flag is attached as an attribute. See {!get_res}
+    for the meaning of [mark_as_seen]. *)
+
+val has_flag : 'a flag -> ?mark_as_seen:bool (** default [true] *) -> 'a -> bool
+(** See {!has_flag_res}. Raises a located error if the attribute is duplicated.
+*)
 
 val consume_res :
   ('a, 'b) t -> 'a -> (('a * 'b) option, Location.Error.t NonEmptyList.t) result
@@ -192,24 +222,24 @@ module Floating : sig
   val convert : ('a, 'b) t list -> 'a -> 'b option
 end
 
-val explicitly_drop : Ast_traverse.iter
+val explicitly_drop : Ast_traverse0.iter
 (** Code that is voluntarily dropped by a rewriter needs to be given to this
     object. All attributes inside will be marked as handled. *)
 
-val check_unused : Ast_traverse.iter
+val check_unused : Ast_traverse0.iter
 (** Raise if there are unused attributes. *)
 
-val collect_unused_attributes_errors : Location.Error.t list Ast_traverse.fold
+val collect_unused_attributes_errors : Location.Error.t list Ast_traverse0.fold
 (** Collect all errors due to unused attributes. *)
 
-val collect : Ast_traverse.iter
+val collect : Ast_traverse0.iter
 (** Collect all attribute names. To be used in conjunction with
     {!check_all_seen}. *)
 
 val collect_unseen_errors : unit -> Location.Error.t list
 
 val check_all_seen : unit -> unit
-(** Check that all attributes collected by {!freshen_and_collect} have been:
+(** Check that all attributes collected by {!collect_unseen_errors} have been:
 
     - matched at least once by one of: {!get}, {!consume} or {!Floating.convert}
     - seen by [check_unused] (to allow allowlisted attributed to pass through)

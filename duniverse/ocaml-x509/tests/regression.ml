@@ -1,10 +1,15 @@
 open X509
 
-let cs_mmap file =
-  Unix_cstruct.of_fd Unix.(openfile file [O_RDONLY] 0)
+let mmap file =
+  let ic = open_in file in
+  let ln = in_channel_length ic in
+  let rs = Bytes.create ln in
+  really_input ic rs 0 ln;
+  close_in ic;
+  Bytes.unsafe_to_string rs
 
 let regression file =
-  cs_mmap ("./regression/" ^ file ^ ".pem")
+  mmap ("./regression/" ^ file ^ ".pem")
 
 let cert file =
   match Certificate.decode_pem (regression file) with
@@ -142,7 +147,7 @@ let test_openssl_2048_key () =
   decode_valid_pem file
 
 let ed25519_priv =
-  Cstruct.of_hex "D4EE72DBF913584AD5B6D8F1F769F8AD3AFE7C28CBF1D4FBE097A88F44755842"
+  Ohex.decode "D4EE72DBF913584AD5B6D8F1F769F8AD3AFE7C28CBF1D4FBE097A88F44755842"
 
 let ed25519_priv_key () =
   let data =
@@ -151,10 +156,10 @@ MC4CAQAwBQYDK2VwBCIEINTuctv5E1hK1bbY8fdp+K06/nwoy/HU++CXqI9EdVhC
 -----END PRIVATE KEY-----
 |}
   in
-  match Private_key.decode_pem (Cstruct.of_string data) with
-  | Ok (`ED25519 k as ke) when Cstruct.equal ed25519_priv (Mirage_crypto_ec.Ed25519.priv_to_cstruct k) ->
+  match Private_key.decode_pem data with
+  | Ok (`ED25519 k as ke) when String.equal ed25519_priv (Mirage_crypto_ec.Ed25519.priv_to_octets k) ->
     let encoded = Private_key.encode_pem ke in
-    if not (String.equal (Cstruct.to_string encoded) data) then
+    if not (String.equal encoded data) then
       Alcotest.failf "ED25519 encoding failed"
   | Ok (`ED25519 _) -> Alcotest.failf "wrong ED25519 private key"
   | Ok _ | Error (`Msg _) -> Alcotest.failf "ED25519 private key decode failure"
@@ -166,18 +171,18 @@ MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=
 -----END PUBLIC KEY-----
 |}
   and pub =
-    match Mirage_crypto_ec.Ed25519.priv_of_cstruct ed25519_priv with
+    match Mirage_crypto_ec.Ed25519.priv_of_octets ed25519_priv with
     | Error _ -> Alcotest.fail "couldn't decode private Ed25519 key"
     | Ok p ->
       match Private_key.public (`ED25519 p) with
       | `ED25519 p -> p
       | _ -> Alcotest.fail "couldn't convert private Ed25519 key to public"
   in
-  let to_cs = Mirage_crypto_ec.Ed25519.pub_to_cstruct in
-  match Public_key.decode_pem (Cstruct.of_string data) with
-  | Ok (`ED25519 k) when Cstruct.equal (to_cs pub) (to_cs k) ->
+  let to_cs = Mirage_crypto_ec.Ed25519.pub_to_octets in
+  match Public_key.decode_pem data with
+  | Ok (`ED25519 k) when String.equal (to_cs pub) (to_cs k) ->
     let encoded = Public_key.encode_pem (`ED25519 k) in
-    if not (String.equal (Cstruct.to_string encoded) data) then
+    if not (String.equal encoded data) then
       Alcotest.failf "ED25519 public key encoding failure"
   | _ -> Alcotest.failf "bad ED25519 public key"
 
@@ -197,22 +202,22 @@ GjfhN8ieupCqSdF3iqDidK006KWs848y
 |}
   in
   match
-    Private_key.decode_pem (Cstruct.of_string priv_data),
-    Public_key.decode_pem (Cstruct.of_string pub_data)
+    Private_key.decode_pem priv_data,
+    Public_key.decode_pem pub_data
   with
   | Ok (`P384 priv), Ok (`P384 pub) ->
-    let to_cs = Mirage_crypto_ec.P384.Dsa.pub_to_cstruct in
+    let to_cs = Mirage_crypto_ec.P384.Dsa.pub_to_octets in
     let pub' = Mirage_crypto_ec.P384.Dsa.pub_of_priv priv in
-    Alcotest.(check bool __LOC__ true (Cstruct.equal (to_cs pub) (to_cs pub')));
+    Alcotest.(check bool __LOC__ true (String.equal (to_cs pub) (to_cs pub')));
     let pub_data' = Public_key.encode_pem (`P384 pub) in
     Alcotest.(check bool __LOC__ true
-                (Cstruct.equal (Cstruct.of_string pub_data) pub_data'));
+                (String.equal pub_data pub_data'));
     let priv_data' = Private_key.encode_pem (`P384 priv) in
     begin match Private_key.decode_pem priv_data' with
       | Ok (`P384 priv) ->
         let pub' = Mirage_crypto_ec.P384.Dsa.pub_of_priv priv in
         Alcotest.(check bool __LOC__ true
-                    (Cstruct.equal (to_cs pub) (to_cs pub')))
+                    (String.equal (to_cs pub) (to_cs pub')))
       | _ -> Alcotest.failf "cannot decode re-encoded P384 private key"
     end
   | _ -> Alcotest.failf "bad P384 key"
@@ -265,6 +270,74 @@ let ip_address () =
   | Error ce -> Alcotest.failf "validation of IP address failed: %a"
                   Validation.pp_chain_error ce
 
+let alternate_sha1rsa_oid () =
+  let file = "alternate-sha1rsa-oid" in
+  match Certificate.decode_pem (regression file) with
+  | Error (`Msg msg) ->
+    Alcotest.failf "alternate SHA1RSA OID certificate %s, decoding error %s" file msg
+  | Ok _cert -> ()
+
+let p256_sha384 () =
+  let file = "p256_sha384" in
+  match Certificate.decode_pem (regression file) with
+  | Error (`Msg msg) ->
+    Alcotest.failf "P256 certificate with SHA384 %s, decoding error %s"
+      file msg
+  | Ok cert ->
+    match Validation.valid_ca cert with
+    | Error e ->
+      Alcotest.failf "verifying P256 certificate failed %a"
+        Validation.pp_ca_error e
+    | Ok () -> ()
+
+let rsa_pub () =
+  let file = "rsa_pub" in
+  let data = regression file in
+  match Public_key.decode_pem data with
+  | Error (`Msg msg) ->
+    Alcotest.failf "RSA public key %s, decoding error %s" file msg
+  | Ok pub ->
+    let pem = Public_key.encode_pem pub in
+    Alcotest.(check string "PEM encoding of RSA public key is identical"
+                data pem)
+
+let rsa_priv () =
+  let file = "rsa_priv" in
+  let data = regression file in
+  match Private_key.decode_pem data with
+  | Error (`Msg msg) ->
+    Alcotest.failf "RSA private key %s, decoding error %s" file msg
+  | Ok priv ->
+    let pem = Private_key.encode_pem priv in
+    Alcotest.(check string "PEM encoding of RSA private key is identical"
+                data pem);
+    let pub = regression "rsa_pub" in
+    Alcotest.(check string "PEM encoding of RSA public key (derived from private key) is identical"
+                pub (Public_key.encode_pem (Private_key.public priv)))
+
+let ec_pub file () =
+  let data = regression file in
+  match Public_key.decode_pem data with
+  | Error (`Msg msg) ->
+    Alcotest.failf "EC public key %s, decoding error %s" file msg
+  | Ok pub ->
+    let pem = Public_key.encode_pem pub in
+    Alcotest.(check string "PEM encoding of EC public key is identical"
+                data pem)
+
+let ec_priv file pub_file () =
+  let data = regression file in
+  match Private_key.decode_pem data with
+  | Error (`Msg msg) ->
+    Alcotest.failf "EC private key %s, decoding error %s" file msg
+  | Ok priv ->
+    let pem = Private_key.encode_pem priv in
+    Alcotest.(check string "PEM encoding of EC private key is identical"
+                data pem);
+    let pub = regression pub_file in
+    Alcotest.(check string "PEM encoding of EC public key (derived from private key) is identical"
+                pub (Public_key.encode_pem (Private_key.public priv)))
+
 let regression_tests = [
   "RSA: key too small (jc_jc)", `Quick, test_jc_jc ;
   "jc_ca", `Quick, test_jc_ca_fail ;
@@ -286,7 +359,14 @@ let regression_tests = [
   "p384 certificate", `Quick, le_p384_root ;
   "p256 key", `Quick, p256_key ;
   "ip_address", `Quick, ip_address ;
-]
+  "alternative SHA1RSA OID", `Quick, alternate_sha1rsa_oid;
+  "p256 with sha384", `Quick, p256_sha384 ;
+  "rsa public key", `Quick, rsa_pub ;
+  "rsa private key", `Quick, rsa_priv ;
+] @ List.flatten (List.map (fun file ->
+    [ "public " ^ file, `Quick, ec_pub ("pub_" ^ file) ;
+      "private " ^ file, `Quick, ec_priv ("priv_" ^ file) ("pub_" ^ file)
+    ]) [ "p521" ; "p384" ; "p256_2" ])
 
 let host_set_test =
   let module M = struct
@@ -305,7 +385,7 @@ let cert_hostnames cert names () =
   Alcotest.check host_set_test __LOC__ (Certificate.hostnames cert) names
 
 let csr file =
-  let data = cs_mmap ("./csr/" ^ file ^ ".pem") in
+  let data = mmap ("./csr/" ^ file ^ ".pem") in
   match Signing_request.decode_pem data with
   | Ok csr -> csr
   | Error (`Msg m) ->

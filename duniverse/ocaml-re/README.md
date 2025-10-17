@@ -2,7 +2,7 @@ Description
 ===========
 
 Re is a regular expression library for OCaml.
-[![Build Status](https://travis-ci.org/ocaml/ocaml-re.svg?branch=master)](https://travis-ci.org/ocaml/ocaml-re)
+[![Build status](https://github.com/ocaml/ocaml-re/actions/workflows/main.yml/badge.svg)](https://github.com/ocaml/ocaml-re/actions/workflows/main.yml)
 
 Contact
 =======
@@ -29,7 +29,7 @@ The most notable missing features are **back-references** and
 look-ahead/look-behind **assertions**.
 
 There is also a subset of the PCRE interface available in the `Re.Pcre` module.
-This makes it easier to port code from that library to Re minimal changes.
+This makes it easier to port code from that library to Re with minimal changes.
 
 Performances
 ============

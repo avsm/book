@@ -1,11 +1,10 @@
-(lang dune 2.1)
+(lang dune 2.7)
 (name graphics)
-(version 5.1.2)
 
 (generate_opam_files true)
 
-(license "LGPL-2.1 with OCaml linking exception")
-(maintainers jeremie@dimino.org david.allsopp@metastack.com)
+(license "LGPL-2.1-only with OCaml-LGPL-linking-exception")
+(maintainers david.allsopp@metastack.com)
 (authors "Xavier Leroy"
          "Jun Furuse"
          "J-M Geffroy"
@@ -19,6 +18,7 @@
  (depends
    "dune-configurator"
   ("conf-libX11" (<> :os win32))
+  ("conf-libXft" (<> :os win32))
   ("conf-pkg-config" (<> :os win32))
   ("ocaml" (>= "4.09.0~~")))
  (synopsis "The OCaml graphics library")

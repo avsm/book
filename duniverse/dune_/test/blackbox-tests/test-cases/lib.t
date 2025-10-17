@@ -142,7 +142,8 @@ Testsuite for the %{lib...} and %{lib-private...} variable.
   > EOF
 
   $ touch external/external_library.opam
-  $ ( cd external && ../sdune build @install && ../sdune install --prefix install | dune_cmd sanitize)
+  $ ( cd external && ../sdune build @install \
+  > && ../sdune install --prefix install --display short | dune_cmd sanitize)
   Installing install/lib/external_library/META
   Installing install/lib/external_library/dune-package
   Installing install/lib/external_library/extlib.a
@@ -177,6 +178,7 @@ Testsuite for the %{lib...} and %{lib-private...} variable.
   Error: The variable "lib-private" can only refer to libraries within the same
   project. The current project's name is "test-lib", but the reference is to an
   external library.
+  Leaving directory 'src'
   [1]
 
 ----------------------------------------------------------------------------------
@@ -253,10 +255,24 @@ But will fail when we release it, as it will need to run with -p:
   Error: Library "lib1" not found.
   -> required by %{lib-private:lib1:lib1.ml} at lib2/dune:5
   -> required by _build/default/lib2/lib2.ml
-  -> required by _build/default/lib2/.lib2.objs/byte/lib2.cmi
-  -> required by _build/default/lib2/.lib2.objs/native/lib2.cmx
-  -> required by _build/default/lib2/lib2.a
-  -> required by _build/install/default/lib/public_lib2/lib2.a
+  -> required by _build/install/default/lib/public_lib2/lib2.ml
   -> required by _build/default/public_lib2.install
   -> required by alias install
+  [1]
+
+----------------------------------------------------------------------------------
+* Error when the wrong number of arguments are passed to %{lib-private:...}
+
+  $ cat >dune <<EOF
+  > (rule
+  >  (alias find-a)
+  >  (action (echo "%{lib-private:a.ml}")))
+  > EOF
+
+  $ dune build @find-a
+  File "dune", line 3, characters 30-34:
+  3 |  (action (echo "%{lib-private:a.ml}")))
+                                    ^^^^
+  Incorrect arguments for macro lib-private.
+  Error: Expected two arguments separated by ':' but no ':' found.
   [1]

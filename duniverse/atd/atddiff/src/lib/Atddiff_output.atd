@@ -1,0 +1,101 @@
+(*
+   Type definitions used to build comparison results
+
+   We don't derive OCaml serializers from this file with atdgen due to
+   circular dependencies but we derive the OCaml types by calling atdgen
+   and keeping the result under source control:
+
+     atdgen -t Atddiff_output.atd
+
+   This provides an ATD specification to users who consume the JSON
+   output of the atddiff.
+*)
+
+type position = {
+  path: string;
+  line: int;
+  column: int;
+}
+
+type location = {
+  start: position;
+  end <ocaml name="end_">: position;
+}
+
+type direction = [ Backward | Forward | Both ] <ocaml repr="classic">
+
+type field_info = {
+  field_name: string
+}
+
+type variant_info = {
+  variant_name: string
+}
+
+type incompatibility_kind = [
+  | Missing_field of field_info
+  | Missing_variant of variant_info
+  | Missing_variant_argument of variant_info
+  | Default_required of field_info
+  | Incompatible_type
+  | Deleted_type
+  | Added_type
+] <ocaml repr="classic">
+
+(*
+   Important things we want to report:
+   - the name of the root type definition
+   - the location of the mismatch in the old file and in the new file:
+
+       Old:
+         type a = int
+                  ^^^
+       New:
+         type a = b
+         type b = int
+                  ^^^
+     Note the location of the mismatch is not necessarily in the root type
+     definition.
+
+   - no duplicates. The same mismatch can affect multiple root types:
+
+       Old:
+         type a = { x: c }
+         type b = { x: c list }
+         type c = int
+                  ^^^
+       New:
+         type a = { x: c }
+         type b = { x: c list }
+         type c = float
+                  ^^^^^
+     The same int/float mismatch affects the root type definitions 'a' and 'b'.
+     In this case, we would report one finding that affects 'a' and 'b'.
+
+     Findings are deduplicated by their full contents i.e. we can have two
+     different findings at the same location(s).
+*)
+type finding = {
+  (* A hexadecimal hash of all the other fields excluding location fields.
+     It is not necessarily unique but should be unique in most cases.
+     It's used for sorting, tracking, and referring to findings. *)
+  hash: string;
+
+  direction: direction;
+  kind: incompatibility_kind;
+  location_old: location option;
+  location_new: location option;
+
+  (* The description should not mention the affected root type definition
+     so as to allow the deduplication of findings. *)
+  description: string;
+
+  affected_types: string list;
+}
+
+(*
+   A result is a list of unique findings.
+*)
+type result = {
+  findings: finding list;
+}

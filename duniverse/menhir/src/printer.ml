@@ -169,6 +169,14 @@ let typeparams p0 p1 f = function
   | _ :: _ as params ->
       fprintf f "(%a) " (seplist p1 comma) params
 
+(* OCaml type parameters, for a class. *)
+
+let classtypeparams p f = function
+  | [] ->
+      ()
+  | _ :: _ as params ->
+      fprintf f "[%a] " (seplist p comma) params
+
 (* ------------------------------------------------------------------------- *)
 (* Expression printer. *)
 
@@ -268,6 +276,7 @@ let rec member e k =
             true
       end
   | EApp (_, _ :: _)
+  | EMethodCall _
   | EData (_, _ :: _)
   | EMagic _
   | ERepr _
@@ -381,6 +390,14 @@ and exprk k f e =
           e1 nl
           (indent 2 (exprk (andNotSeq k)))
           e2
+    | EFun (ps, EAnnot (e, ts)) ->
+        (* A special case for functions whose body carries a type annotation.
+           In this case, the result type can be indicated before the function
+           arrow [->]. This syntax was introduced in OCaml 4.03. *)
+        fprintf f "fun%a : %a ->%a"
+          (list pat0 space) ps
+          scheme ts
+          (indent 2 (exprk k)) e
     | EFun (ps, e) ->
         fprintf f "fun%a ->%a" (list pat0 space) ps (indent 2 (exprk k)) e
     | EApp (EVar op, [ e1; e2 ])
@@ -389,6 +406,8 @@ and exprk k f e =
         fprintf f "%a %s %a" app e1 op app e2
     | EApp (e, args) ->
         fprintf f "%a%a" app e (list atom space) args
+    | EMethodCall (e, m) ->
+        fprintf f "%a#%s" atom e m
     | ERaise e ->
         fprintf f "raise %a" atom e
     | EMagic e ->
@@ -416,7 +435,7 @@ and exprk k f e =
         else
           fprintf f "(%d)" k
     | EStringConst s ->
-        fprintf f "\"%s\"" (Compatibility.String.escaped s)
+        fprintf f "\"%s\"" (String.escaped s)
     | ETuple [] ->
         assert false
     | ETuple [ e ] ->
@@ -437,7 +456,7 @@ and exprk k f e =
     fprintf f "(%a)" expr e
 
 (* When printing a stretch, the string [content] includes padding (that is,
-   whitespace) to as to preserve the column numbers of the source file,
+   whitespace) so as to preserve the column numbers of the source file,
    whereas the string [raw_content] does not. When [X.locate_stretches]
    is [None], the parameter [raw] controls the choice between them. When
    [X.locate_stretches] is [Some _], we ignore [raw] and force the use of
@@ -662,6 +681,8 @@ let typerhs typename f = function
       fprintf f " = %a" (list (datadef typename) nl) defs
   | TAbbrev t ->
       fprintf f " = %a" typ t
+  | TAbstract ->
+      ()
 
 let typeconstraint f = function
   | None ->
@@ -718,6 +739,7 @@ let excdefs in_intf =
   pdefs (excdef in_intf) exc exc
 
 let block format body f b =
+  (* [format] should contain just one [%a] *)
   fprintf f format (fun f b ->
     indent 2 body f b;
     nl f
@@ -757,6 +779,12 @@ let rec structure_item f item =
     | SIAttribute (attribute, payload) ->
         (* We assume that the payload does not contain newlines. *)
         fprintf f "[@@@%s \"%s\"]" attribute payload
+    | SIClass (v, params, name, oselftyp, cfs) ->
+        fprintf f "class %a%a%s = %a"
+          virtuality v
+          (classtypeparams typevar) params
+          name
+          (objectend oselftyp) cfs
     end;
     nl f
 
@@ -773,6 +801,78 @@ and modexpr f = function
       structend f s
   | MApp (e1, e2) ->
       fprintf f "%a (%a)" modexpr e1 modexpr e2
+
+and virtuality f = function
+  | NonVirtual ->
+      ()
+  | Virtual ->
+      fprintf f "virtual "
+
+and privacy f = function
+  | Public ->
+      ()
+  | Private ->
+      fprintf f "private "
+
+and objectend oselftyp f cfs =
+  objectself f oselftyp;
+  indent 2 class_fields f cfs;
+  nl f;
+  fprintf f "end"
+
+and objectself f = function
+  | None ->
+      fprintf f "object (self)"
+  | Some ty ->
+      fprintf f "object (self : %a)" typ ty
+
+and class_fields f cfs =
+  list class_field nothing f cfs
+
+and class_field f cf =
+  nl f;
+  begin match cf with
+  | CFMethod (p, name, e) ->
+      fprintf f "method %a%s = %a"
+        privacy p
+        name
+        expr e
+  | CFMethodVirtual (name, ts) ->
+      fprintf f "method virtual %s : %a"
+        name
+        scheme ts
+  | CFComment comment ->
+      fprintf f "(* %s *)" comment
+  end;
+  nl f
+
+and objectendspec oselftyp f cfss =
+  objectselfspec f oselftyp;
+  indent 2 class_field_specs f cfss;
+  nl f;
+  fprintf f "end"
+
+and objectselfspec f = function
+  | None ->
+      fprintf f "object"
+  | Some ty ->
+      fprintf f "object (%a)" typ ty
+
+and class_field_specs f cfss =
+  list class_field_spec nothing f cfss
+
+and class_field_spec f cfs =
+  nl f;
+  begin match cfs with
+  | CFSMethod (v, name, ts) ->
+      fprintf f "method %a%s : %a"
+        virtuality v
+        name
+        scheme ts
+  | CFSComment comment ->
+      fprintf f "(* %s *)" comment
+  end;
+  nl f
 
 let valdecl f (x, ts) =
   fprintf f "val %s: %a" x typ ts.body
@@ -822,6 +922,12 @@ and interface_item f item =
         fprintf f "module %s : %a" name module_type mt
     | IIComment comment ->
         fprintf f "(* %s *)" comment
+    | IIClass (v, params, name, oselftyp, cfss) ->
+        fprintf f "class %a%a%s : %a"
+          virtuality v
+          (classtypeparams typevar) params
+          name
+          (objectendspec oselftyp) cfss
     end;
     nl f
 

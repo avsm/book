@@ -19,10 +19,12 @@ module Where_to_connect = struct
   let remote_address t = t.remote_address ()
 
   let create_local_address ~bind_to_address ~bind_to_port =
-    let port = Option.value bind_to_port ~default:0 in
-    match bind_to_address with
-    | None -> Socket.Address.Inet.create_bind_any ~port
-    | Some inet_addr -> Socket.Address.Inet.create ~port inet_addr
+    match bind_to_address, bind_to_port with
+    | None, None -> None
+    | None, Some port -> Some (Socket.Address.Inet.create_bind_any ~port)
+    | Some inet_addr, bind_to_port ->
+      let port = Option.value bind_to_port ~default:0 in
+      Some (Socket.Address.Inet.create ~port inet_addr)
   ;;
 
   let of_host_and_port ?bind_to_address ?bind_to_port ({ Host_and_port.host; port } as hp)
@@ -32,7 +34,7 @@ module Where_to_connect = struct
         (fun () ->
            Unix.Inet_addr.of_string_or_getbyname host
            >>| fun inet_addr -> Socket.Address.Inet.create inet_addr ~port)
-    ; local_address = Some (create_local_address ~bind_to_address ~bind_to_port)
+    ; local_address = create_local_address ~bind_to_address ~bind_to_port
     ; info = [%sexp (hp : Host_and_port.t)]
     }
   ;;
@@ -48,7 +50,7 @@ module Where_to_connect = struct
   let of_inet_address ?bind_to_address ?bind_to_port address =
     { socket_type = Socket.Type.tcp
     ; remote_address = (fun () -> return address)
-    ; local_address = Some (create_local_address ~bind_to_address ~bind_to_port)
+    ; local_address = create_local_address ~bind_to_address ~bind_to_port
     ; info = [%sexp_of: Socket.Address.Inet.t] address
     }
   ;;
@@ -138,15 +140,6 @@ let connect_sock
          raise_s [%sexp "connection attempt aborted", (address : string)]))
 ;;
 
-type 'a with_connect_options =
-  ?buffer_age_limit:[ `At_most of Time.Span.t | `Unlimited ]
-  -> ?interrupt:unit Deferred.t
-  -> ?reader_buffer_size:int
-  -> ?writer_buffer_size:int
-  -> ?timeout:Time.Span.t
-  -> ?time_source:Time_source.t
-  -> 'a
-
 let connect
       ?socket
       ?buffer_age_limit
@@ -173,8 +166,7 @@ let collect_errors writer f =
     [ choice (Monitor.get_next_error monitor) (fun e -> Error e)
     ; choice
         (Monitor.try_with
-           ~run:
-             `Schedule
+           ~run:`Schedule
            ~rest:`Log
            ~name:"Tcp.collect_errors"
            f)
@@ -437,7 +429,17 @@ module Server = struct
       | `Socket_closed -> ()
       | `Ok conns ->
         (* It is possible that someone called [close t] after the [accept] returned but
-           before we got here.  In that case, we just close the clients. *)
+           before we got here.  In that case, we just close the clients.  One might argue
+           that if [close] was called with [close_existing_connections = false], then we
+           should not close these, but instead let the clients finish their business. One
+           may want this for example to arrange a smooth handover when using
+           [SO_REUSEPORT].
+           Unfortunately, even if we make this fix, a smooth handover
+           does not seem to be possible on Linux, since Linux assigns a connection to a
+           process before [accept] is called, which creates an inherent race between that
+           and [close]: any connections assigned to a listening socket at the time of
+           [close] will be dropped.
+           *)
         if is_closed t || t.drop_incoming_connections
         then
           List.iter conns ~f:(fun (sock, _) -> don't_wait_for (Fd.close (Socket.fd sock)))
@@ -531,35 +533,28 @@ module Server = struct
       :  'addr t
       -> f:
            (([ `Unconnected ], 'addr) Socket.t
-            -> reuseaddr:bool
             -> ([ `Passive ], 'addr) Socket.t Deferred.t)
       -> ([ `Passive ], 'addr) Socket.t Deferred.t
 
     val bind_and_listen_maybe_retry'
       :  'addr t
-      -> f:
-           (([ `Unconnected ], 'addr) Socket.t
-            -> reuseaddr:bool
-            -> ([ `Passive ], 'addr) Socket.t)
+      -> f:(([ `Unconnected ], 'addr) Socket.t -> ([ `Passive ], 'addr) Socket.t)
       -> ([ `Passive ], 'addr) Socket.t
   end = struct
     type 'addr t =
       { create_socket : unit -> ([ `Unconnected ], 'addr) Socket.t
-      ; should_set_reuseaddr : bool
       ; retries_upon_addr_in_use : int
       }
 
     let create maybe_socket where_to_listen =
       match maybe_socket with
-      | Some socket ->
-        { create_socket = Fn.const socket
-        ; should_set_reuseaddr = false
-        ; retries_upon_addr_in_use = 0
-        }
+      | Some socket -> { create_socket = Fn.const socket; retries_upon_addr_in_use = 0 }
       | None ->
         { create_socket =
-            (fun () -> Socket.create where_to_listen.Where_to_listen.socket_type)
-        ; should_set_reuseaddr = true
+            (fun () ->
+               let socket = Socket.create where_to_listen.Where_to_listen.socket_type in
+               Socket.setopt socket Socket.Opt.reuseaddr true;
+               socket)
         ; retries_upon_addr_in_use =
             Where_to_listen.max_retries_upon_addr_in_use where_to_listen
         }
@@ -582,10 +577,7 @@ module Server = struct
 
     let rec aux_bind_and_listen_maybe_retry t ~retries_attempted_upon_addr_in_use ~f =
       let socket = t.create_socket () in
-      match%bind
-        Monitor.try_with ~extract_exn:true (fun () ->
-          f socket ~reuseaddr:t.should_set_reuseaddr)
-      with
+      match%bind Monitor.try_with ~extract_exn:true (fun () -> f socket) with
       | Ok v -> return v
       | Error exn ->
         let `Please_retry = handle_exn t socket exn ~retries_attempted_upon_addr_in_use in
@@ -597,7 +589,7 @@ module Server = struct
 
     let rec aux_bind_and_listen_maybe_retry' t ~retries_attempted_upon_addr_in_use ~f =
       let socket = t.create_socket () in
-      try f socket ~reuseaddr:t.should_set_reuseaddr with
+      try f socket with
       | exn ->
         let `Please_retry = handle_exn t socket exn ~retries_attempted_upon_addr_in_use in
         aux_bind_and_listen_maybe_retry'
@@ -633,10 +625,8 @@ module Server = struct
     in
     let%map socket =
       let socket_creator = Socket_creator.create socket where_to_listen in
-      Socket_creator.bind_and_listen_maybe_retry
-        socket_creator
-        ~f:(fun socket ~reuseaddr ->
-          Socket.bind ~reuseaddr socket where_to_listen.address >>| Socket.listen ?backlog)
+      Socket_creator.bind_and_listen_maybe_retry socket_creator ~f:(fun socket ->
+        Socket.bind_keep_opts socket where_to_listen.address >>| Socket.listen ?backlog)
     in
     let max_connections =
       Max_connections.create
@@ -674,11 +664,9 @@ module Server = struct
     in
     let socket =
       let socket_creator = Socket_creator.create socket where_to_listen in
-      Socket_creator.bind_and_listen_maybe_retry'
-        socket_creator
-        ~f:(fun socket ~reuseaddr ->
-          Socket.bind_inet ~reuseaddr socket where_to_listen.address
-          |> Socket.listen ?backlog)
+      Socket_creator.bind_and_listen_maybe_retry' socket_creator ~f:(fun socket ->
+        Socket.bind_inet_keep_opts socket where_to_listen.address
+        |> Socket.listen ?backlog)
     in
     let max_connections =
       Max_connections.create
@@ -804,8 +792,7 @@ module Server = struct
       where_to_listen
       (fun client_address client_socket ->
          Monitor.try_with
-           ~run:
-             `Schedule
+           ~run:`Schedule
            ~rest:`Log
            ~name:"Tcp.Server.create_sock"
            (fun () -> handle_client client_address client_socket))
@@ -833,8 +820,7 @@ module Server = struct
       where_to_listen
       (fun client_address client_socket ->
          Monitor.try_with
-           ~run:
-             `Schedule
+           ~run:`Schedule
            ~rest:`Log
            ~name:"Tcp.Server.create_sock_inet"
            (fun () -> handle_client client_address client_socket))
@@ -927,6 +913,17 @@ module Server = struct
   module Private = struct
     let fd = fd
   end
+end
+
+module Aliases = struct
+  type 'a with_connect_options =
+    ?buffer_age_limit:[ `At_most of Time.Span.t | `Unlimited ]
+    -> ?interrupt:unit Deferred.t
+    -> ?reader_buffer_size:int
+    -> ?writer_buffer_size:int
+    -> ?timeout:Time.Span.t
+    -> ?time_source:Time_source.t
+    -> 'a
 end
 
 module Private = struct

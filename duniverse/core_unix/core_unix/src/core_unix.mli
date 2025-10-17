@@ -331,12 +331,21 @@ val exec
   -> unit
   -> never_returns
 
-(** [fork_exec ~prog ~argv ?use_path ?env ()] forks and execs [prog] with [argv] in the
-    child process, returning the child PID to the parent. As in [exec], by convention, the
-    0th element in [argv] should be the program itself. *)
+(** [fork_exec ~prog ~argv ?preexec_fn ?use_path ?env ()] forks, calls [preexec_fn], and
+    then execs [prog] with [argv] in the child process, returning the child PID to the
+    parent. As in [exec], by convention, the 0th element in [argv] should be the program
+    itself.
+
+    Since [preexec_fn] is invoked post-fork but pre-exec, it must:
+    - not allocate; and
+    - not call any async-signal-unsafe functions (see man 7 signal)
+
+    Violating these constraints may cause the program to deadlock or exhibit undefined
+    behavior. *)
 val fork_exec
   :  prog:string
   -> argv:string list
+  -> ?preexec_fn:(unit -> unit)
   -> ?use_path:bool  (** default is [true] *)
   -> ?env:env
   -> unit
@@ -403,8 +412,12 @@ val getppid_exn : unit -> Pid.t
 (** Set process group ID of a process. *)
 val setpgid : of_:Pid.t -> to_:Pid.t -> unit
 
-(** Return process group ID of a process. *)
-val getpgid : Pid.t -> Pid.t
+(** Return process group ID of a process.
+
+    [None] means the pgid is zero, which cannot be represented as a [Pid.t]. This happens
+    at least for kernel processes. See [ps -ejH] for examples.
+*)
+val getpgid : Pid.t -> Pid.t option
 
 module Thread_id : sig
   type t [@@deriving sexp_of, bin_io]
@@ -448,6 +461,7 @@ type open_flag =
   | O_NOCTTY        (** Don't make this dev a controlling tty *)
   | O_DSYNC         (** Writes complete as `Synchronised I/O data integrity completion' *)
   | O_SYNC          (** Writes complete as `Synchronised I/O file integrity completion' *)
+
   | O_RSYNC         (** Reads complete as writes (depending on O_SYNC/O_DSYNC) *)
   | O_SHARE_DELETE  (** Windows only: allow the file to be deleted while still open *)
   | O_CLOEXEC       (** Set the close-on-exec flag on the descriptor returned by {!openfile} *)
@@ -1337,7 +1351,14 @@ module Group : sig
   val getbygid_exn : int -> t
 end
 
-(** Return the login name of the user executing the process. *)
+(** Return the name of the user executing the process, from the {!Passwd} module.
+
+    Note that this function is not always guaranteed to succeed: depending on OS
+    configuration, computing the current username can involve network queries, which can
+    fail transiently. *)
+val username : unit -> string
+
+(** A deprecated alias for [username]. *)
 val getlogin : unit -> string
 
 module Protocol_family : sig
@@ -1402,7 +1423,7 @@ module Inet_addr : sig
   module Stable : sig
     module V1 : sig
       type nonrec t = t [@@deriving hash]
-      include Stable with type t := t and type comparator_witness = comparator_witness
+      include Stable_with_witness with type t := t and type comparator_witness = comparator_witness
     end
   end
 end
@@ -1461,7 +1482,7 @@ module Cidr : sig
   val is_subset : t -> of_:t -> bool
 
   module Stable : sig
-    module V1 : Stable_comparable.V1
+    module V1 : Stable_comparable.With_stable_witness.V1
       with type t = t
       with type comparator_witness = comparator_witness
   end
@@ -1680,9 +1701,8 @@ type socket_int_option =
     and modified with {!UnixLabels.setsockopt_optint}.  These options have a
     value of type [int option], with [None] meaning ``disabled''. *)
 type socket_optint_option =
-    SO_LINGER              (** Whether to linger on closed connections
-                               with sexp                      that have data present, and for how long
-                               (in seconds) *)
+    SO_LINGER              (** Whether to linger on closed connections with sexp that have
+                               data present, and for how long (in seconds) *)
 
 (** The socket options that can be consulted with {!UnixLabels.getsockopt_float}
     and modified with {!UnixLabels.setsockopt_float}.  These options have a
@@ -2255,6 +2275,8 @@ type sysconf =
   | AVPHYS_PAGES
   | IOV_MAX
   | CLK_TCK
+  | NPROCESSORS_CONF
+  | NPROCESSORS_ONLN
 [@@deriving sexp]
 
 (** Wrapper over [sysconf] function in C. *)
@@ -2334,7 +2356,7 @@ module Utsname : sig
   val machine : t -> string
 
   module Stable : sig
-    module V1 : Stable_without_comparator
+    module V1 : Stable_without_comparator_with_witness
       with type t = t
   end
 end
@@ -2488,6 +2510,8 @@ module Ifaddr : sig
 end
 
 val getifaddrs : unit -> Ifaddr.t list
+
+val get_all_ifnames : unit -> string list
 
 module Stable : sig
   module Inet_addr = Inet_addr.Stable

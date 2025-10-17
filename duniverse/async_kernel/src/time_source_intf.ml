@@ -43,7 +43,7 @@ module type Time_source = sig
     :  ?timing_wheel_config:Timing_wheel.Config.t
     -> now:Time_ns.t
     -> unit
-    -> read_write T1.t
+    -> _ T1.t
 
   (** A time source with [now t] given by wall-clock time (i.e., [Time_ns.now]) and that
       is advanced automatically as time passes (specifically, at the start of each Async
@@ -128,7 +128,10 @@ module type Time_source = sig
     val immediately : t
   end
 
-  (** See {{!Async_kernel.Clock_intf.Clock.every'}[Clock.every]} for documentation. *)
+  (** [run_repeatedly] is the same as [every'], with the delay between jobs controlled by
+      [continue]. When [continue] is [Continue.immediately] (the only value currently
+      exposed in this interface), a new execution of [f] will be scheduled immediately
+      after the deferred returned by [f] is resolved. *)
   val run_repeatedly
     :  ?start:unit Deferred.t (** default is [return ()] *)
     -> ?stop:unit Deferred.t (** default is [Deferred.never ()] *)
@@ -272,4 +275,15 @@ module type Time_source = sig
   val of_synchronous : 'a Synchronous_time_source0.T1.t -> 'a T1.t
 
   val to_synchronous : 'a T1.t -> 'a Synchronous_time_source0.T1.t
+
+  (** Advance iff:
+      - no alarms are scheduled up (and including) to that time point
+      - no jobs are runnable (which could cause events to happen in the time range)
+
+      Returns true if we advanced, false if we were unable to.
+
+      This is an optimisation relative to (for instance) [Time_source.advance_by_alarms] or
+      other methods that will rely on running async cycles to produce quiescence.
+  *)
+  val advance_directly_if_quiescent : [> write ] T1.t -> to_:Time_ns.t -> bool
 end

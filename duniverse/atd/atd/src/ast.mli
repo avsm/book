@@ -1,6 +1,6 @@
 (** Abstract syntax tree (AST) representing ATD data *)
 
-type loc = Lexing.position * Lexing.position
+type loc = Loc.t
     (** A location in the source code. *)
 
 exception Atd_error of string
@@ -290,3 +290,38 @@ val is_parametrized : type_expr -> bool
   *)
 
 val is_required : field_kind -> bool
+
+(** Replace nodes by other nodes of the same type.
+    First the user-given mapper is applied to a node,
+    then the children nodes are mapped recursively.
+*)
+module Map : sig
+  type mappers = {
+    type_expr: type_expr -> type_expr;
+  }
+
+  val default_mappers : mappers
+
+  val type_expr : mappers -> type_expr -> type_expr
+  val variant : mappers -> variant -> variant
+  val field : mappers -> field -> field
+  val type_def : mappers -> type_def -> type_def
+  val module_item : mappers -> module_item -> module_item
+  val module_body : mappers -> module_body -> module_body
+  val full_module : mappers -> full_module -> full_module
+end
+
+val use_only_specific_variants : full_module -> full_module
+  (** Use the dedicated variants [Int], [List], etc. instead of the generic
+      variant [Name]. *)
+
+val use_only_name_variant : full_module -> full_module
+  (** Use the generic variant [Name] instead of the dedicated variants
+      [Int], [List], etc. *)
+
+val remove_wrap_constructs : full_module -> full_module
+  (** Remove all [Wrap] constructs and their annotations from the
+      tree. This unwrapping returns the original ATD types e.g.
+      an [int wrap <ocaml module="ID">] becomes [int].
+      It can be useful for backends that don't support [Wrap]
+      or for pretty-printing more basic type definitions. *)

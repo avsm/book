@@ -4,6 +4,11 @@
 Dune RPC
 ********
 
+.. TODO(diataxis)
+
+   This one could be split into :doc:`reference/dune-libs` for the API part and
+   a how-to guide which is missing.
+
 Starting from dune 3.0, dune's watch mode also runs an RPC server. This is a
 general mechanism introduced to integrate with various dune functionality. Some
 use cases we have in mind are:
@@ -30,25 +35,39 @@ the RPC server greater than it. In other words, a client using version ``X``
 will work with all servers ``>= X``. However, it will not work with any servers
 ``< X``.
 
-The library contains a client implementation parameterized over a concurrency
-monad. It should be trivial to provide an implementation using the lwt_ library
-for example.
+The library contains a client implementation parameterised over a concurrency
+monad. The ``dune-rpc-lwt`` package provides an instantiation of the RPC client
+defined in ``dune-rpc`` using lwt_ to implement the concurrency monad.
+It is of course possible to instantiate the dune RPC client using alternative
+concurrency implementations.
 
-The library provides an API to do the following:
 
-- Initialize an RPC session over a channel
+The ``dune-rpc`` library provides an API to do the following:
+
+- Initialise an RPC session over a channel
 - Send RPC requests and notifications
 - Handle notifications received from the server
 - Definitions of available requests, notifications, and their associated types.
+- Subscribe to streams of build progress events
+
+`Here <rpc_client_example_>`_ is an example of a simple Dune RPC client that
+uses the ``dune-rpc`` and ``dune-rpc-lwt`` packages.
 
 Connecting
 ==========
 
-To connect to dune's RPC server, ``$ dune rpc init`` must be ran. This command
-will initiate a new RPC session communicating over `stdin`, `stdout`. When
-instantiating the ``Client`` functor, a read/write ``Chan.t`` must be provided.
-This ``Chan.t`` value should represent read/write from stdin/stdout
-respectively.
+To connect to Dune's RPC server, it needs to be started in watch mode. There
+are two ways of doing this:
+
+- Run ``dune build --passive-watch-mode`` to start an RPC server which will
+  listen for requests without starting a build by itself...
+- Or run ``dune build --watch`` to start a build server that rebuilds the
+  project's default target when source files change and *also* starts an RPC
+  server that listens for requests.
+
+Then ``dune rpc build .`` will connect to it, trigger a build, and report
+status.
 
 .. _lwt: https://github.com/ocsigen/lwt
 .. _Dune_rpc: https://github.com/ocaml/dune/blob/main/otherlibs/dune-rpc/dune_rpc.mli
+.. _rpc_client_example: https://github.com/ocaml/dune/tree/main/otherlibs/dune-rpc-lwt/examples/rpc_client

@@ -20,9 +20,9 @@ module Make (Config : Expect_test_config_types.S) : sig
       This function should only be called while a test is running. It is meant to be
       called as a result of ppx_expect translating an expect-test, and is not intended
       to be called manually. *)
-  val save_output : File.Location.t -> unit Config.IO_flush.t
+  val save_output : File.Location.t -> unit
 
-  val save_and_return_output : File.Location.t -> string Config.IO_flush.t
+  val save_and_return_output : File.Location.t -> string
 
   (** Run an expect-test *)
   val run
@@ -33,10 +33,13 @@ module Make (Config : Expect_test_config_types.S) : sig
     -> tags:string list
     -> expectations:Expectation.Raw.t list
     -> uncaught_exn_expectation:Expectation.Raw.t option
-    -> inline_test_config:Ppx_inline_test_lib.Runtime.config
-    -> (unit -> unit Config.IO_run.t)
+    -> inline_test_config:Ppx_inline_test_lib.config
+    -> (unit -> unit Config.IO.t)
     -> unit
 end
+
+(** Returns true if and only if an expect test is currently collecting output. *)
+val am_running_expect_test : unit -> bool
 
 (** Flushes stdout/stderr. Same as [Make().save_and_return_output], without monad. *)
 val save_and_return_output : File.Location.t -> string

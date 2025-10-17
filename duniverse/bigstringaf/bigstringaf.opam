@@ -1,4 +1,4 @@
-version: "0.9.0"
+version: "0.10.0"
 opam-version: "2.0"
 maintainer: "Spiros Eliopoulos <spiros@inhabitedtype.com>"
 authors: [ "Spiros Eliopoulos <spiros@inhabitedtype.com>" ]
@@ -8,21 +8,27 @@ bug-reports: "https://github.com/inhabitedtype/bigstringaf/issues"
 dev-repo: "git+https://github.com/inhabitedtype/bigstringaf.git"
 build: [
   ["dune" "subst"] {dev}
-  ["dune" "build" "-p" name "-j" jobs]
-  ["dune" "runtest" "-p" name] {with-test}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
 ]
 depends: [
-  "dune" {>= "2.6.0"}
+  "dune" {>= "3.0"}
+  "dune-configurator" {>= "3.0"}
   "alcotest" {with-test}
   "ocaml" {>= "4.08.0"}
-  "conf-pkg-config" {build}
-]
-depopts: [
-  "ocaml-freestanding"
 ]
 conflicts: [
   "mirage-xen" {< "6.0.0"}
-  "ocaml-freestanding" {< "0.4.1"}
+  "ocaml-freestanding"
   "js_of_ocaml" {< "3.5.0"}
 ]
 synopsis: "Bigstring intrinsics and fast blits based on memcpy/memmove"

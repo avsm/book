@@ -1,181 +1,10 @@
 open! Core
 open! Int.Replace_polymorphic_compare
 module Unix = Core_unix
-module Time = Time_unix
+module Time = Time_float_unix
 include Time_ns
 module Zone = Time.Zone
-
-module Span = struct
-  include Time_ns.Span
-
-  let hash t = Int63.hash (Time_ns.Span.to_int63_ns t)
-  let compare = compare
-  let arg_type = Core.Command.Arg_type.create of_string
-
-  module Stable = struct
-    module V1 = struct
-      module T = struct
-        type nonrec t = Time_ns.Span.t [@@deriving bin_io, compare, hash, equal]
-
-        let sexp_of_t t = Time.Stable.Span.V1.sexp_of_t (to_span_float_round_nearest t)
-        let t_of_sexp s = of_span_float_round_nearest (Time.Stable.Span.V1.t_of_sexp s)
-        let of_int63_exn t = Time_ns.Span.of_int63_ns t
-        let to_int63 t = Time_ns.Span.to_int63_ns t
-      end
-
-      include T
-      include Comparator.Stable.V1.Make (T)
-    end
-
-    module V2 = Time_ns.Stable.Span.V2
-  end
-
-  module Option = struct
-    type span = t [@@deriving sexp]
-    type t = Int63.t [@@deriving bin_io, compare, hash, typerep] (* nanoseconds or none *)
-
-    let none = Int63.min_value
-    let is_none t = Int63.(t = none)
-    let is_some t = Int63.(t <> none)
-    let some_is_representable span = is_some (to_int63_ns span)
-
-    let[@cold] raise_some_error span =
-      raise_s [%message [%here] "Span.Option.some value not representable" (span : span)]
-    ;;
-
-    let some span =
-      if some_is_representable span then to_int63_ns span else raise_some_error span
-    ;;
-
-    let value t ~default = if is_none t then default else of_int63_ns t
-    let unchecked_value t = of_int63_ns t
-
-    let value_exn t =
-      if is_some t
-      then unchecked_value t
-      else raise_s [%message [%here] "Span.Option.value_exn none"]
-    ;;
-
-    let of_option = function
-      | None -> none
-      | Some t -> some t
-    ;;
-
-    let to_option t = if is_none t then None else Some (of_int63_ns t)
-
-    module For_quickcheck = struct
-      module Some = struct
-        type t = span
-
-        let quickcheck_generator =
-          Quickcheck.Generator.filter quickcheck_generator ~f:some_is_representable
-        ;;
-
-        let quickcheck_observer = quickcheck_observer
-
-        let quickcheck_shrinker =
-          Base_quickcheck.Shrinker.filter quickcheck_shrinker ~f:some_is_representable
-        ;;
-      end
-
-      type t = Some.t option [@@deriving quickcheck]
-    end
-
-    let quickcheck_generator =
-      Quickcheck.Generator.map For_quickcheck.quickcheck_generator ~f:of_option
-    ;;
-
-    let quickcheck_observer =
-      Quickcheck.Observer.unmap For_quickcheck.quickcheck_observer ~f:to_option
-    ;;
-
-    let quickcheck_shrinker =
-      Quickcheck.Shrinker.map
-        For_quickcheck.quickcheck_shrinker
-        ~f:of_option
-        ~f_inverse:to_option
-    ;;
-
-    module Optional_syntax = struct
-      module Optional_syntax = struct
-        let is_none = is_none
-        let unsafe_value = unchecked_value
-      end
-    end
-
-    module Stable = struct
-      module V1 = struct
-        module T = struct
-          type nonrec t = t [@@deriving compare, bin_io]
-
-          let v1_some span =
-            assert (some_is_representable span);
-            to_int63_ns span
-          ;;
-
-          let sexp_of_t t = [%sexp_of: Stable.V1.t option] (to_option t)
-          let t_of_sexp s = of_option ([%of_sexp: Stable.V1.t option] s)
-          let of_int63_exn i = if is_none i then none else v1_some (of_int63_ns i)
-          let to_int63 t = t
-        end
-
-        include T
-        include Comparator.Stable.V1.Make (T)
-      end
-
-      module V2 = struct
-        module T = struct
-          type nonrec t = t [@@deriving compare, bin_io]
-
-          let sexp_of_t t =
-            Sexp.List
-              (if is_none t then [] else [ Stable.V2.sexp_of_t (unchecked_value t) ])
-          ;;
-
-          let t_of_sexp sexp =
-            let fail () =
-              of_sexp_error
-                "Time_ns_unix.Span.Option.Stable.V2.t_of_sexp: sexp must be a List of \
-                 0-1 Atom"
-                sexp
-            in
-            match sexp with
-            | Sexp.Atom _ -> fail ()
-            | Sexp.List list ->
-              (match list with
-               | [] -> none
-               | [ Sexp.Atom x ] ->
-                 some
-                   (try of_string x with
-                    | exn -> of_sexp_error (Exn.to_string exn) sexp)
-               | _ -> fail ())
-          ;;
-
-          let of_int63_exn i = i
-          let to_int63 t = t
-        end
-
-        include T
-        include Comparator.Stable.V1.Make (T)
-      end
-    end
-
-    let sexp_of_t = Stable.V2.sexp_of_t
-    let t_of_sexp = Stable.V2.t_of_sexp
-
-    include Identifiable.Make (struct
-        type nonrec t = t [@@deriving sexp, compare, bin_io, hash]
-
-        let module_name = "Time_ns_unix.Span.Option"
-
-        include Sexpable.To_stringable (struct
-            type nonrec t = t [@@deriving sexp]
-          end)
-      end)
-
-    include (Int63 : Core.Comparisons.S with type t := t)
-  end
-end
+module Span = Time_ns.Span
 
 let nanosleep t = Span.of_sec (Unix.nanosleep (Span.to_sec t))
 
@@ -221,6 +50,54 @@ let of_string_gen ~if_no_timezone s =
 let of_string_abs s = of_string_gen ~if_no_timezone:`Fail s
 let of_string s = of_string_gen ~if_no_timezone:`Local s
 let arg_type = Core.Command.Arg_type.create of_string_abs
+
+let to_tm t ~zone : Unix.tm =
+  let date, ofday = to_date_ofday t ~zone in
+  let parts = Ofday.to_parts ofday in
+  { tm_year = Date.year date - 1900
+  ; tm_mon = Month.to_int (Date.month date) - 1
+  ; tm_mday = Date.day date
+  ; tm_hour = parts.hr
+  ; tm_min = parts.min
+  ; tm_sec = parts.sec
+  ; tm_isdst =
+      (* We don't keep track of "DST or not", so we use a dummy value. See caveat in
+         interface about time zones and DST. *)
+      false
+  ; tm_wday = Day_of_week.to_int (Date.day_of_week date)
+  ; tm_yday = Date.diff date (Date.create_exn ~y:(Date.year date) ~m:Jan ~d:1)
+  }
+;;
+
+let format (t : t) s ~zone = Unix.strftime (to_tm t ~zone) s
+
+let of_tm tm ~zone =
+  (* Explicitly ignoring isdst, wday, yday (they are redundant with the other fields
+     and the [zone] argument) *)
+  let ({ tm_year
+       ; tm_mon
+       ; tm_mday
+       ; tm_hour
+       ; tm_min
+       ; tm_sec
+       ; tm_isdst = _
+       ; tm_wday = _
+       ; tm_yday = _
+       }
+       : Unix.tm)
+    =
+    tm
+  in
+  let date =
+    Date.create_exn ~y:(tm_year + 1900) ~m:(Month.of_int_exn (tm_mon + 1)) ~d:tm_mday
+  in
+  let ofday = Ofday.create ~hr:tm_hour ~min:tm_min ~sec:tm_sec () in
+  of_date_ofday ~zone date ofday
+;;
+
+let parse ?allow_trailing_input s ~fmt ~zone =
+  Unix.strptime ?allow_trailing_input ~fmt s |> of_tm ~zone
+;;
 
 (* Does not represent extra hours due to DST (daylight saving time) (because DST makes
    adjustments in terms of wall clock time) or leap seconds (which aren't represented in
@@ -308,16 +185,14 @@ module Ofday = struct
 
     module Stable = struct
       module V1 = struct
-        type nonrec t = t [@@deriving hash]
-
         let compare = With_nonchronological_compare.compare
 
         module Bin_repr = struct
-          type t =
+          type nonrec t = t =
             { ofday : Time_ns.Stable.Ofday.V1.t
             ; zone : Timezone.Stable.V1.t
             }
-          [@@deriving bin_io]
+          [@@deriving bin_io, stable_witness]
         end
 
         include
@@ -329,6 +204,10 @@ module Ofday = struct
               let to_binable t : Bin_repr.t = { ofday = ofday t; zone = zone t }
               let of_binable (repr : Bin_repr.t) = create repr.ofday repr.zone
             end)
+
+        type nonrec t = t [@@deriving hash]
+
+        let stable_witness : t Stable_witness.t = Bin_repr.stable_witness
 
         type sexp_repr = Time_ns.Stable.Ofday.V1.t * Timezone.Stable.V1.t
         [@@deriving sexp]
@@ -357,9 +236,10 @@ module Ofday = struct
     ;;
 
     let value t ~default =
-      match is_some t with
-      | true -> of_span_since_start_of_day_unchecked (Span.Option.unchecked_value t)
-      | false -> default
+      Bool.select
+        (is_none t)
+        default
+        (of_span_since_start_of_day_unchecked (Span.Option.unchecked_value t))
     ;;
 
     let of_span_since_start_of_day span =
@@ -415,6 +295,7 @@ module Ofday = struct
         module T = struct
           type nonrec t = t [@@deriving compare, bin_io]
 
+          let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
           let sexp_of_t t = [%sexp_of: Time_ns.Stable.Ofday.V1.t option] (to_option t)
           let t_of_sexp s = of_option ([%of_sexp: Time_ns.Stable.Ofday.V1.t option] s)
           let to_int63 t = Span.Option.Stable.V1.to_int63 t
@@ -495,10 +376,11 @@ let to_ofday_zoned t ~zone =
 module Stable0 = struct
   module V1 = struct
     module T0 = struct
-      (* We use the unstable sexp here, and rely on comprehensive tests of the stable
-         conversion to make sure we don't change it. *)
-      type nonrec t = t [@@deriving bin_io, compare, sexp, hash]
+      (* We use the unstable serialization here, and rely on comprehensive tests of the
+         stable conversion to make sure we don't change it. *)
+      type nonrec t = t [@@deriving bin_io, compare, equal, hash, sexp]
 
+      let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
       let of_int63_exn t = of_span_since_epoch (Span.of_int63_ns t)
       let to_int63 t = to_int63_ns_since_epoch t
     end
@@ -510,7 +392,7 @@ module Stable0 = struct
     end
 
     include T
-    include Comparable.Stable.V1.Make (T)
+    include Comparable.Stable.V1.With_stable_witness.Make (T)
   end
 end
 
@@ -555,6 +437,7 @@ module Option = struct
       module T = struct
         type nonrec t = t [@@deriving compare, bin_io]
 
+        let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
         let sexp_of_t t = [%sexp_of: Stable0.V1.t option] (to_option t)
         let t_of_sexp s = of_option ([%of_sexp: Stable0.V1.t option] s)
         let to_int63 t = Span.Option.Stable.V1.to_int63 t
@@ -617,6 +500,7 @@ module Stable = struct
     module Option = Ofday.Option.Stable
   end
 
+  module Zone = Timezone.Stable
   include Stable0
   module Alternate_sexp = Core.Time_ns.Stable.Alternate_sexp
 end

@@ -2,6 +2,7 @@ open Core
 open Deferred_std
 module Deferred = Deferred1
 module List = Deferred_list
+module Throttled_map = Map.Make_applicative_traversals (Throttled)
 
 type ('a, 'b, 'c) t = ('a, 'b, 'c) Map.t
 
@@ -15,9 +16,9 @@ let update t k ~f =
   Map.set t ~key:k ~data
 ;;
 
-let iter_keys ?how t ~f = List.iter ?how (Map.keys t) ~f
-let iter ?how t ~f = List.iter ?how (Map.data t) ~f
-let iteri ?how t ~f = List.iter ?how (Map.to_alist t) ~f:(fun (key, data) -> f ~key ~data)
+let iter_keys ~how t ~f = List.iter ~how (Map.keys t) ~f
+let iter ~how t ~f = List.iter ~how (Map.data t) ~f
+let iteri ~how t ~f = List.iter ~how (Map.to_alist t) ~f:(fun (key, data) -> f ~key ~data)
 
 let fold t ~init ~f =
   let alist_in_increasing_key_order =
@@ -69,10 +70,20 @@ let filter_mapi_sequential t ~f =
              (Base.Map.Using_comparator.Tree.Build_increasing.to_tree x))))
 ;;
 
-let filter_mapi ?(how = `Sequential) t ~f =
+let filter_mapi_max_concurrent t ~f ~max_concurrent_jobs =
+  let computation =
+    Throttled_map.filter_mapi t ~f:(fun ~key ~data ->
+      Throttled.job (fun () -> f ~key ~data))
+  in
+  Throttled.run computation ~max_concurrent_jobs
+;;
+
+let filter_mapi ~how t ~f =
   match how with
   | `Sequential -> filter_mapi_sequential t ~f
-  | `Parallel | `Max_concurrent_jobs _ ->
+  | `Max_concurrent_jobs max_concurrent_jobs ->
+    filter_mapi_max_concurrent t ~f ~max_concurrent_jobs
+  | `Parallel ->
     let jobs = ref [] in
     let job_map =
       Map.mapi t ~f:(fun ~key ~data ->
@@ -89,39 +100,50 @@ let filter_mapi ?(how = `Sequential) t ~f =
     Map.filter_map job_map ~f:Job.result
 ;;
 
-let filter_map ?how t ~f = filter_mapi ?how t ~f:(fun ~key:_ ~data -> f data)
+let filter_map ~how t ~f = filter_mapi ~how t ~f:(fun ~key:_ ~data -> f data)
 
-let filter_keys ?how t ~f =
-  filter_mapi ?how t ~f:(fun ~key ~data ->
+let filter_keys ~how t ~f =
+  filter_mapi ~how t ~f:(fun ~key ~data ->
     let%map b = f key in
     if b then Some data else None)
 ;;
 
-let filter ?how t ~f =
-  filter_mapi ?how t ~f:(fun ~key:_ ~data ->
+let filter ~how t ~f =
+  filter_mapi ~how t ~f:(fun ~key:_ ~data ->
     let%map b = f data in
     if b then Some data else None)
 ;;
 
-let filteri ?how t ~f =
-  filter_mapi ?how t ~f:(fun ~key ~data ->
+let filteri ~how t ~f =
+  filter_mapi ~how t ~f:(fun ~key ~data ->
     let%map b = f ~key ~data in
     if b then Some data else None)
 ;;
 
-let mapi ?how t ~f =
-  filter_mapi ?how t ~f:(fun ~key ~data ->
-    let%map z = f ~key ~data in
-    Some z)
+let mapi_max_concurrent t ~f ~max_concurrent_jobs =
+  let computation =
+    Throttled_map.mapi t ~f:(fun ~key ~data -> Throttled.job (fun () -> f ~key ~data))
+  in
+  Throttled.run computation ~max_concurrent_jobs
 ;;
 
-let map ?how t ~f = mapi ?how t ~f:(fun ~key:_ ~data -> f data)
+let mapi ~how t ~f =
+  match how with
+  | `Sequential | `Parallel ->
+    filter_mapi ~how t ~f:(fun ~key ~data ->
+      let%map z = f ~key ~data in
+      Some z)
+  | `Max_concurrent_jobs max_concurrent_jobs ->
+    mapi_max_concurrent t ~f ~max_concurrent_jobs
+;;
 
-let merge ?how t1 t2 ~f =
+let map ~how t ~f = mapi ~how t ~f:(fun ~key:_ ~data -> f data)
+
+let merge ~how t1 t2 ~f =
   filter_map
-    ?how
+    ~how
     (Map.merge t1 t2 ~f:(fun ~key z -> Some (fun () -> f ~key z)))
     ~f:(fun thunk -> thunk ())
 ;;
 
-let all t = map t ~f:Fn.id
+let all t = map t ~f:Fn.id ~how:`Sequential

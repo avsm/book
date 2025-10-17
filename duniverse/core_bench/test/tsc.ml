@@ -5,7 +5,7 @@ let calibrator = force Time_stamp_counter.calibrator
 
 let command =
   Bench.make_command
-    [ Bench.Test.create ~name:"Time.now" (fun () -> ignore (Time.now ()))
+    [ Bench.Test.create ~name:"Time.now" (fun () -> ignore (Time_float.now ()))
     ; Bench.Test.create ~name:"Calibrator.calibrate" (fun () ->
         ignore (Time_stamp_counter.Calibrator.calibrate calibrator))
     ; Bench.Test.create_group
@@ -20,8 +20,7 @@ let command =
            Bench.Test.create ~name:"TSC.to_nanos_since_epoch" (fun () ->
              ignore (Time_stamp_counter.to_time_ns c ~calibrator)))
         ; Bench.Test.create ~name:"TSC.to_nanos_since_epoch(TSC.now ())" (fun () ->
-            ignore
-              (Time_stamp_counter.to_time_ns (Time_stamp_counter.now ()) ~calibrator))
+            ignore (Time_stamp_counter.to_time_ns (Time_stamp_counter.now ()) ~calibrator))
         ]
     ]
 ;;

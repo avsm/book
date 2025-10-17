@@ -1,42 +1,46 @@
-open Utils
 open Core
-
-open Sexplib.Std
 
 let src = Logs.Src.create "tls.config" ~doc:"TLS config"
 module Log = (val Logs.src_log src : Logs.LOG)
 
-type certchain = Cert.t list * Priv.t [@@deriving sexp_of]
+type certchain = X509.Certificate.t list * X509.Private_key.t
 
 type own_cert = [
   | `None
   | `Single of certchain
   | `Multiple of certchain list
   | `Multiple_default of certchain * certchain list
-] [@@deriving sexp_of]
+]
+
+let pp_cert ppf cs =
+  let from, until = X509.Certificate.validity cs in
+  Fmt.pf ppf "subject %a@ issuer %a@ valid from %a until %a"
+    X509.Distinguished_name.pp (X509.Certificate.subject cs)
+    X509.Distinguished_name.pp (X509.Certificate.issuer cs)
+    (Ptime.pp_human ~tz_offset_s:0 ()) from
+    (Ptime.pp_human ~tz_offset_s:0 ()) until
+
+let pp_certchain ppf (chain, _) =
+  Fmt.(list ~sep:(any "@.") pp_cert) ppf chain
+
+let pp_own_cert ppf = function
+  | `None -> Fmt.string ppf "NONE"
+  | `Single chain -> pp_certchain ppf chain
+  | `Multiple cs ->
+    Fmt.pf ppf "multiple: %a" Fmt.(list ~sep:(any "@.@.") pp_certchain) cs
+  | `Multiple_default (c, cs) ->
+    Fmt.pf ppf "multiple default:@.%a@.others:@.%a"
+      pp_certchain c
+      Fmt.(list ~sep:(any "@.@.") pp_certchain) cs
 
 type session_cache = SessionID.t -> epoch_data option
-let sexp_of_session_cache _ = Sexplib.Sexp.Atom "SESSION_CACHE"
-
-module Auth = struct
-  type t = X509.Authenticator.t
-  let sexp_of_t _ = Sexplib.Sexp.Atom "Authenticator"
-end
-
-module DN = struct
-  type t = X509.Distinguished_name.t
-  let sexp_of_t _ = Sexplib.Sexp.Atom "distinguished name"
-end
 
 type ticket_cache = {
-  lookup : Cstruct.t -> (psk13 * epoch_data) option ;
+  lookup : string -> (psk13 * epoch_data) option ;
   ticket_granted : psk13 -> epoch_data -> unit ;
   lifetime : int32 ;
   timestamp : unit -> Ptime.t
 }
-
-type ticket_cache_opt = ticket_cache option
-let sexp_of_ticket_cache_opt _ = Sexplib.Sexp.Atom "TICKET_CACHE"
 
 (* TODO: min_rsa, min_dh *)
 type config = {
@@ -44,19 +48,44 @@ type config = {
   protocol_versions : tls_version * tls_version ;
   signature_algorithms : signature_algorithm list ;
   use_reneg : bool ;
-  authenticator : Auth.t option ;
-  peer_name : Peer_name.t option ;
+  authenticator : X509.Authenticator.t option ;
+  peer_name : [`host] Domain_name.t option ;
   own_certificates : own_cert ;
-  acceptable_cas : DN.t list ;
+  acceptable_cas : X509.Distinguished_name.t list ;
   session_cache : session_cache ;
-  ticket_cache : ticket_cache_opt ;
+  ticket_cache : ticket_cache option ;
   cached_session : epoch_data option ;
   cached_ticket : (psk13 * epoch_data) option ;
   alpn_protocols : string list ;
   groups : group list ;
   zero_rtt : int32 ;
-  ip : Ipaddr_sexp.t option ;
-} [@@deriving sexp_of]
+  ip : Ipaddr.t option ;
+}
+
+let pp_config ppf cfg =
+  Fmt.pf ppf
+    "ciphers: %a@. \
+     minimal protocol version: %a@. \
+     maximum protocol version: %a@. \
+     signature algorithms: %a@. \
+     renegotiation enabled %B@. \
+     peer name: %a@. \
+     own certificate: %a@. \
+     acceptable CAs: %a@. \
+     alpn protocols: %a@. \
+     groups: %a@. \
+     IP: %a@."
+    Fmt.(list ~sep:(any ", ") Ciphersuite.pp_ciphersuite) cfg.ciphers
+    pp_tls_version (fst cfg.protocol_versions)
+    pp_tls_version (snd cfg.protocol_versions)
+    Fmt.(list ~sep:(any ", ") pp_signature_algorithm) cfg.signature_algorithms
+    cfg.use_reneg
+    Fmt.(option ~none:(any "none provided") Domain_name.pp) cfg.peer_name
+    pp_own_cert cfg.own_certificates
+    Fmt.(list ~sep:(any ", ") X509.Distinguished_name.pp) cfg.acceptable_cas
+    Fmt.(list ~sep:(any ", ") string) cfg.alpn_protocols
+    Fmt.(list ~sep:(any ", ") pp_group) cfg.groups
+    Fmt.(option ~none:(any "none provided") Ipaddr.pp) cfg.ip
 
 let ciphers13 cfg =
   List.rev
@@ -218,185 +247,198 @@ let default_config = {
    and client request.
 *)
 
-
-let invalid msg = invalid_arg ("Tls.Config: invalid configuration: " ^ msg)
-
 let ciphers_and_groups ?ciphers ?groups default_ciphers =
   let tls13 = function #Ciphersuite.ciphersuite13 -> true | _ -> false in
   match ciphers, groups with
-  | None, None -> default_ciphers, supported_groups
+  | None, None -> Ok (default_ciphers, supported_groups)
   | Some cs, None ->
-    cs,
-    let has_kex x = function
-      | #Ciphersuite.ciphersuite13 -> true
-      | c -> x = Ciphersuite.ciphersuite_kex c
-    in
-    begin
-      match List.exists (has_kex `ECDHE) cs, List.exists (has_kex `FFDHE) cs with
-      | true, true -> supported_groups
-      | true, false ->
-        Log.warn (fun m -> m "removed FFDHE groups (no FFDHE ciphersuite) from configuation");
-        List.filter elliptic_curve supported_groups
-      | false, true ->
-        Log.warn (fun m -> m "removed ECDHE groups (no ECDHE ciphersuite) from configuration");
-        List.filter (fun g -> not (elliptic_curve g)) supported_groups
-      | false, false -> []
-    end
+    Ok (cs,
+        let has_kex x = function
+          | #Ciphersuite.ciphersuite13 -> true
+          | c -> x = Ciphersuite.ciphersuite_kex c
+        in
+        begin
+          match List.exists (has_kex `ECDHE) cs, List.exists (has_kex `FFDHE) cs with
+          | true, true -> supported_groups
+          | true, false ->
+            Log.warn (fun m -> m "removed FFDHE groups (no FFDHE ciphersuite) from configuation");
+            List.filter elliptic_curve supported_groups
+          | false, true ->
+            Log.warn (fun m -> m "removed ECDHE groups (no ECDHE ciphersuite) from configuration");
+            List.filter (fun g -> not (elliptic_curve g)) supported_groups
+          | false, false -> []
+        end)
   | None, Some g ->
-    begin match List.partition elliptic_curve g with
-      | [], [] ->
-        Log.warn (fun m -> m "removed DHE and ECDHE ciphersuites (empty groups provided) from configuration");
-        List.filter (fun c -> not (Ciphersuite.ciphersuite_fs c)) default_ciphers
-      | _::_, [] ->
-        Log.warn (fun m -> m "removed DHE ciphersuites (no FFDHE groups provided) from configuration");
-        List.filter (fun c -> not (Ciphersuite.dhe_only c)) default_ciphers
-      | [], _ :: _ ->
-        Log.warn (fun m -> m "removed ECDHE ciphersuites (no EC groups provided) from configuration");
-        List.filter (fun c -> not (Ciphersuite.ecdhe_only c)) default_ciphers
-      | _ -> default_ciphers
-    end, g
+    Ok (begin match List.partition elliptic_curve g with
+        | [], [] ->
+          Log.warn (fun m -> m "removed DHE and ECDHE ciphersuites (empty groups provided) from configuration");
+          List.filter (fun c -> not (Ciphersuite.ciphersuite_fs c)) default_ciphers
+        | _::_, [] ->
+          Log.warn (fun m -> m "removed DHE ciphersuites (no FFDHE groups provided) from configuration");
+          List.filter (fun c -> not (Ciphersuite.dhe_only c)) default_ciphers
+        | [], _ :: _ ->
+          Log.warn (fun m -> m "removed ECDHE ciphersuites (no EC groups provided) from configuration");
+          List.filter (fun c -> not (Ciphersuite.ecdhe_only c)) default_ciphers
+        | _ -> default_ciphers
+      end, g)
   | Some cs, Some g ->
     if List.exists Ciphersuite.ecdhe_only cs && not (List.exists elliptic_curve g) then
-      invalid "ciphersuite with ECDHE provided, but no EC group";
-    if List.exists Ciphersuite.dhe_only cs && not (List.exists (fun g -> not (elliptic_curve g)) g) then
-      invalid "ciphersuite with FFDHE provided, but no FF group";
-    if List.exists Ciphersuite.ciphersuite_fs cs && g = [] then
-      invalid "ciphersuite with forward security provided, but no group";
-    if List.exists elliptic_curve g && not (List.exists Ciphersuite.ecdhe cs) then
-      invalid "EC group provided, but no ciphersuite with ECDHE";
-    if List.exists (fun g -> not (elliptic_curve g)) g &&
+      Error (`Msg "ciphersuite with ECDHE provided, but no EC group")
+    else if List.exists Ciphersuite.dhe_only cs && not (List.exists (fun g -> not (elliptic_curve g)) g) then
+      Error (`Msg "ciphersuite with FFDHE provided, but no FF group")
+    else if List.exists Ciphersuite.ciphersuite_fs cs && g = [] then
+      Error (`Msg "ciphersuite with forward security provided, but no group")
+    else if List.exists elliptic_curve g && not (List.exists Ciphersuite.ecdhe cs) then
+      Error (`Msg "EC group provided, but no ciphersuite with ECDHE")
+    else if List.exists (fun g -> not (elliptic_curve g)) g &&
        not (List.exists (fun c -> Ciphersuite.dhe_only c || tls13 c) cs)
     then
-      invalid "FF group provided, but no ciphersuite with DHE";
-    cs, g
+      Error (`Msg "FF group provided, but no ciphersuite with DHE")
+    else
+      Ok (cs, g)
 
 let ciphers_and_sig_alg ?ciphers ?signature_algorithms default_ciphers =
   let tls13 = function #Ciphersuite.ciphersuite13 -> true | _ -> false in
   let default_sa_from_ciphers c =
     let has_key k c = tls13 c || k = Ciphersuite.ciphersuite_keytype c in
     match List.exists (has_key `RSA) c, List.exists (has_key `EC) c with
-    | true, true -> supported_signature_algorithms
+    | true, true -> Ok supported_signature_algorithms
     | true, false ->
       Log.warn (fun m -> m "removed EC signature algorithms (no EC ciphersuite present)");
-      List.filter rsa_sigalg supported_signature_algorithms
+      Ok (List.filter rsa_sigalg supported_signature_algorithms)
     | false, true ->
       Log.warn (fun m -> m "removed RSA signature algorithms (no RSA ciphersuite present)");
-      List.filter (fun sa -> not (rsa_sigalg sa)) supported_signature_algorithms
+      Ok (List.filter (fun sa -> not (rsa_sigalg sa)) supported_signature_algorithms)
     | false, false ->
-      invalid "ciphersuite list without RSA and EC keys"
+      Error (`Msg "ciphersuite list without RSA and EC keys")
   in
+  let ( let* ) = Result.bind in
   match ciphers, signature_algorithms with
-  | None, None -> default_ciphers, default_sa_from_ciphers default_ciphers
-  | Some c, None -> c, default_sa_from_ciphers c
+  | None, None ->
+    let* sig_algs = default_sa_from_ciphers default_ciphers in
+    Ok (default_ciphers, sig_algs)
+  | Some c, None ->
+    let* sig_algs = default_sa_from_ciphers c in
+    Ok (c, sig_algs)
   | None, Some sa ->
     begin match List.partition rsa_sigalg sa with
-      | [], [] -> invalid "empty signature algorithms provided"
+      | [], [] -> Error (`Msg "empty signature algorithms provided")
       | _::_, [] ->
         Log.warn (fun m -> m "removing EC ciphers (no EC signature algorithm provided)");
-        List.filter
-          (fun c -> tls13 c || not (Ciphersuite.ciphersuite_keytype c = `EC))
-          default_ciphers,
-        sa
+        Ok (List.filter
+              (fun c -> tls13 c || not (Ciphersuite.ciphersuite_keytype c = `EC))
+              default_ciphers,
+            sa)
       | [], _::_ ->
         Log.warn (fun m -> m "removing RSA ciphers (no RSA signature algorithm provided)");
-        List.filter
-          (fun c -> tls13 c || not (Ciphersuite.ciphersuite_keytype c = `RSA))
-          default_ciphers,
-        sa
-      | _::_, _::_ -> default_ciphers, sa
+        Ok (List.filter
+              (fun c -> tls13 c || not (Ciphersuite.ciphersuite_keytype c = `RSA))
+              default_ciphers,
+            sa)
+      | _::_, _::_ -> Ok (default_ciphers, sa)
     end
   | Some c, Some sa ->
     if List.exists rsa_sigalg sa && not (List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `RSA) c) then
-      invalid "RSA signature algorithm, but no ciphersuites with RSA keys";
-    if List.exists (fun s -> not (rsa_sigalg s)) sa && not (List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `EC) c) then
-      invalid "EC signature algorithm, but no ciphersuites with EC keys";
-    if List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `RSA) c && not (List.exists rsa_sigalg sa) then
-      invalid "RSA ciphersuite, but no RSA signature algorithm";
-    if List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `EC) c && not (List.exists (fun s -> not (rsa_sigalg s)) sa) then
-      invalid "EC ciphersuite, but no EC signature algorithm";
-    c, sa
+      Error (`Msg "RSA signature algorithm, but no ciphersuites with RSA keys")
+    else if List.exists (fun s -> not (rsa_sigalg s)) sa && not (List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `EC) c) then
+      Error (`Msg "EC signature algorithm, but no ciphersuites with EC keys")
+    else if List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `RSA) c && not (List.exists rsa_sigalg sa) then
+      Error (`Msg "RSA ciphersuite, but no RSA signature algorithm")
+    else if List.exists (fun c -> Ciphersuite.ciphersuite_keytype c = `EC) c && not (List.exists (fun s -> not (rsa_sigalg s)) sa) then
+      Error (`Msg "EC ciphersuite, but no EC signature algorithm")
+    else
+      Ok (c, sa)
 
 let validate_common config =
+  let ( let* ) = Result.bind in
   let (v_min, v_max) = config.protocol_versions in
-  if v_max < v_min then invalid "bad version range" ;
-  let ciphers, signature_algorithms =
-    match v_min, v_max with
-    | _, `TLS_1_1 | _, `TLS_1_0 ->
-      Log.warn (fun m -> m "TLS 1.0 or TLS 1.1 as maximum version configured, removing 1.2 and 1.3 ciphersuites");
-      List.filter (fun c ->
-          not (Ciphersuite.ciphersuite_tls12_only c || Ciphersuite.ciphersuite_tls13 c))
-        config.ciphers,
-      []
-    | _, `TLS_1_2 ->
-      if config.signature_algorithms = [] then
-        invalid "TLS 1.2 configured but no signature algorithms provided"
-      else begin
-        Log.warn (fun m -> m "TLS 1.2 as maximum version configured, removing 1.3 cipher suites");
-        List.filter
-          (fun c -> not (Ciphersuite.ciphersuite_tls13 c)) config.ciphers,
-        config.signature_algorithms
+  if v_max < v_min then
+    Error (`Msg "bad version range")
+  else
+    let* ciphers, signature_algorithms =
+      match v_min, v_max with
+      | _, `TLS_1_1 | _, `TLS_1_0 ->
+        Log.warn (fun m -> m "TLS 1.0 or TLS 1.1 as maximum version configured, removing 1.2 and 1.3 ciphersuites");
+        Ok (List.filter (fun c ->
+            not (Ciphersuite.ciphersuite_tls12_only c || Ciphersuite.ciphersuite_tls13 c))
+            config.ciphers,
+            [])
+      | _, `TLS_1_2 ->
+        if config.signature_algorithms = [] then
+          Error (`Msg "TLS 1.2 configured but no signature algorithms provided")
+        else begin
+          Log.warn (fun m -> m "TLS 1.2 as maximum version configured, removing 1.3 cipher suites");
+          Ok (List.filter
+                (fun c -> not (Ciphersuite.ciphersuite_tls13 c)) config.ciphers,
+              config.signature_algorithms)
       end
     | `TLS_1_3, `TLS_1_3 ->
       let sa = List.filter tls13_sigalg config.signature_algorithms in
       if sa = [] then
-        invalid "TLS 1.3 configured but no 1.3 signature algorithms provided"
+        Error (`Msg "TLS 1.3 configured but no 1.3 signature algorithms provided")
       else begin
         Log.warn (fun m -> m "only TLS 1.3 configured, removing pre-1.3 cipher suites and signature algorithms");
-        List.filter Ciphersuite.ciphersuite_tls13 config.ciphers, sa
+        Ok (List.filter Ciphersuite.ciphersuite_tls13 config.ciphers, sa)
       end
-    | _ -> config.ciphers, config.signature_algorithms
+    | _ -> Ok (config.ciphers, config.signature_algorithms)
   in
-  if not (List_set.is_proper_set ciphers) then
-    invalid "set of ciphers is not a proper set" ;
-  if List.length ciphers = 0 then
-    invalid "set of ciphers is empty" ;
-  if not (List_set.is_proper_set config.groups) then
-    invalid "set of groups is not a proper set" ;
-  if not (List_set.is_proper_set signature_algorithms) then
-    invalid "set of signature algorithms is not a proper set" ;
-  if List.exists (fun proto -> let len = String.length proto in len = 0 || len > 255) config.alpn_protocols then
-    invalid "invalid alpn protocol" ;
-  if List.length config.alpn_protocols > 0xffff then
-    invalid "alpn protocols list too large" ;
-  { config with ciphers ; signature_algorithms }
+  if not (Utils.List_set.is_proper_set ciphers) then
+    Error (`Msg "set of ciphers is not a proper set")
+  else if List.length ciphers = 0 then
+    Error (`Msg "set of ciphers is empty")
+  else if not (Utils.List_set.is_proper_set config.groups) then
+    Error (`Msg "set of groups is not a proper set")
+  else if not (Utils.List_set.is_proper_set signature_algorithms) then
+    Error (`Msg "set of signature algorithms is not a proper set")
+  else if List.exists (fun proto -> let len = String.length proto in len = 0 || len > 255) config.alpn_protocols then
+    Error (`Msg "invalid alpn protocol")
+  else if List.length config.alpn_protocols > 0xffff then
+    Error (`Msg "alpn protocols list too large")
+  else
+    Ok { config with ciphers ; signature_algorithms }
 
 let validate_certificate_chain = function
   | (s::chain, priv) ->
+    let ( let* ) = Result.bind in
     let pub = X509.Private_key.public priv in
-    ( match pub with
-      | `RSA pub ->
-        if Mirage_crypto_pk.Rsa.pub_bits pub < min_rsa_key_size then
-          invalid "RSA key too short!"
-      | _ -> () );
-    ( let eq_pub a b =
-        Cstruct.equal
-          (X509.Public_key.fingerprint a)
-          (X509.Public_key.fingerprint b)
+    let* () =
+      match pub with
+      | `RSA pub when Mirage_crypto_pk.Rsa.pub_bits pub < min_rsa_key_size ->
+        Error (`Msg "RSA key too short!")
+      | _ -> Ok ()
+    in
+    let* () =
+      let eq_pub a b =
+        String.equal (X509.Public_key.fingerprint a) (X509.Public_key.fingerprint b)
       in
       if not (eq_pub pub (X509.Certificate.public_key s)) then
-          invalid "public / private key combination" ) ;
-     ( match init_and_last chain with
-       | Some (ch, trust) ->
-         (* TODO: verify that certificates are x509 v3 if TLS_1_2 *)
-         ( match X509.Validation.verify_chain_of_trust ~time:(fun () -> None) ~host:None ~anchors:[trust] (s :: ch) with
-           | Ok _   -> ()
-           | Error x ->
-             let s = Fmt.to_to_string X509.Validation.pp_validation_error x in
-             invalid ("certificate chain does not validate: " ^ s))
-       | None -> () )
-  | _ -> invalid "certificate chain"
+        Error (`Msg "public / private key combination" )
+      else
+        Ok ()
+    in
+    ( match Utils.init_and_last chain with
+      | Some (ch, trust) ->
+        (* TODO: verify that certificates are x509 v3 if TLS_1_2 *)
+        ( match X509.Validation.verify_chain_of_trust ~time:(fun () -> None) ~host:None ~anchors:[trust] (s :: ch) with
+          | Ok _   -> Ok ()
+          | Error x ->
+            let s = Fmt.to_to_string X509.Validation.pp_validation_error x in
+            Error (`Msg ("certificate chain does not validate: " ^ s)))
+      | None -> Ok () )
+  | _ -> Error (`Msg "certificate chain")
 
 let validate_client config =
   match config.own_certificates with
-  | `None -> ()
+  | `None -> Ok ()
   | `Single c -> validate_certificate_chain c
-  | _ -> invalid_arg "multiple client certificates not supported in client config"
+  | _ -> Error (`Msg "multiple client certificates not supported in client config")
 
 let non_overlapping cs =
   let namessets =
-    filter_map cs ~f:(function
+    List.filter_map (function
         | (s :: _, _) -> Some s
         | _           -> None)
+      cs
     |> List.map X509.Certificate.hostnames
   in
   let rec check = function
@@ -423,29 +465,44 @@ module PK = Map.Make (struct
   end)
 
 let validate_server config =
+  let ( let* ) = Result.bind in
   let open Ciphersuite in
   let usages =
     List.fold_left
       (fun acc c -> KU.add (required_usage (ciphersuite_kex c)) acc)
       KU.empty config.ciphers
-  and certificate_chains =
+  in
+  let* certificate_chains =
     match config.own_certificates with
-    | `Single c                 -> [c]
-    | `Multiple cs              -> cs
-    | `Multiple_default (c, cs) -> c :: cs
-    | `None                     -> invalid "no server certificate provided"
+    | `Single c                 -> Ok [c]
+    | `Multiple cs              -> Ok cs
+    | `Multiple_default (c, cs) -> Ok (c :: cs)
+    | `None                     -> Error (`Msg "no server certificate provided")
   in
-  let server_certs =
-    List.map (function (s::_,_) -> s | _ -> invalid "empty certificate chain")
-      certificate_chains
+  let* server_certs =
+    List.fold_left (fun acc cc ->
+        let* acc = acc in
+        match cc with
+        | (s::_,_) -> Ok (s :: acc)
+        | _ -> Error (`Msg "empty certificate chain"))
+      (Ok []) certificate_chains
   in
-  if not
-      (KU.for_all (fun u ->
-           List.exists (supports_key_usage ~not_present:true u) server_certs)
-          usages)
-  then
-    invalid "certificate usage does not match" ;
-  List.iter validate_certificate_chain certificate_chains ;
+  let* () =
+    if not
+        (KU.for_all (fun u ->
+             List.exists (supports_key_usage ~not_present:true u) server_certs)
+            usages)
+    then
+      Error (`Msg "certificate usage does not match")
+    else
+      Ok ()
+  in
+  let* () =
+    List.fold_left (fun acc cc ->
+        let* () = acc in
+        validate_certificate_chain cc)
+      (Ok ()) certificate_chains
+  in
   let rsa_cert, ec_cert =
     let is_ec_cert c = match X509.Certificate.public_key c with
       | `ED25519 _ | `P256 _ | `P384 _ | `P521 _ -> true
@@ -479,42 +536,45 @@ let validate_server config =
             | `ED25519 _ -> add `ED25519 cs acc
             | `P256 _ -> add `P256 cs acc
             | `P384 _ -> add `P384 cs acc
-            | `P521 _ -> add `P521 cs acc
-            | _ -> invalid "unknown key type")
+            | `P521 _ -> add `P521 cs acc)
           PK.empty cs
       in
       PK.iter (fun _ chains -> non_overlapping chains) pk
     | _ -> () );
-  { config with ciphers }
+  Ok { config with ciphers }
 
 let validate_keys_sig_algs config =
+  let ( let* ) = Result.bind in
   let _, v_max = config.protocol_versions in
   if v_max = `TLS_1_2 || v_max = `TLS_1_3 then
-    let certificate_chains =
+    let* certificate_chains =
       match config.own_certificates with
-      | `Single c                 -> [c]
-      | `Multiple cs              -> cs
-      | `Multiple_default (c, cs) -> c :: cs
-      | `None                     -> invalid "no server certificate provided"
+      | `Single c                 -> Ok [c]
+      | `Multiple cs              -> Ok cs
+      | `Multiple_default (c, cs) -> Ok (c :: cs)
+      | `None                     -> Error (`Msg "no server certificate provided")
     in
-    let server_keys =
-      List.map (function
-          | (s::_,_) -> X509.Certificate.public_key s
-          | _ -> invalid "empty certificate chain")
-        certificate_chains
+    let* server_keys =
+      List.fold_left (fun acc cc ->
+          let* acc = acc in
+          match cc with
+          | (s::_,_) -> Ok (X509.Certificate.public_key s :: acc)
+          | _ -> Error (`Msg "empty certificate chain"))
+        (Ok []) certificate_chains
     in
     if not
         (List.for_all (fun cert ->
              List.exists (pk_matches_sa cert) config.signature_algorithms)
             server_keys)
     then
-      invalid "certificate provided which does not allow any signature algorithm"
+      Error (`Msg "certificate provided which does not allow any signature algorithm")
+    else
+      Ok ()
+  else
+    Ok ()
 
-type client = config [@@deriving sexp_of]
-type server = config [@@deriving sexp_of]
-
-let client_of_sexp _ = invalid_arg "couldn't decode client configuration"
-let server_of_sexp _ = invalid_arg "couldn't decode server configuration"
+type client = config
+type server = config
 
 let of_server conf = conf
 and of_client conf = conf
@@ -530,9 +590,10 @@ let with_acceptable_cas conf acceptable_cas = { conf with acceptable_cas }
 let (<?>) ma b = match ma with None -> b | Some a -> a
 
 let client
-  ~authenticator ?peer_name ?ciphers ?version ?signature_algorithms ?reneg ?certificates ?cached_session ?cached_ticket ?ticket_cache ?alpn_protocols ?groups ?ip () =
-  let ciphers', groups = ciphers_and_groups ?ciphers ?groups default_config.ciphers in
-  let ciphers, signature_algorithms = ciphers_and_sig_alg ?ciphers ?signature_algorithms ciphers' in
+    ~authenticator ?peer_name ?ciphers ?version ?signature_algorithms ?reneg ?certificates ?cached_session ?cached_ticket ?ticket_cache ?alpn_protocols ?groups ?ip () =
+  let ( let* ) = Result.bind in
+  let* ciphers', groups = ciphers_and_groups ?ciphers ?groups default_config.ciphers in
+  let* ciphers, signature_algorithms = ciphers_and_sig_alg ?ciphers ?signature_algorithms ciphers' in
   let config =
     { default_config with
         authenticator = Some authenticator ;
@@ -549,16 +610,16 @@ let client
         groups ;
         ip ;
     } in
-  let config = validate_common config in
-  validate_client config ;
-  Log.debug (fun m -> m "client with %s"
-                (Sexplib.Sexp.to_string_hum (sexp_of_config config)));
-  config
+  let* config = validate_common config in
+  let* () = validate_client config in
+  Log.debug (fun m -> m "client with %a" pp_config config);
+  Ok config
 
 let server
     ?ciphers ?version ?signature_algorithms ?reneg ?certificates ?acceptable_cas ?authenticator ?session_cache ?ticket_cache ?alpn_protocols ?groups ?zero_rtt ?ip () =
-  let ciphers', groups = ciphers_and_groups ?ciphers ?groups default_config.ciphers in
-  let ciphers, signature_algorithms = ciphers_and_sig_alg ?ciphers ?signature_algorithms ciphers' in
+  let ( let* ) = Result.bind in
+  let* ciphers', groups = ciphers_and_groups ?ciphers ?groups default_config.ciphers in
+  let* ciphers, signature_algorithms = ciphers_and_sig_alg ?ciphers ?signature_algorithms ciphers' in
   let config =
     { default_config with
         ciphers ;
@@ -575,9 +636,8 @@ let server
         zero_rtt = zero_rtt <?> default_config.zero_rtt ;
         ip ;
     } in
-  let config = validate_server config in
-  let config = validate_common config in
-  validate_keys_sig_algs config;
-  Log.debug (fun m -> m "server with %s"
-                (Sexplib.Sexp.to_string_hum (sexp_of_config config)));
-  config
+  let* config = validate_server config in
+  let* config = validate_common config in
+  let* () = validate_keys_sig_algs config in
+  Log.debug (fun m -> m "server with %a" pp_config config);
+  Ok config

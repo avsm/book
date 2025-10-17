@@ -127,13 +127,18 @@ let rec get_writer_name
       "Yojson.Safe.write_null"
   | Bool (_, Bool, Bool) ->
       "Yojson.Safe.write_bool"
-  | Int (_, Int o, Int) ->
-      (match o with
-         Int -> "Yojson.Safe.write_int"
-       | Char ->  "Atdgen_runtime.Oj_run.write_int8"
-       | Int32 -> "Atdgen_runtime.Oj_run.write_int32"
-       | Int64 -> "Atdgen_runtime.Oj_run.write_int64"
-       | Float -> "Atdgen_runtime.Oj_run.write_float_as_int"
+  | Int (_, Int o, Int j) ->
+      (match o, j with
+       | Int, Int -> "Yojson.Safe.write_int"
+       | Int, String -> "Atdgen_runtime.Oj_run.write_int_as_string"
+       | Char, Int ->  "Atdgen_runtime.Oj_run.write_int8"
+       | Char, String ->  "Atdgen_runtime.Oj_run.write_int8_as_string"
+       | Int32, Int -> "Atdgen_runtime.Oj_run.write_int32"
+       | Int32, String -> "Atdgen_runtime.Oj_run.write_int32_as_string"
+       | Int64, Int -> "Atdgen_runtime.Oj_run.write_int64"
+       | Int64, String -> "Atdgen_runtime.Oj_run.write_int64_as_string"
+       | Float, Int -> "Atdgen_runtime.Oj_run.write_float_as_int"
+       | Float, String -> "Atdgen_runtime.Oj_run.write_float_as_int_string"
       )
 
   | Float (_, Float, Float j) ->
@@ -196,7 +201,7 @@ let rec get_reader_name
   match x with
     Unit (_, Unit, Unit) -> "Atdgen_runtime.Oj_run.read_null"
   | Bool (_, Bool, Bool) -> "Atdgen_runtime.Oj_run.read_bool"
-  | Int (_, Int o, Int) ->
+  | Int (_, Int o, Int _) ->
       (match o with
          Int -> "Atdgen_runtime.Oj_run.read_int"
        | Char -> "Atdgen_runtime.Oj_run.read_int8"
@@ -287,8 +292,13 @@ let rec make_writer ?type_constraint p (x : Oj_mapping.t) : Indent.t list =
           )
         ]
       in
+      let xval =
+        match type_constraint with
+        | Some x -> sprintf "(x : %s)" x
+        | None -> "x"
+      in
       let standard_writer = [
-        Annot ("fun", Line "fun ob x ->");
+        Annot ("fun", Line (sprintf "fun ob %s ->" xval));
         Block body
       ] in
       let adapter = j.json_sum_adapter in
@@ -427,6 +437,23 @@ and make_variant_writer p ~tick ~open_enum x : Indent.t list =
           Block (make_writer p v);
           Line ") ob x;";
         ];
+      ]
+  | Some (Record (_, a, Record o, Record _)) ->
+      (* We need a special case because inline-records cannot escape their scope. *)
+      let op, sep, cl =
+        if p.std then "[", ",", ']'
+        else "<", ":", '>'
+      in
+      [
+        Line (sprintf "| %s%s x ->" tick ocaml_cons);
+        Block [
+          Line (sprintf "Buffer.add_string ob %S;"
+                  (op ^ make_json_string json_cons ^ sep));
+          Line "begin";
+          Block (make_record_writer p a o);
+          Line "end (* ob x *);";
+          Line (sprintf "Buffer.add_char ob %C" cl);
+        ]
       ]
   | Some v ->
       let op, sep, cl =
@@ -747,7 +774,6 @@ let rec make_reader p type_annot (x : Oj_mapping.t) : Indent.t list =
       let json_options = {
         Json.json_sum_adapter = Json.no_adapter;
         json_open_enum = false;
-        json_lowercase_tags = false;
       } in
       make_reader p
         (Some "_ option")
@@ -824,36 +850,47 @@ and make_case_reader
         ] in
         true, expr
     | Some v ->
+        let read_x, put_x =
+          match v with
+          | Record (loc, a, Record o, Record j) ->
+            (* We need a special case for inline-records: *)
+            let create_record_prefix = sprintf "%s%s" tick ocaml_cons in
+            Inline [
+              Line "let x = (";
+              Block (make_record_reader ~create_record_prefix p type_annot loc a j);
+              Line ") in";
+            ],
+            Line "x"
+          | other ->
+            Inline [
+              Line "let x = (";
+              Block [
+                Block (make_reader p None other);
+                Line ") p lb";
+              ];
+              Line "in";
+            ],
+            Line (Ox_emit.opt_annot
+                    type_annot (sprintf "%s%s x" tick ocaml_cons));
+        in
         let expr =
           if std then
             [
               Line "Yojson.Safe.read_space p lb;";
               Line "Yojson.Safe.read_comma p lb;";
               Line "Yojson.Safe.read_space p lb;";
-              Line "let x = (";
-              Block [
-                Block (make_reader p None v);
-                Line ") p lb";
-              ];
-              Line "in";
+              read_x;
               Line "Yojson.Safe.read_space p lb;";
               Line "Yojson.Safe.read_rbr p lb;";
-              Line (Ox_emit.opt_annot
-                      type_annot (sprintf "%s%s x" tick ocaml_cons));
+              put_x;
             ]
           else
             [
               Line "Atdgen_runtime.Oj_run.read_until_field_value p lb;";
-              Line "let x = (";
-              Block [
-                Block (make_reader p None v);
-                Line ") p lb";
-              ];
-              Line "in";
+              read_x;
               Line "Yojson.Safe.read_space p lb;";
               Line "Yojson.Safe.read_gt p lb;";
-              Line (Ox_emit.opt_annot
-                      type_annot (sprintf "%s%s x" tick ocaml_cons));
+              put_x;
             ]
         in
         false, expr
@@ -900,7 +937,7 @@ and make_cases_reader p type_annot ~tick ~open_enum ~std ~fallback_expr l =
   in
   all_cases @ catch_all
 
-and make_record_reader p type_annot loc a json_options =
+and make_record_reader ?(create_record_prefix = "") p type_annot loc a json_options =
   let keep_nulls = json_options.json_keep_nulls in
   let fields = Ox_emit.get_fields p.deref a in
   let init_fields, create_record =
@@ -1005,7 +1042,7 @@ and make_record_reader p type_annot loc a json_options =
     Line "with Yojson.End_of_object -> (";
     Block [
       Block [
-        Line "(";
+        Line (sprintf "(%s" create_record_prefix);
         Block create_record;
         Line (sprintf "%s)" (Ox_emit.insert_annot type_annot));
       ];
@@ -1355,7 +1392,7 @@ let make_ocaml_files
   let m1 = tsort m0 in
   let defs1 = Oj_mapping.defs_of_atd_modules m1 ~target in
   let (m1', original_types) =
-    Atd.Expand.expand_module_body ~keep_poly:true m0
+    Atd.Expand.expand_module_body ~keep_builtins:false ~keep_poly:true m0
   in
   let m2 = tsort m1' in
   (* m0 = original type definitions

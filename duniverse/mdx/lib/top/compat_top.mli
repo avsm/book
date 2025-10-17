@@ -59,3 +59,16 @@ val ctype_is_equal :
 
 val ctype_expand_head_and_get_desc : Env.t -> Types.type_expr -> Types.type_desc
 val ctype_get_desc : Types.type_expr -> Types.type_desc
+
+exception Exit_with_status of int
+
+val execute_phrase :
+  bool -> Format.formatter -> Parsetree.toplevel_phrase -> bool
+
+(* If the directive has to be intercepted, this function will return the new name of the directive *)
+val redirect_directive : string -> string
+val get_id_in_path : Path.t -> Ident.t
+val get_id_opt : Path.t -> Ident.t option
+
+val mk_fun : Location.t -> Parsetree.expression -> Parsetree.expression
+(** [mk_fun loc e] produces [fun () -> e]. *)

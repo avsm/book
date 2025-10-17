@@ -16,6 +16,7 @@ let ( >>|~ ) = Result.( >>| )
 
 module Rpc_common = struct
   let dispatch_raw'
+        ?metadata
         conn
         ~tag
         ~version
@@ -24,16 +25,17 @@ module Rpc_common = struct
         ~query_id
         ~response_handler
     =
-    let query = { P.Query.tag; version; id = query_id; data = query } in
+    let query = { P.Query.tag; version; id = query_id; metadata; data = query } in
     match Connection.dispatch conn ~response_handler ~bin_writer_query ~query with
     | Ok () -> Ok ()
     | Error `Closed -> Error Rpc_error.Connection_closed
   ;;
 
-  let dispatch_raw conn ~tag ~version ~bin_writer_query ~query ~query_id ~f =
+  let dispatch_raw ?metadata conn ~tag ~version ~bin_writer_query ~query ~query_id ~f =
     let response_ivar = Ivar.create () in
     (match
        dispatch_raw'
+         ?metadata
          conn
          ~tag
          ~version
@@ -47,13 +49,6 @@ module Rpc_common = struct
     Ivar.read response_ivar
   ;;
 end
-
-let shapes lst =
-  Sexp.List
-    (List.map lst ~f:(fun (name, shape) ->
-       [%message
-         "" ~_:(name : string) ~_:(Bin_prot.Shape.eval_to_digest_string shape : string)]))
-;;
 
 module Rpc = struct
   type ('query, 'response) t =
@@ -88,12 +83,28 @@ module Rpc = struct
   let response_type_id t = t.response_type_id
   let bin_query t = t.bin_query
   let bin_response t = t.bin_response
-  let shapes t = shapes [ "query", t.bin_query.shape; "response", t.bin_response.shape ]
+
+  let shapes t =
+    Rpc_shapes.Rpc { query = t.bin_query.shape; response = t.bin_response.shape }
+  ;;
+
+  let blocking_no_authorization f state query =
+    Or_not_authorized.Authorized (f state query)
+  ;;
+
+  let deferred_no_authorization f state query =
+    Eager_deferred.map (f state query) ~f:(fun a -> Or_not_authorized.Authorized a)
+  ;;
 
   let implement ?(on_exception = On_exception.continue) t f =
     { Implementation.tag = t.tag
     ; version = t.version
-    ; f = Rpc (t.bin_query.reader, t.bin_response.writer, f, Deferred)
+    ; f =
+        Rpc
+          ( t.bin_query.reader
+          , t.bin_response.writer
+          , deferred_no_authorization f
+          , Deferred )
     ; shapes = lazy (shapes t)
     ; on_exception
     }
@@ -102,13 +113,18 @@ module Rpc = struct
   let implement' ?(on_exception = On_exception.continue) t f =
     { Implementation.tag = t.tag
     ; version = t.version
-    ; f = Rpc (t.bin_query.reader, t.bin_response.writer, f, Blocking)
+    ; f =
+        Rpc
+          ( t.bin_query.reader
+          , t.bin_response.writer
+          , blocking_no_authorization f
+          , Blocking )
     ; shapes = lazy (shapes t)
     ; on_exception
     }
   ;;
 
-  let dispatch' t conn query =
+  let dispatch' ?metadata t conn query =
     let response_handler
           ivar
           (response : _ P.Response.t)
@@ -130,6 +146,7 @@ module Rpc = struct
     in
     let query_id = P.Query_id.create () in
     Rpc_common.dispatch_raw
+      ?metadata
       conn
       ~tag:t.tag
       ~version:t.version
@@ -147,12 +164,14 @@ module Rpc = struct
       ~connection_close_started:(Connection.close_reason ~on_close:`started conn)
   ;;
 
-  let dispatch t conn query =
-    let%map result = dispatch' t conn query in
+  let dispatch ?metadata t conn query =
+    let%map result = dispatch' ?metadata t conn query in
     rpc_result_to_or_error t conn result
   ;;
 
-  let dispatch_exn t conn query = dispatch t conn query >>| Or_error.ok_exn
+  let dispatch_exn ?metadata t conn query =
+    dispatch ?metadata t conn query >>| Or_error.ok_exn
+  ;;
 
   module Expert = struct
     module Responder = Implementations.Expert.Rpc_responder
@@ -162,6 +181,7 @@ module Rpc = struct
           conn
           ~rpc_tag
           ~version
+          ?metadata
           buf
           ~pos
           ~len
@@ -188,6 +208,7 @@ module Rpc = struct
             if Deferred.is_determined d then `remove (Ok ()) else `remove_and_wait d
       in
       do_dispatch
+        ?metadata
         conn
         ~tag:(P.Rpc_tag.of_string rpc_tag)
         ~version
@@ -197,10 +218,21 @@ module Rpc = struct
         ~response_handler:(Some response_handler)
     ;;
 
-    let dispatch conn ~rpc_tag ~version buf ~pos ~len ~handle_response ~handle_error =
+    let dispatch
+          ?metadata
+          conn
+          ~rpc_tag
+          ~version
+          buf
+          ~pos
+          ~len
+          ~handle_response
+          ~handle_error
+      =
       match
         make_dispatch
           Connection.dispatch_bigstring
+          ?metadata
           conn
           ~rpc_tag
           ~version
@@ -215,6 +247,7 @@ module Rpc = struct
     ;;
 
     let schedule_dispatch
+          ?metadata
           conn
           ~rpc_tag
           ~version
@@ -227,6 +260,7 @@ module Rpc = struct
       match
         make_dispatch
           Connection.schedule_dispatch_bigstring
+          ?metadata
           conn
           ~rpc_tag
           ~version
@@ -244,10 +278,19 @@ module Rpc = struct
       | Replied
       | Delayed_response of unit Deferred.t
 
+    let deferred_no_authorization f state responder buf ~pos ~len =
+      Eager_deferred.map (f state responder buf ~pos ~len) ~f:(fun a ->
+        Or_not_authorized.Authorized a)
+    ;;
+
+    let blocking_no_authorization f state responder buf ~pos ~len =
+      Or_not_authorized.Authorized (f state responder buf ~pos ~len)
+    ;;
+
     let implement ?(on_exception = On_exception.continue) t f =
       { Implementation.tag = t.tag
       ; version = t.version
-      ; f = Rpc_expert (f, Deferred)
+      ; f = Rpc_expert (deferred_no_authorization f, Deferred)
       ; shapes = lazy (shapes t)
       ; on_exception
       }
@@ -256,7 +299,7 @@ module Rpc = struct
     let implement' ?(on_exception = On_exception.continue) t f =
       { Implementation.tag = t.tag
       ; version = t.version
-      ; f = Rpc_expert (f, Blocking)
+      ; f = Rpc_expert (blocking_no_authorization f, Blocking)
       ; shapes = lazy (shapes t)
       ; on_exception
       }
@@ -270,8 +313,8 @@ module Rpc = struct
       =
       { Implementation.tag = P.Rpc_tag.of_string rpc_tag
       ; version
-      ; f = Rpc_expert (f, Deferred)
-      ; shapes = lazy (Sexp.Atom "Unknown")
+      ; f = Rpc_expert (deferred_no_authorization f, Deferred)
+      ; shapes = lazy Rpc_shapes.Unknown
       ; on_exception
       }
     ;;
@@ -284,8 +327,8 @@ module Rpc = struct
       =
       { Implementation.tag = P.Rpc_tag.of_string rpc_tag
       ; version
-      ; f = Rpc_expert (f, Blocking)
-      ; shapes = lazy (Sexp.Atom "Unknown")
+      ; f = Rpc_expert (blocking_no_authorization f, Blocking)
+      ; shapes = lazy Rpc_shapes.Unknown
       ; on_exception
       }
     ;;
@@ -308,22 +351,27 @@ module One_way = struct
     { tag = P.Rpc_tag.of_string name; version; bin_msg; msg_type_id }
   ;;
 
-  let shapes t = shapes [ "msg", t.bin_msg.shape ]
+  let shapes t = Rpc_shapes.One_way { msg = t.bin_msg.shape }
   let description t = { Description.name = name t; version = version t }
   let msg_type_id t = t.msg_type_id
+
+  let no_authorization f state query =
+    Eager_deferred.return (Or_not_authorized.Authorized (f state query))
+  ;;
 
   let implement ?(on_exception = On_exception.close_connection) t f =
     { Implementation.tag = t.tag
     ; version = t.version
-    ; f = One_way (t.bin_msg.reader, f)
+    ; f = One_way (t.bin_msg.reader, no_authorization f)
     ; shapes = lazy (shapes t)
     ; on_exception
     }
   ;;
 
-  let dispatch' t conn query =
+  let dispatch' ?metadata t conn query =
     let query_id = P.Query_id.create () in
     Rpc_common.dispatch_raw'
+      ?metadata
       conn
       ~tag:t.tag
       ~version:t.version
@@ -341,25 +389,39 @@ module One_way = struct
       ~connection_close_started:(Connection.close_reason ~on_close:`started conn)
   ;;
 
-  let dispatch t conn query =
-    dispatch' t conn query |> fun result -> rpc_result_to_or_error t conn result
+  let dispatch ?metadata t conn query =
+    dispatch' ?metadata t conn query |> fun result -> rpc_result_to_or_error t conn result
   ;;
 
-  let dispatch_exn t conn query = Or_error.ok_exn (dispatch t conn query)
+  let dispatch_exn ?metadata t conn query =
+    Or_error.ok_exn (dispatch ?metadata t conn query)
+  ;;
 
   module Expert = struct
+    let no_authorization f state buf ~pos ~len =
+      Eager_deferred.return (Or_not_authorized.Authorized (f state buf ~pos ~len))
+    ;;
+
     let implement ?(on_exception = On_exception.close_connection) t f =
       { Implementation.tag = t.tag
       ; version = t.version
-      ; f = One_way_expert f
+      ; f = One_way_expert (no_authorization f)
       ; shapes = lazy (shapes t)
       ; on_exception
       }
     ;;
 
-    let dispatch { tag; version; bin_msg = _; msg_type_id = _ } conn buf ~pos ~len =
+    let dispatch
+          ?metadata
+          { tag; version; bin_msg = _; msg_type_id = _ }
+          conn
+          buf
+          ~pos
+          ~len
+      =
       match
         Connection.dispatch_bigstring
+          ?metadata
           conn
           ~tag
           ~version
@@ -373,6 +435,7 @@ module One_way = struct
     ;;
 
     let schedule_dispatch
+          ?metadata
           { tag; version; bin_msg = _; msg_type_id = _ }
           conn
           buf
@@ -381,6 +444,7 @@ module One_way = struct
       =
       match
         Connection.schedule_dispatch_bigstring
+          ?metadata
           conn
           ~tag
           ~version
@@ -402,6 +466,11 @@ module Pipe_close_reason = struct
     | Error of Error.t
   [@@deriving bin_io, compare, sexp]
 
+  let%expect_test _ =
+    print_endline [%bin_digest: t];
+    [%expect {| 748c8bf4502d0978d007bf7f96a7ef7f |}]
+  ;;
+
   module Stable = struct
     module V1 = struct
       type nonrec t = t =
@@ -409,6 +478,11 @@ module Pipe_close_reason = struct
         | Closed_remotely
         | Error of Error.Stable.V2.t
       [@@deriving bin_io, compare, sexp]
+
+      let%expect_test _ =
+        print_endline [%bin_digest: t];
+        [%expect {| 748c8bf4502d0978d007bf7f96a7ef7f |}]
+      ;;
     end
   end
 end
@@ -483,12 +557,12 @@ module Streaming_rpc = struct
   ;;
 
   let shapes t =
-    shapes
-      [ "query", t.bin_query.shape
-      ; "initial-response", t.bin_initial_response.shape
-      ; "update-response", t.bin_update_response.shape
-      ; "error", t.bin_error_response.shape
-      ]
+    Rpc_shapes.Streaming_rpc
+      { query = t.bin_query.shape
+      ; initial_response = t.bin_initial_response.shape
+      ; update_response = t.bin_update_response.shape
+      ; error = t.bin_error_response.shape
+      }
   ;;
 
   let implement_gen t ?(on_exception = On_exception.continue) impl =
@@ -501,7 +575,11 @@ module Streaming_rpc = struct
     ; version = t.version
     ; f =
         Streaming_rpc
-          (t.bin_query.reader, bin_init_writer, t.bin_update_response.writer, impl)
+          { bin_query_reader = t.bin_query.reader
+          ; bin_init_writer
+          ; bin_update_writer = t.bin_update_response.writer
+          ; impl
+          }
     ; shapes = lazy (shapes t)
     ; on_exception
     }
@@ -510,8 +588,9 @@ module Streaming_rpc = struct
   let implement ?on_exception t f =
     let f c query =
       match%map f c query with
-      | Error err -> Error (make_initial_message (Error err))
-      | Ok (initial, pipe) -> Ok (make_initial_message (Ok initial), pipe)
+      | Error err ->
+        Or_not_authorized.Authorized (Error (make_initial_message (Error err)))
+      | Ok (initial, pipe) -> Authorized (Ok (make_initial_message (Ok initial), pipe))
     in
     implement_gen t ?on_exception (Pipe f)
   ;;
@@ -519,14 +598,16 @@ module Streaming_rpc = struct
   let implement_direct ?on_exception t f =
     let f c query writer =
       match%map f c query writer with
-      | Error _ as x -> Error (make_initial_message x)
-      | Ok _ as x -> Ok (make_initial_message x)
+      | Error _ as x -> Or_not_authorized.Authorized (Error (make_initial_message x))
+      | Ok _ as x -> Authorized (Ok (make_initial_message x))
     in
     implement_gen ?on_exception t (Direct f)
   ;;
 
   let abort t conn id =
-    let query = { P.Query.tag = t.tag; version = t.version; id; data = `Abort } in
+    let query =
+      { P.Query.tag = t.tag; version = t.version; id; metadata = None; data = `Abort }
+    in
     ignore
       (Connection.dispatch
          conn
@@ -679,7 +760,7 @@ module Streaming_rpc = struct
                  `keep)))
   ;;
 
-  let dispatch_gen t conn query make_update_handler =
+  let dispatch_gen ?metadata t conn query make_update_handler =
     let bin_writer_query =
       P.Stream_query.bin_writer_needs_length
         (Writer_with_length.of_type_class t.bin_query)
@@ -687,6 +768,7 @@ module Streaming_rpc = struct
     let query = `Query query in
     let query_id = P.Query_id.create () in
     Rpc_common.dispatch_raw
+      ?metadata
       conn
       ~query_id
       ~tag:t.tag
@@ -706,15 +788,15 @@ module Streaming_rpc = struct
           ~connection_close_started:(Connection.close_reason ~on_close:`started conn)
   ;;
 
-  let dispatch_iter t conn query ~f =
-    match%map dispatch_gen t conn query (fun () -> (), f) with
+  let dispatch_iter ?metadata t conn query ~f =
+    match%map dispatch_gen ?metadata t conn query (fun () -> (), f) with
     | (Error _ | Ok (Error _)) as e -> e
     | Ok (Ok (id, init, ())) -> Ok (Ok (id, init))
   ;;
 
-  let dispatch t conn query =
+  let dispatch ?metadata t conn query =
     match%map
-      dispatch_gen t conn query (fun () ->
+      dispatch_gen ?metadata t conn query (fun () ->
         let pipe_r, pipe_w = Pipe.create () in
         (* Set a small buffer to reduce the number of pushback events *)
         Pipe.set_size_budget pipe_w 100;
@@ -933,17 +1015,19 @@ module Pipe_rpc = struct
     end
   end
 
-  let implement_direct t f = Streaming_rpc.implement_direct t f
+  let implement_direct ?on_exception t f =
+    Streaming_rpc.implement_direct ?on_exception t f
+  ;;
 
-  let dispatch t conn query =
-    let%map response = Streaming_rpc.dispatch t conn query in
+  let dispatch ?metadata t conn query =
+    let%map response = Streaming_rpc.dispatch ?metadata t conn query in
     response >>|~ fun x -> x >>|~ fun (metadata, (), pipe_r) -> pipe_r, metadata
   ;;
 
   exception Pipe_rpc_failed
 
-  let dispatch_exn t conn query =
-    let%map result = dispatch t conn query in
+  let dispatch_exn ?metadata t conn query =
+    let%map result = dispatch ?metadata t conn query in
     match result with
     | Error rpc_error -> raise (Error.to_exn rpc_error)
     | Ok (Error _) -> raise Pipe_rpc_failed
@@ -953,8 +1037,8 @@ module Pipe_rpc = struct
   module Pipe_message = Streaming_rpc.Pipe_message
   module Pipe_response = Streaming_rpc.Pipe_response
 
-  let dispatch_iter t conn query ~f =
-    let%map response = Streaming_rpc.dispatch_iter t conn query ~f in
+  let dispatch_iter ?metadata t conn query ~f =
+    let%map response = Streaming_rpc.dispatch_iter ?metadata t conn query ~f in
     response >>|~ fun x -> x >>|~ fun (id, ()) -> id
   ;;
 
@@ -1003,9 +1087,10 @@ module State_rpc = struct
   let bin_update t = t.Streaming_rpc.bin_update_response
   let bin_error t = t.Streaming_rpc.bin_error_response
   let implement = Streaming_rpc.implement
+  let implement_direct = Streaming_rpc.implement_direct
 
-  let dispatch t conn query =
-    let%map response = Streaming_rpc.dispatch t conn query in
+  let dispatch ?metadata t conn query =
+    let%map response = Streaming_rpc.dispatch ?metadata t conn query in
     response
     >>|~ fun x -> x >>|~ fun (metadata, state, update_r) -> state, update_r, metadata
   ;;

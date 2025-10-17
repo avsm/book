@@ -1,77 +1,16 @@
-(** First class AST patterns *)
+(** This module implements first class AST patterns. It allows to destruct and
+    extract values from AST fragments. This gives the same functionality as a
+    pattern-match, but with simpler syntax and more stability than directly
+    pattern-matching on the {!Parsetree} constructors. *)
 
 open! Import
 
-(** PPX rewriters often need to recognize fragments the OCaml AST, for instance
-    to parse the payload of an attribute/expression. You can do that with a
-    pattern matching and manual error reporting when the input is not what you
-    expect but this has proven to quickly become extremely verbose and
-    unreadable.
+(** {1 Link to the tutorial}
 
-    This module aims to help with that by providing first class AST patterns.
+    For a detailed explanation on this module, refer to the
+    {{!"matching-code".ast_pattern_intro} relevant} part of the manual.
 
-    To understand how to use it, let's consider the example of ppx_inline_test.
-    We want to recognize patterns of the form:
-
-    {[ let%test "name" = expr ]}
-
-    Which is a syntactic sugar for:
-
-    {[ [%%test let "name" = expr] ]}
-
-    If we wanted to write a function that recognizes the payload of [%%test]
-    using normal pattern matching we would write:
-
-    {[
-      let match_payload = function
-        | Pstr [ { pstr_desc = Pstr_value (Nonrecursive,
-                                           [ { pvb_pat = Ppat_constant (Constant_string
-                                                                          (name, None))
-                                             ; pvb_expr = e
-                                             ; _ } ])
-                 ; _ } ] ->
-          (name, e)
-        | _ -> Location.raisef ...
-    ]}
-
-    This is quite cumbersome, and this is still not right: this function drops
-    all attributes without notice.
-
-    Now let's imagine we wanted to construct the payload instead, using
-    [Ast_builder] one would write:
-
-    {[
-      let build_payload ~loc name expr =
-        let (module B) = Ast_builder.with_loc loc in
-        let open B in
-        pstr
-          [ pstr_value Nonrecursive (value_binding ~pat:(pstring name) ~expr) ]
-    ]}
-
-    Constructing a first class pattern is almost as simple as replacing
-    [Ast_builder] by [Ast_pattern]:
-
-    {[
-      let payload_pattern name expr =
-        let open Ast_pattern in
-        pstr
-          (pstr_value nonrecursive (value_binding ~pat:(pstring __) ~expr:__)
-          ^:: nil)
-    ]}
-
-    Notice that the place-holders for [name] and [expr] have been replaced by
-    [__]. The following pattern with have type:
-
-    {[ (payload, string -> expression -> 'a, 'a) Ast_pattern.t ]}
-
-    which means that it matches values of type [payload] and captures a string
-    and expression from it. The two captured elements comes from the use of
-    [__].
-
-    An empty payload (e.g. for an attribute that has no payload) is matched by
-    [Ast_pattern.(pstr nil)]. A payload with exactly one expression (e.g. to
-    specify a custom function in a deriver) is matched by
-    [Ast_pattern.(single_expr_payload __)]. *)
+    {1 API} *)
 
 type ('a, 'b, 'c) t = ('a, 'b, 'c) Ast_pattern0.t
 (** Type of a pattern:
@@ -83,7 +22,8 @@ type ('a, 'b, 'c) t = ('a, 'b, 'c) Ast_pattern0.t
 
 val parse :
   ('a, 'b, 'c) t -> Location.t -> ?on_error:(unit -> 'c) -> 'a -> 'b -> 'c
-(** Matches a value against a pattern. Raise a located error in case of failure. *)
+(** Matches a value against a pattern. Raise a located error in case of failure.
+*)
 
 val parse_res :
   ('a, 'b, 'c) t ->
@@ -118,11 +58,15 @@ val __' : ('a, 'a Loc.t -> 'b, 'b) t
     Note: this should only be used for types that do not embed a location. For
     instance you can use it to capture a string constant:
 
-    {[ estring __' ]}
+    {[
+      estring __'
+    ]}
 
     but using it to capture an expression would not yield the expected result:
 
-    {[ pair (eint (int 42)) __' ]}
+    {[
+      pair (eint (int 42)) __'
+    ]}
 
     In the latter case you should use the [pexp_loc] field of the captured
     expression instead. *)
@@ -175,6 +119,8 @@ val map2' :
   f:(Location.t -> 'v1 -> 'v2 -> 'v) ->
   ('a, 'v -> 'b, 'c) t
 
+val map_value : ('a, 'b, 'c) t -> f:('d -> 'a) -> ('d, 'b, 'c) t
+val map_value' : ('a, 'b, 'c) t -> f:(location -> 'd -> 'a) -> ('d, 'b, 'c) t
 val nil : (_ list, 'a, 'a) t
 val ( ^:: ) : ('a, 'b, 'c) t -> ('a list, 'c, 'd) t -> ('a list, 'b, 'd) t
 val many : ('a, 'b -> 'c, 'c) t -> ('a list, 'b list -> 'c, 'c) t
@@ -186,6 +132,8 @@ val int32 : int32 -> (int32, 'a, 'a) t
 val int64 : int64 -> (int64, 'a, 'a) t
 val nativeint : nativeint -> (nativeint, 'a, 'a) t
 val bool : bool -> (bool, 'a, 'a) t
+val ebool : (bool, 'a, 'b) t -> (expression, 'a, 'b) t
+val pbool : (bool, 'a, 'b) t -> (pattern, 'a, 'b) t
 
 val cst :
   to_string:('a -> string) -> ?equal:('a -> 'a -> bool) -> 'a -> ('a, 'b, 'b) t

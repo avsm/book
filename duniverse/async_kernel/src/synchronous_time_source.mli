@@ -127,15 +127,12 @@ module Event : sig
   module Abort_result : sig
     type t =
       | Ok
-      | Currently_happening
       | Previously_unscheduled
     [@@deriving sexp_of]
   end
 
   (** [abort t] aborts the event [t], if possible, and returns [Ok] if the event was
-      aborted, or the reason it could not be aborted.  [abort] returns
-      [Currently_happening] iff it is called on an event while running that event's
-      callback and the event is not scheduled at intervals. *)
+      aborted, or the reason it could not be aborted. *)
   val abort : [> read ] T1.t -> t -> Abort_result.t
 
   val abort_exn : [> read ] T1.t -> t -> unit
@@ -145,6 +142,10 @@ module Event : sig
       [timesource]'s timing wheel but is available to be scheduled using [schedule_at] and
       [schedule_after]. *)
   val create : [> read ] T1.t -> callback -> t
+
+  (** If [is_scheduled t] returns false, calling any of the below [schedule_*] functions
+      is guaranteed to not return an error. *)
+  val is_scheduled : t -> bool
 
   (** [schedule_at timesource t time] schedules [t] to fire at [time].  [schedule_at]
       returns [Error] if [t] is currently scheduled to run. *)
@@ -200,6 +201,10 @@ val next_alarm_fires_at : [> write ] T1.t -> Time_ns.t option
     but alarms with [at <= to_] may still may fire. *)
 val advance_by_alarms : [> write ] T1.t -> to_:Time_ns.t -> unit Or_error.t
 
+(** [advance_by_alarms_by t by] is equivalent to:
+    [advance_by_alarms t ~to_:(Time_ns.add (now t) by)] *)
+val advance_by_alarms_by : [> write ] T1.t -> Time_ns.Span.t -> unit Or_error.t
+
 (** A version of [advance_by_alarms] with some weird behavior caused by timing wheel
     [alarm_precision]: if there are multiple alarms within the same timing_wheel
     precision bucket, then this function fires them all at the same time (when the last
@@ -220,6 +225,10 @@ val advance_by_max_alarms_in_each_timing_wheel_interval
     [advance_by_alarms] advances the clock in steps, to each intervening alarm.  In
     particular periodic/rearming timers will fire at most twice. *)
 val advance_directly : [> write ] T1.t -> to_:Time_ns.t -> unit Or_error.t
+
+(** [advance_directly_by t by] is equivalent to:
+    [advance_directly_by t ~to_:(Time_ns.add (now t) by)] *)
+val advance_directly_by : [> write ] T1.t -> Time_ns.Span.t -> unit Or_error.t
 
 
 (** This value is close to [next_alarm_fires_at] but differs from it by at most

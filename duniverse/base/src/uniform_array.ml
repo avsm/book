@@ -23,7 +23,7 @@ module Trusted : sig
   val unsafe_set_assuming_currently_int : 'a t -> int -> 'a -> unit
   val unsafe_set_with_caml_modify : 'a t -> int -> 'a -> unit
   val set_with_caml_modify : 'a t -> int -> 'a -> unit
-  val length : 'a t -> int
+  val length : ('a t[@local]) -> int
   val unsafe_blit : ('a t, 'a t) Blit.blit
   val copy : 'a t -> 'a t
   val unsafe_clear_if_pointer : _ t -> int -> unit
@@ -33,13 +33,13 @@ end = struct
   let empty = Obj_array.empty
   let unsafe_create_uninitialized ~len = Obj_array.create_zero ~len
   let create_obj_array ~len = Obj_array.create_zero ~len
-  let create ~len x = Obj_array.create ~len (Caml.Obj.repr x)
-  let singleton x = Obj_array.singleton (Caml.Obj.repr x)
+  let create ~len x = Obj_array.create ~len (Stdlib.Obj.repr x)
+  let singleton x = Obj_array.singleton (Stdlib.Obj.repr x)
   let swap t i j = Obj_array.swap t i j
-  let get arr i = Caml.Obj.obj (Obj_array.get arr i)
-  let set arr i x = Obj_array.set arr i (Caml.Obj.repr x)
-  let unsafe_get arr i = Caml.Obj.obj (Obj_array.unsafe_get arr i)
-  let unsafe_set arr i x = Obj_array.unsafe_set arr i (Caml.Obj.repr x)
+  let get arr i = Stdlib.Obj.obj (Obj_array.get arr i)
+  let set arr i x = Obj_array.set arr i (Stdlib.Obj.repr x)
+  let unsafe_get arr i = Stdlib.Obj.obj (Obj_array.unsafe_get arr i)
+  let unsafe_set arr i x = Obj_array.unsafe_set arr i (Stdlib.Obj.repr x)
   let unsafe_set_int arr i x = Obj_array.unsafe_set_int arr i x
 
   let unsafe_set_int_assuming_currently_int arr i x =
@@ -47,7 +47,7 @@ end = struct
   ;;
 
   let unsafe_set_assuming_currently_int arr i x =
-    Obj_array.unsafe_set_assuming_currently_int arr i (Caml.Obj.repr x)
+    Obj_array.unsafe_set_assuming_currently_int arr i (Stdlib.Obj.repr x)
   ;;
 
   let length = Obj_array.length
@@ -55,20 +55,22 @@ end = struct
   let copy = Obj_array.copy
 
   let unsafe_set_omit_phys_equal_check t i x =
-    Obj_array.unsafe_set_omit_phys_equal_check t i (Caml.Obj.repr x)
+    Obj_array.unsafe_set_omit_phys_equal_check t i (Stdlib.Obj.repr x)
   ;;
 
   let unsafe_set_with_caml_modify t i x =
-    Obj_array.unsafe_set_with_caml_modify t i (Caml.Obj.repr x)
+    Obj_array.unsafe_set_with_caml_modify t i (Stdlib.Obj.repr x)
   ;;
 
-  let set_with_caml_modify t i x = Obj_array.set_with_caml_modify t i (Caml.Obj.repr x)
+  let set_with_caml_modify t i x = Obj_array.set_with_caml_modify t i (Stdlib.Obj.repr x)
   let unsafe_clear_if_pointer = Obj_array.unsafe_clear_if_pointer
 end
 
 include Trusted
 
-let invariant t = assert (Caml.Obj.tag (Caml.Obj.repr t) <> Caml.Obj.double_array_tag)
+let invariant t =
+  assert (Stdlib.Obj.tag (Stdlib.Obj.repr t) <> Stdlib.Obj.double_array_tag)
+;;
 
 let init l ~f =
   if l < 0
@@ -81,9 +83,9 @@ let init l ~f =
     res)
 ;;
 
-let of_array arr = init ~f:(Array.unsafe_get arr) (Array.length arr)
-let map a ~f = init ~f:(fun i -> f (unsafe_get a i)) (length a)
-let mapi a ~f = init ~f:(fun i -> f i (unsafe_get a i)) (length a)
+let of_array arr = init ~f:(Array.unsafe_get arr) (Array.length arr) [@nontail]
+let map a ~f = init ~f:(fun i -> f (unsafe_get a i)) (length a) [@nontail]
+let mapi a ~f = init ~f:(fun i -> f i (unsafe_get a i)) (length a) [@nontail]
 
 let iter a ~f =
   for i = 0 to length a - 1 do
@@ -133,7 +135,7 @@ let for_all t ~f =
 let map2_exn t1 t2 ~f =
   let len = length t1 in
   if length t2 <> len then invalid_arg "Array.map2_exn";
-  init len ~f:(fun i -> f (unsafe_get t1 i) (unsafe_get t2 i))
+  init len ~f:(fun i -> f (unsafe_get t1 i) (unsafe_get t2 i)) [@nontail]
 ;;
 
 let t_sexp_grammar (type elt) (grammar : elt Sexplib0.Sexp_grammar.t)
@@ -201,3 +203,13 @@ let compare compare_elt a b =
       in
       loop 0))
 ;;
+
+module Sort = Array.Private.Sorter (struct
+    type nonrec 'a t = 'a t
+
+    let length = length
+    let get = unsafe_get
+    let set = unsafe_set
+  end)
+
+let sort = Sort.sort

@@ -18,20 +18,31 @@ module Sexp_style = struct
   [@@deriving sexp_of]
 end
 
-module type With_comparator = sig
-  type t [@@deriving sexp_of]
-
-  include Comparator.S with type t := t
-end
-
 module type With_compare = sig
   type t [@@deriving compare, sexp_of]
 end
 
 module type With_equal = sig
-  type t [@@deriving sexp_of]
+  type t [@@deriving equal, sexp_of]
+end
 
-  include Equal.S with type t := t
+module type With_round_trip = sig
+  type t
+  type repr [@@deriving sexp_of]
+
+  val to_repr : t -> repr
+  val of_repr : repr -> t
+  val repr_name : string
+end
+
+module type With_sexpable = sig
+  type t [@@deriving equal, sexp]
+end
+
+module type With_stringable = sig
+  type t [@@deriving equal]
+
+  include Stringable.S with type t := t
 end
 
 module Quickcheck = Base_quickcheck
@@ -40,9 +51,11 @@ module type Expect_test_helpers_base = sig
   (** Helpers for producing output inside [let%expect_test]. Designed for code using
       [Base]. See also [Expect_test_helpers_core] and [Expect_test_helpers_async]. *)
 
-  module type With_comparator = With_comparator
   module type With_compare = With_compare
   module type With_equal = With_equal
+  module type With_round_trip = With_round_trip
+  module type With_sexpable = With_sexpable
+  module type With_stringable = With_stringable
 
   module CR : sig
     include module type of struct
@@ -110,6 +123,17 @@ module type Expect_test_helpers_base = sig
   (** Behaves like [[%expect.output]].  *)
   val expect_test_output : Source_code_position.t -> string
 
+  (** Returns [true] if running inside the body of [let%expect_test], or [false]
+      otherwise. Use to test whether [expect_test_output] will raise, for example. Unlike
+      [Core.am_running_test], this is not configured by an environment variable, and is
+      not inherited by child processes. *)
+  val am_running_expect_test : unit -> bool
+
+  (** If [am_running_expect_test () = false], raises with an explanatory error message. Do
+      not use [require am_running_expect_test], as outside of an expect test that may not
+      accomplish anything. *)
+  val assert_am_running_expect_test : Source_code_position.t -> unit
+
   (** [print_cr here message] prints a [CR require-failed], which will appear in
       expect-test output. The CR will appear in the feature owner's [fe todo], thus
       preventing release of the feature. [print_cr] is an expect-test-friendly version of
@@ -165,6 +189,30 @@ module type Expect_test_helpers_base = sig
     -> 'a
     -> unit
 
+  (** Like [require_equal] but instead requires that the arguments are *not* equal. *)
+  val require_not_equal
+    :  ?cr:CR.t (** default is [CR]    *)
+    -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
+    -> ?if_false_then_print_s:Sexp.t Lazy.t
+    -> ?message:string
+    -> Source_code_position.t
+    -> (module With_equal with type t = 'a)
+    -> 'a
+    -> 'a
+    -> unit
+
+  (** Like [require_not_equal], but derives an equality predicate from a comparison
+      function. *)
+  val require_compare_not_equal
+    :  ?cr:CR.t (** default is [CR]    *)
+    -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
+    -> ?message:string
+    -> Source_code_position.t
+    -> (module With_compare with type t = 'a)
+    -> 'a
+    -> 'a
+    -> unit
+
   (** Like [require_equal], but when equality fails produces a message including sexps of
       both [Set.diff first second] and [Set.diff second first] to aid in debugging. *)
   val require_sets_are_equal
@@ -172,7 +220,6 @@ module type Expect_test_helpers_base = sig
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?names:string * string (** default is ["first", "second"] *)
     -> Source_code_position.t
-    -> (module With_comparator with type t = 'elt and type comparator_witness = 'cmp)
     -> ('elt, 'cmp) Set.t
     -> ('elt, 'cmp) Set.t
     -> unit
@@ -200,7 +247,7 @@ module type Expect_test_helpers_base = sig
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?show_backtrace:bool (** default is [false] *)
     -> Source_code_position.t
-    -> (unit -> unit)
+    -> ((unit -> unit)[@local])
     -> unit
 
   (** [require_does_raise] is like [show_raise], but additionally prints a CR if the
@@ -210,7 +257,7 @@ module type Expect_test_helpers_base = sig
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?show_backtrace:bool (** default is [false] *)
     -> Source_code_position.t
-    -> (unit -> _)
+    -> ((unit -> _)[@local])
     -> unit
 
   (** [require_some here option] is like [require here (is_some option)], with improved
@@ -308,6 +355,38 @@ module type Expect_test_helpers_base = sig
     -> Source_code_position.t
     -> ('first -> Sexp.t)
     -> ('first, 'second) Either.t
+    -> unit
+
+  (** Print string representations of the given values, and test that [to_string] /
+      [of_string] round-trip. *)
+  val print_and_check_stringable
+    :  ?cr:CR.t (** default is [CR] *)
+    -> ?hide_positions:bool (** default is [false] when [cr=CR], [true otherwise] *)
+    -> Source_code_position.t
+    -> (module With_stringable with type t = 'a)
+    -> 'a list
+    -> unit
+
+  (** Print sexp representations of the given values, and test that [sexp_of_t] /
+      [t_of_sexp] round-trip. *)
+  val print_and_check_sexpable
+    :  ?cr:CR.t (** default is [CR] *)
+    -> ?hide_positions:bool (** default is [false] when [cr=CR], [true otherwise] *)
+    -> Source_code_position.t
+    -> (module With_sexpable with type t = 'a)
+    -> 'a list
+    -> unit
+
+  (** Print the [With_round_trip] representations of the given values. If there are
+      multiple representations, includes the [repr_name] of each in the output. Tests that
+      [to_repr] and [of_repr] round-trip for each representation. *)
+  val print_and_check_round_trip
+    :  ?cr:CR.t (** default is [CR] *)
+    -> ?hide_positions:bool (** default is [false] when [cr=CR], [true otherwise] *)
+    -> Source_code_position.t
+    -> (module With_equal with type t = 'a)
+    -> (module With_round_trip with type t = 'a) list
+    -> 'a list
     -> unit
 
 

@@ -169,8 +169,7 @@ module Tree0 = struct
           | i ->
             if Poly.( <> ) (i < 0) increasing
             then
-              r.return
-                (Or_error.error_string "of_sorted_array: elements are not ordered")
+              r.return (Or_error.error_string "of_sorted_array: elements are not ordered")
         done;
         Result.Ok (of_sorted_array_unchecked array ~compare_elt))
   ;;
@@ -250,31 +249,51 @@ module Tree0 = struct
       | Leaf v ->
         let c = compare_elt x v in
         if c = 0
-        then raise Same
+        then Exn.raise_without_backtrace Same
         else if c < 0
         then create (Leaf x) v Empty
         else create Empty v (Leaf x)
       | Node (l, v, r, _, _) ->
         let c = compare_elt x v in
-        if c = 0 then raise Same else if c < 0 then bal (aux l) v r else bal l v (aux r)
+        if c = 0
+        then Exn.raise_without_backtrace Same
+        else if c < 0
+        then bal (aux l) v r
+        else bal l v (aux r)
     in
     try aux t with
     | Same -> t
   ;;
 
+  (* specialization of [add] that assumes that [x] is less than all existing elements *)
+  let rec add_min x t =
+    match t with
+    | Empty -> Leaf x
+    | Leaf _ -> Node (Empty, x, t, 2, 2)
+    | Node (l, v, r, _, _) -> bal (add_min x l) v r
+  ;;
+
+  (* specialization of [add] that assumes that [x] is greater than all existing elements *)
+  let rec add_max t x =
+    match t with
+    | Empty -> Leaf x
+    | Leaf _ -> Node (t, x, Empty, 2, 2)
+    | Node (l, v, r, _, _) -> bal l v (add_max r x)
+  ;;
+
   (* Same as create and bal, but no assumptions are made on the relative heights of l and
      r. *)
-  let rec join l v r ~compare_elt =
+  let rec join l v r =
     match l, r with
-    | Empty, _ -> add r v ~compare_elt
-    | _, Empty -> add l v ~compare_elt
-    | Leaf lv, _ -> add (add r v ~compare_elt) lv ~compare_elt
-    | _, Leaf rv -> add (add l v ~compare_elt) rv ~compare_elt
+    | Empty, _ -> add_min v r
+    | _, Empty -> add_max l v
+    | Leaf lv, _ -> add_min lv (add_min v r)
+    | _, Leaf rv -> add_max (add_max l v) rv
     | Node (ll, lv, lr, lh, _), Node (rl, rv, rr, rh, _) ->
       if lh > rh + 2
-      then bal ll lv (join lr v r ~compare_elt)
+      then bal ll lv (join lr v r)
       else if rh > lh + 2
-      then bal (join l v rl ~compare_elt) rv rr
+      then bal (join l v rl) rv rr
       else create l v r
   ;;
 
@@ -321,7 +340,7 @@ module Tree0 = struct
     let rec fold_until_helper ~f t acc =
       match t with
       | Empty -> Container.Continue_or_stop.Continue acc
-      | Leaf value -> f acc value
+      | Leaf value -> f acc value [@nontail]
       | Node (left, value, right, _, _) ->
         (match fold_until_helper ~f left acc with
          | Stop _a as x -> x
@@ -331,7 +350,7 @@ module Tree0 = struct
             | Continue a -> fold_until_helper ~f right a))
     in
     match fold_until_helper ~f t init with
-    | Continue x -> finish x
+    | Continue x -> finish x [@nontail]
     | Stop x -> x
   ;;
 
@@ -367,10 +386,10 @@ module Tree0 = struct
 
   (* Merge two trees l and r into one.  All elements of l must precede the elements of r.
      No assumption on the heights of l and r. *)
-  let concat t1 t2 ~compare_elt =
+  let concat t1 t2 =
     match t1, t2 with
     | Empty, t | t, Empty -> t
-    | _, _ -> join t1 (min_elt_exn t2) (remove_min_elt t2) ~compare_elt
+    | _, _ -> join t1 (min_elt_exn t2) (remove_min_elt t2)
   ;;
 
   let split t x ~compare_elt =
@@ -391,12 +410,46 @@ module Tree0 = struct
         else if c < 0
         then (
           let ll, maybe_elt, rl = split l in
-          ll, maybe_elt, join rl v r ~compare_elt)
+          ll, maybe_elt, join rl v r)
         else (
           let lr, maybe_elt, rr = split r in
-          join l v lr ~compare_elt, maybe_elt, rr)
+          join l v lr, maybe_elt, rr)
     in
     split t
+  ;;
+
+  let rec split_le_gt t x ~compare_elt =
+    match t with
+    | Empty -> Empty, Empty
+    | Leaf v -> if compare_elt x v >= 0 then Leaf v, Empty else Empty, Leaf v
+    | Node (l, v, r, _, _) ->
+      let c = compare_elt x v in
+      if c = 0
+      then add_max l v, r
+      else if c < 0
+      then (
+        let ll, rl = split_le_gt l x ~compare_elt in
+        ll, join rl v r)
+      else (
+        let lr, rr = split_le_gt r x ~compare_elt in
+        join l v lr, rr)
+  ;;
+
+  let rec split_lt_ge t x ~compare_elt =
+    match t with
+    | Empty -> Empty, Empty
+    | Leaf v -> if compare_elt x v > 0 then Leaf v, Empty else Empty, Leaf v
+    | Node (l, v, r, _, _) ->
+      let c = compare_elt x v in
+      if c = 0
+      then l, add_min v r
+      else if c < 0
+      then (
+        let ll, rl = split_lt_ge l x ~compare_elt in
+        ll, join rl v r)
+      else (
+        let lr, rr = split_lt_ge r x ~compare_elt in
+        join l v lr, rr)
   ;;
 
   (* Implementation of the set operations *)
@@ -419,8 +472,8 @@ module Tree0 = struct
   let remove t x ~compare_elt =
     let rec aux t =
       match t with
-      | Empty -> raise Same
-      | Leaf v -> if compare_elt x v = 0 then Empty else raise Same
+      | Empty -> Exn.raise_without_backtrace Same
+      | Leaf v -> if compare_elt x v = 0 then Empty else Exn.raise_without_backtrace Same
       | Node (l, v, r, _, _) ->
         let c = compare_elt x v in
         if c = 0 then merge l r else if c < 0 then bal (aux l) v r else bal l v (aux r)
@@ -432,8 +485,8 @@ module Tree0 = struct
   let remove_index t i ~compare_elt:_ =
     let rec aux t i =
       match t with
-      | Empty -> raise Same
-      | Leaf _ -> if i = 0 then Empty else raise Same
+      | Empty -> Exn.raise_without_backtrace Same
+      | Leaf _ -> if i = 0 then Empty else Exn.raise_without_backtrace Same
       | Node (l, v, r, _, _) ->
         let l_size = length l in
         let c = Poly.compare i l_size in
@@ -463,12 +516,12 @@ module Tree0 = struct
             then add s1 v2 ~compare_elt
             else (
               let l2, _, r2 = split s2 v1 ~compare_elt in
-              join (union l1 l2) v1 (union r1 r2) ~compare_elt)
+              join (union l1 l2) v1 (union r1 r2))
           else if h1 = 1
           then add s2 v1 ~compare_elt
           else (
             let l1, _, r1 = split s1 v2 ~compare_elt in
-            join (union l1 l2) v2 (union r1 r2) ~compare_elt))
+            join (union l1 l2) v2 (union r1 r2)))
     in
     union s1 s2
   ;;
@@ -489,8 +542,8 @@ module Tree0 = struct
           if mem other_set elt ~compare_elt then singleton else Empty
         | Node (l1, v1, r1, _, _), t2 ->
           (match split t2 v1 ~compare_elt with
-           | l2, None, r2 -> concat (inter l1 l2) (inter r1 r2) ~compare_elt
-           | l2, Some v1, r2 -> join (inter l1 l2) v1 (inter r1 r2) ~compare_elt))
+           | l2, None, r2 -> concat (inter l1 l2) (inter r1 r2)
+           | l2, Some v1, r2 -> join (inter l1 l2) v1 (inter r1 r2)))
     in
     inter s1 s2
   ;;
@@ -506,8 +559,8 @@ module Tree0 = struct
         | Leaf v1, t2 -> diff (Node (Empty, v1, Empty, 1, 1)) t2
         | Node (l1, v1, r1, _, _), t2 ->
           (match split t2 v1 ~compare_elt with
-           | l2, None, r2 -> join (diff l1 l2) v1 (diff r1 r2) ~compare_elt
-           | l2, Some _, r2 -> concat (diff l1 l2) (diff r1 r2) ~compare_elt))
+           | l2, None, r2 -> join (diff l1 l2) v1 (diff r1 r2)
+           | l2, Some _, r2 -> concat (diff l1 l2) (diff r1 r2)))
     in
     diff s1 s2
   ;;
@@ -587,8 +640,8 @@ module Tree0 = struct
       let rec loop t1 t2 =
         match t1, t2 with
         | End, End -> ()
-        | End, _ -> iter t2 ~f:(fun a -> f (`Right a))
-        | _, End -> iter t1 ~f:(fun a -> f (`Left a))
+        | End, _ -> iter t2 ~f:(fun a -> f (`Right a)) [@nontail]
+        | _, End -> iter t1 ~f:(fun a -> f (`Left a)) [@nontail]
         | More (a1, tree1, enum1), More (a2, tree2, enum2) ->
           let compare_result = compare_elt a1 a2 in
           if compare_result = 0
@@ -603,15 +656,17 @@ module Tree0 = struct
             f (`Right a2);
             loop t1 (cons tree2 enum2))
       in
-      loop t1 t2
+      loop t1 t2 [@nontail]
     ;;
 
     let symmetric_diff t1 t2 ~compare_elt =
       let step state : ((_, _) Either.t, _) Sequence.Step.t =
         match state with
         | End, End -> Done
-        | End, More (elt, tree, enum) -> Yield (Second elt, (End, cons tree enum))
-        | More (elt, tree, enum), End -> Yield (First elt, (cons tree enum, End))
+        | End, More (elt, tree, enum) ->
+          Yield { value = Second elt; state = End, cons tree enum }
+        | More (elt, tree, enum), End ->
+          Yield { value = First elt; state = cons tree enum, End }
         | (More (a1, tree1, enum1) as left), (More (a2, tree2, enum2) as right) ->
           let compare_result = compare_elt a1 a2 in
           if compare_result = 0
@@ -621,10 +676,10 @@ module Tree0 = struct
               then enum1, enum2
               else cons tree1 enum1, cons tree2 enum2
             in
-            Skip next_state)
+            Skip { state = next_state })
           else if compare_result < 0
-          then Yield (First a1, (cons tree1 enum1, right))
-          else Yield (Second a2, (left, cons tree2 enum2))
+          then Yield { value = First a1; state = cons tree1 enum1, right }
+          else Yield { value = Second a2; state = left, cons tree2 enum2 }
       in
       Sequence.unfold_step ~init:(of_set t1, of_set t2) ~f:step
     ;;
@@ -634,7 +689,7 @@ module Tree0 = struct
     let next enum =
       match enum with
       | Enum.End -> Sequence.Step.Done
-      | Enum.More (k, t, e) -> Sequence.Step.Yield (k, Enum.cons t e)
+      | Enum.More (k, t, e) -> Sequence.Step.Yield { value = k; state = Enum.cons t e }
     in
     let init =
       match from_elt with
@@ -648,7 +703,8 @@ module Tree0 = struct
     let next enum =
       match enum with
       | Enum.End -> Sequence.Step.Done
-      | Enum.More (k, t, e) -> Sequence.Step.Yield (k, Enum.cons_right t e)
+      | Enum.More (k, t, e) ->
+        Sequence.Step.Yield { value = k; state = Enum.cons_right t e }
     in
     let init =
       match from_elt with
@@ -711,8 +767,10 @@ module Tree0 = struct
 
   let binary_search t ~compare how v =
     match how with
-    | `Last_strictly_less_than -> find_last_satisfying t ~f:(fun x -> compare x v < 0)
-    | `Last_less_than_or_equal_to -> find_last_satisfying t ~f:(fun x -> compare x v <= 0)
+    | `Last_strictly_less_than ->
+      find_last_satisfying t ~f:(fun x -> compare x v < 0) [@nontail]
+    | `Last_less_than_or_equal_to ->
+      find_last_satisfying t ~f:(fun x -> compare x v <= 0) [@nontail]
     | `First_equal_to ->
       (match find_first_satisfying t ~f:(fun x -> compare x v >= 0) with
        | Some x as elt when compare x v = 0 -> elt
@@ -722,9 +780,9 @@ module Tree0 = struct
        | Some x as elt when compare x v = 0 -> elt
        | None | Some _ -> None)
     | `First_greater_than_or_equal_to ->
-      find_first_satisfying t ~f:(fun x -> compare x v >= 0)
+      find_first_satisfying t ~f:(fun x -> compare x v >= 0) [@nontail]
     | `First_strictly_greater_than ->
-      find_first_satisfying t ~f:(fun x -> compare x v > 0)
+      find_first_satisfying t ~f:(fun x -> compare x v > 0) [@nontail]
   ;;
 
   let binary_search_segmented t ~segment_of how =
@@ -735,8 +793,8 @@ module Tree0 = struct
     in
     let is_right x = not (is_left x) in
     match how with
-    | `Last_on_left -> find_last_satisfying t ~f:is_left
-    | `First_on_right -> find_first_satisfying t ~f:is_right
+    | `Last_on_left -> find_last_satisfying t ~f:is_left [@nontail]
+    | `First_on_right -> find_first_satisfying t ~f:is_right [@nontail]
   ;;
 
   let merge_to_sequence
@@ -760,7 +818,10 @@ module Tree0 = struct
     Enum.compare compare_elt (Enum.of_set s1) (Enum.of_set s2)
   ;;
 
-  let iter2 s1 s2 ~compare_elt = Enum.iter2 compare_elt (Enum.of_set s1) (Enum.of_set s2)
+  let iter2 s1 s2 ~compare_elt ~f =
+    Enum.iter2 compare_elt (Enum.of_set s1) (Enum.of_set s2) ~f
+  ;;
+
   let equal s1 s2 ~compare_elt = compare compare_elt s1 s2 = 0
 
   let is_subset s1 ~of_:s2 ~compare_elt =
@@ -812,7 +873,7 @@ module Tree0 = struct
         f v;
         iter r
     in
-    iter t
+    iter t [@nontail]
   ;;
 
   let symmetric_diff = Enum.symmetric_diff
@@ -852,14 +913,21 @@ module Tree0 = struct
     | Node (l, v, r, _, _) -> p v || exists ~f:p l || exists ~f:p r
   ;;
 
-  let filter s ~f:p ~compare_elt =
-    let rec filt accu = function
-      | Empty -> accu
-      | Leaf v -> if p v then add accu v ~compare_elt else accu
-      | Node (l, v, r, _, _) ->
-        filt (filt (if p v then add accu v ~compare_elt else accu) l) r
+  let filter s ~f:p =
+    let rec filt = function
+      | Empty -> Empty
+      | Leaf v as t -> if p v then t else Empty
+      | Node (l, v, r, _, _) as t ->
+        let l' = filt l in
+        let keep_v = p v in
+        let r' = filt r in
+        if keep_v && phys_equal l l' && phys_equal r r'
+        then t
+        else if keep_v
+        then join l' v r'
+        else concat l' r'
     in
-    filt Empty s
+    filt s [@nontail]
   ;;
 
   let filter_map s ~f:p ~compare_elt =
@@ -878,17 +946,27 @@ module Tree0 = struct
              l)
           r
     in
-    filt Empty s
+    filt Empty s [@nontail]
   ;;
 
-  let partition_tf s ~f:p ~compare_elt =
-    let rec part ((t, f) as accu) = function
-      | Empty -> accu
-      | Leaf v -> if p v then add t v ~compare_elt, f else t, add f v ~compare_elt
-      | Node (l, v, r, _, _) ->
-        part (part (if p v then add t v ~compare_elt, f else t, add f v ~compare_elt) l) r
+  let partition_tf s ~f:p =
+    let rec loop = function
+      | Empty -> Empty, Empty
+      | Leaf v as t -> if p v then t, Empty else Empty, t
+      | Node (l, v, r, _, _) as t ->
+        let l't, l'f = loop l in
+        let keep_v_t = p v in
+        let r't, r'f = loop r in
+        let mk keep_v l' r' =
+          if keep_v && phys_equal l l' && phys_equal r r'
+          then t
+          else if keep_v
+          then join l' v r'
+          else concat l' r'
+        in
+        mk keep_v_t l't r't, mk (not keep_v_t) l'f r'f
     in
-    part (Empty, Empty) s
+    loop s [@nontail]
   ;;
 
   let rec elements_aux accu = function
@@ -958,21 +1036,24 @@ module Tree0 = struct
       res
   ;;
 
-  let map t ~f ~compare_elt = fold t ~init:empty ~f:(fun t x -> add t (f x) ~compare_elt)
+  let map t ~f ~compare_elt =
+    fold t ~init:empty ~f:(fun t x -> add t (f x) ~compare_elt) [@nontail]
+  ;;
 
-  let group_by set ~equiv ~compare_elt =
+  let group_by set ~equiv =
     let rec loop set equiv_classes =
       if is_empty set
       then equiv_classes
       else (
         let x = choose_exn set in
         let equiv_x, not_equiv_x =
-          partition_tf set ~f:(fun elt -> phys_equal x elt || equiv x elt) ~compare_elt
+          partition_tf set ~f:(fun elt -> phys_equal x elt || equiv x elt)
         in
         loop not_equiv_x (equiv_x :: equiv_classes))
     in
-    loop set []
+    loop set [] [@nontail]
   ;;
+
 
   let rec find t ~f =
     match t with
@@ -1053,13 +1134,13 @@ module Tree0 = struct
   ;;
 
   module Named = struct
-    type nonrec ('a, 'cmp) t =
-      { tree : 'a t
-      ; name : string
-      }
-
-    let is_subset (subset : _ t) ~of_:(superset : _ t) ~sexp_of_elt ~compare_elt =
-      let invalid_elements = diff subset.tree superset.tree ~compare_elt in
+    let is_subset
+          (subset : _ Named.t)
+          ~of_:(superset : _ Named.t)
+          ~sexp_of_elt
+          ~compare_elt
+      =
+      let invalid_elements = diff subset.set superset.set ~compare_elt in
       if is_empty invalid_elements
       then Ok ()
       else (
@@ -1091,10 +1172,25 @@ type ('a, 'comparator) t =
 type ('a, 'comparator) tree = 'a Tree0.t
 
 let like { tree = _; comparator } tree = { tree; comparator }
+
+let like_maybe_no_op ({ tree = old_tree; comparator } as old_t) tree =
+  if phys_equal old_tree tree then old_t else { tree; comparator }
+;;
+
 let compare_elt t = t.comparator.Comparator.compare
 
 module Accessors = struct
   let comparator t = t.comparator
+
+  let comparator_s (type k cmp) t : (k, cmp) Comparator.Module.t =
+    (module struct
+      type t = k
+      type comparator_witness = cmp
+
+      let comparator = t.comparator
+    end)
+  ;;
+
   let invariants t = Tree0.invariants t.tree ~compare_elt:(compare_elt t)
   let length t = Tree0.length t.tree
   let is_empty t = Tree0.is_empty t.tree
@@ -1108,7 +1204,7 @@ module Accessors = struct
   let to_list t = Tree0.to_list t.tree
   let to_array t = Tree0.to_array t.tree
   let fold t ~init ~f = Tree0.fold t.tree ~init ~f
-  let fold_until t ~init ~f = Tree0.fold_until t.tree ~init ~f
+  let fold_until t ~init ~f ~finish = Tree0.fold_until t.tree ~init ~f ~finish
   let fold_right t ~init ~f = Tree0.fold_right t.tree ~init ~f
   let fold_result t ~init ~f = Container.fold_result ~fold ~init ~f t
   let iter t ~f = Tree0.iter t.tree ~f
@@ -1121,7 +1217,7 @@ module Accessors = struct
   let find_exn t ~f = Tree0.find_exn t.tree ~f
   let find_map t ~f = Tree0.find_map t.tree ~f
   let mem t a = Tree0.mem t.tree a ~compare_elt:(compare_elt t)
-  let filter t ~f = like t (Tree0.filter t.tree ~f ~compare_elt:(compare_elt t))
+  let filter t ~f = like_maybe_no_op t (Tree0.filter t.tree ~f)
   let add t a = like t (Tree0.add t.tree a ~compare_elt:(compare_elt t))
   let remove t a = like t (Tree0.remove t.tree a ~compare_elt:(compare_elt t))
   let union t1 t2 = like t1 (Tree0.union t1.tree t2.tree ~compare_elt:(compare_elt t1))
@@ -1141,14 +1237,9 @@ module Accessors = struct
   ;;
 
   module Named = struct
-    type nonrec ('a, 'cmp) t =
-      { set : ('a, 'cmp) t
-      ; name : string
-      }
+    let to_named_tree (named : (_, _) t Named.t) = { named with set = named.set.tree }
 
-    let to_named_tree { set; name } = { Tree0.Named.tree = set.tree; name }
-
-    let is_subset (subset : (_, _) t) ~of_:(superset : (_, _) t) =
+    let is_subset subset ~of_:superset =
       Tree0.Named.is_subset
         (to_named_tree subset)
         ~of_:(to_named_tree superset)
@@ -1159,11 +1250,13 @@ module Accessors = struct
     let equal t1 t2 =
       Or_error.combine_errors_unit [ is_subset t1 ~of_:t2; is_subset t2 ~of_:t1 ]
     ;;
+
+    include Named
   end
 
   let partition_tf t ~f =
-    let tree_t, tree_f = Tree0.partition_tf t.tree ~f ~compare_elt:(compare_elt t) in
-    like t tree_t, like t tree_f
+    let tree_t, tree_f = Tree0.partition_tf t.tree ~f in
+    like_maybe_no_op t tree_t, like_maybe_no_op t tree_f
   ;;
 
   let split t a =
@@ -1171,10 +1264,17 @@ module Accessors = struct
     like t tree1, b, like t tree2
   ;;
 
-  let group_by t ~equiv =
-    List.map (Tree0.group_by t.tree ~equiv ~compare_elt:(compare_elt t)) ~f:(like t)
+  let split_le_gt t a =
+    let tree1, tree2 = Tree0.split_le_gt t.tree a ~compare_elt:(compare_elt t) in
+    like t tree1, like t tree2
   ;;
 
+  let split_lt_ge t a =
+    let tree1, tree2 = Tree0.split_lt_ge t.tree a ~compare_elt:(compare_elt t) in
+    like t tree1, like t tree2
+  ;;
+
+  let group_by t ~equiv = List.map (Tree0.group_by t.tree ~equiv) ~f:(like t)
   let nth t i = Tree0.nth t.tree i
   let remove_index t i = like t (Tree0.remove_index t.tree i ~compare_elt:(compare_elt t))
   let sexp_of_t sexp_of_a _ t = Tree0.sexp_of_t sexp_of_a t.tree
@@ -1241,12 +1341,12 @@ module Tree = struct
   let find_exn t ~f = Tree0.find_exn t ~f
   let find_map t ~f = Tree0.find_map t ~f
   let fold t ~init ~f = Tree0.fold t ~init ~f
-  let fold_until t ~init ~f = Tree0.fold_until t ~init ~f
+  let fold_until t ~init ~f ~finish = Tree0.fold_until t ~init ~f ~finish
   let fold_right t ~init ~f = Tree0.fold_right t ~init ~f
   let map ~comparator t ~f = Tree0.map t ~f ~compare_elt:(ce comparator)
-  let filter ~comparator t ~f = Tree0.filter t ~f ~compare_elt:(ce comparator)
+  let filter t ~f = Tree0.filter t ~f
   let filter_map ~comparator t ~f = Tree0.filter_map t ~f ~compare_elt:(ce comparator)
-  let partition_tf ~comparator t ~f = Tree0.partition_tf t ~f ~compare_elt:(ce comparator)
+  let partition_tf t ~f = Tree0.partition_tf t ~f
   let iter2 ~comparator a b ~f = Tree0.iter2 a b ~f ~compare_elt:(ce comparator)
   let mem ~comparator t a = Tree0.mem t a ~compare_elt:(ce comparator)
   let add ~comparator t a = Tree0.add t a ~compare_elt:(ce comparator)
@@ -1286,8 +1386,10 @@ module Tree = struct
     Tree0.stable_dedup_list xs ~compare_elt:(ce comparator)
   ;;
 
-  let group_by ~comparator t ~equiv = Tree0.group_by t ~equiv ~compare_elt:(ce comparator)
+  let group_by t ~equiv = Tree0.group_by t ~equiv
   let split ~comparator t a = Tree0.split t a ~compare_elt:(ce comparator)
+  let split_le_gt ~comparator t a = Tree0.split_le_gt t a ~compare_elt:(ce comparator)
+  let split_lt_ge ~comparator t a = Tree0.split_lt_ge t a ~compare_elt:(ce comparator)
   let nth t i = Tree0.nth t i
   let remove_index ~comparator t i = Tree0.remove_index t i ~compare_elt:(ce comparator)
   let sexp_of_t sexp_of_a _ t = Tree0.sexp_of_t sexp_of_a t
@@ -1406,15 +1508,6 @@ end
 type ('elt, 'cmp) comparator =
   (module Comparator.S with type t = 'elt and type comparator_witness = 'cmp)
 
-let comparator_s (type k cmp) t : (k, cmp) comparator =
-  (module struct
-    type t = k
-    type comparator_witness = cmp
-
-    let comparator = t.comparator
-  end)
-;;
-
 let to_comparator (type elt cmp) ((module M) : (elt, cmp) comparator) = M.comparator
 let empty m = Using_comparator.empty ~comparator:(to_comparator m)
 let singleton m a = Using_comparator.singleton ~comparator:(to_comparator m) a
@@ -1439,6 +1532,8 @@ let stable_dedup_list m a =
 
 let map m a ~f = Using_comparator.map ~comparator:(to_comparator m) a ~f
 let filter_map m a ~f = Using_comparator.filter_map ~comparator:(to_comparator m) a ~f
+let to_tree = Using_comparator.to_tree
+let of_tree m t = Using_comparator.of_tree ~comparator:(to_comparator m) t
 
 module M (Elt : sig
     type t
@@ -1513,7 +1608,6 @@ module Poly = struct
   type nonrec ('elt, 'cmp) set = ('elt, comparator_witness) t
   type nonrec 'elt t = ('elt, comparator_witness) t
   type nonrec 'elt tree = ('elt, comparator_witness) tree
-  type nonrec 'elt named = ('elt, comparator_witness) Named.t
 
   include Accessors
 

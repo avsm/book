@@ -1,3 +1,35 @@
+v1.2.0 2024-09-10 Zagreb
+------------------------
+
+- Fix fractional renderings of `Ptime.Span.pp` with leading zeros. For
+  example 1.036s would render as 1.36s. This is a *rendering* bug in a
+  function for human display, not a bug in the computations or
+  conversion functions of `Ptime`.
+- Add `Ptime.weekday` type for naming the result of the `Ptime.weekday`
+  function.
+- Regularize naming structure. The `ptime.clock.os` library is deprecated. 
+  Use `ptime.clock` instead.
+- Make the library `ptime.clock` export `ptime`.
+
+v1.1.0 2022-12-02 Zagreb
+------------------------
+
+- `Ptime.of_rfc3339` timezone offset parsing. Be even more lenient 
+   in non-strict parsing mode: allow `hhmm` and `hh` timezone offsets.
+   (strict is `hh:mm`). Allows to parse an even larger subset of 
+   ISO 8601 than RFC 3339 (#31).
+- Add `Ptime.{to,of}_year`. Less costly than extracting the first 
+  component of `Ptime.to_date_time`. Useful for example to find 
+  out which DST rules a timestamp is subjected to for rendering.
+- Add `?tz_offset_s` optional argument to `Ptime.{of,to}_date` (#32).
+- Add `Ptime.weekday_num`. An integer is often more convenient
+  than the enum value of `Ptime.weekday` (#30).
+- Add `Ptime.rfc3339_string_error` convenience function.
+- Use the new `js_of_ocaml` META `ocamlfind` standard to link 
+  JavaScript stubs (#28).
+- No longer install interfaces in the `ptime.clock` package,
+  this package is now empty.
+
 v1.0.0 2022-02-16 La Forclaz
 ----------------------------
 

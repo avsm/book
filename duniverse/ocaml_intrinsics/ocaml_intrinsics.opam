@@ -1,5 +1,5 @@
 opam-version: "2.0"
-version: "v0.15.0"
+version: "v0.16.2"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/ocaml_intrinsics"
@@ -11,7 +11,7 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"             {>= "4.08.0"}
+  "ocaml"             {>= "4.14.0"}
   "dune"              {>= "2.0.0"}
   "dune-configurator"
 ]
@@ -20,3 +20,4 @@ description: "
 Provides functions to invoke amd64 instructions (such as clz,popcnt,rdtsc,rdpmc)
      when available, or compatible software implementation on other targets.
 "
+available: (arch = "x86_64" | arch = "arm64") & os != "win32"

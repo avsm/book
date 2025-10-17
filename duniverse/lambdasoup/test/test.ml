@@ -47,7 +47,7 @@ let suites = [
     ("parse-select-list" >:: fun _ ->
       let soup = page "list" |> parse in
       let test selector expected_count =
-        assert_equal ~msg:selector
+        assert_equal ~msg:selector ~printer:string_of_int
           (soup |> select selector |> count) expected_count
       in
 
@@ -122,6 +122,14 @@ let suites = [
       test "p:empty" 1;
       test "ul li:not(:nth-child(1))" 2;
       test ":not(ul) > li" 2;
+      test ":has(#one)" 3;
+      test "ul:has([id=one])" 1;
+      test "ol:has(#one)" 0;
+      test "li:has([id=one])" 0;
+      test ":has(.odd)" 4;
+      test "ul:has(.even)" 1;
+      test ":has(ul)" 2;
+      test ":has(caption)" 0;
       test
         ("html:root > body.lists[class~=lists] > ul > li#one:nth-child(1) " ^
          "+ li#two")
@@ -130,7 +138,7 @@ let suites = [
     ("parse-select-quoted" >:: fun _ ->
       let soup = page "quoted" |> parse in
       let test selector expected_count =
-        assert_equal ~msg:selector
+        assert_equal ~msg:selector ~printer:string_of_int
           (soup |> select selector |> count) expected_count
       in
 
@@ -155,7 +163,9 @@ let suites = [
       test "[id=\"\\\"dquotes\\\"\"]" 1;
       test "[id=\"simple'quote\"]" 1;
       test "[id='simple\\'quote']" 1;
-      test "[id='back\\slash']" 1);
+      test "[id='back\\slash']" 1;
+      test "[id=\"bracket]\"]" 1;
+      test ":has([id=\"bracket]\"])" 2);
 
     ("parse-fail-quoted" >:: fun _ ->
       let soup = page "quoted" |> parse in
@@ -175,7 +185,7 @@ let suites = [
     ("parse-select-escaped" >:: fun _ ->
       let soup = page "quoted" |> parse in
       let test selector expected_count =
-        assert_equal ~msg:selector
+        assert_equal ~msg:selector ~printer:string_of_int
           (soup |> select selector |> count) expected_count
       in
 
@@ -196,7 +206,8 @@ let suites = [
     ("parse-select-html5" >:: fun _ ->
       let soup = page "html5" |> parse in
       let test selector expected_count =
-        assert_equal ~msg:selector (soup $$ selector |> count) expected_count
+        assert_equal ~msg:selector ~printer:string_of_int
+          (soup $$ selector |> count) expected_count
       in
 
       test "nav" 1;
@@ -208,7 +219,8 @@ let suites = [
       test "footer" 1);
 
     ("parse-select-google" >:: fun _ ->
-      assert_equal (page "google" |> parse $$ "form[action]" |> count) 1);
+      assert_equal ~printer:string_of_int
+        (page "google" |> parse $$ "form[action]" |> count) 1);
 
     ("parse-error" >:: fun _ ->
       let soup = parse "<p></p>" in
@@ -251,10 +263,34 @@ let suites = [
       test "[foo&=bar]" "invalid attribute operator '&='";
     );
 
+    ("from_signals" >:: fun _ ->
+      let soup =
+        [
+          `Start_element (("", "p"), []);
+          `Text ["a "];
+          `Start_element (("", "em"), []);
+          `Text ["b"];
+          `End_element;
+          `Text [" c "];
+          `Start_element (("", "em"), [("", "class"), "foo"]);
+          `Text ["d"];
+          `End_element;
+          `Text [" e"];
+          `End_element;
+        ]
+        |> Markup.of_list
+        |> from_signals
+      in
+      assert_equal (soup $$ ".foo" |> count) 1;
+      assert_equal (soup $ ".foo" |> name) "em";
+      assert_equal (soup $ ".foo" |> leaf_text) (Some "d");
+      assert_equal (soup |> texts |> String.concat "") "a b c d e";
+    );
+
     ("generalized-select" >:: fun _ ->
       let soup = page "list" |> parse in
       let test root selector expected_count =
-        assert_equal ~msg:selector
+        assert_equal ~msg:selector ~printer:string_of_int
           (root |> select selector |> count) expected_count
       in
 
@@ -267,7 +303,8 @@ let suites = [
 
     ("select-attribute-operators" >:: fun _ ->
       let soup = "<form action=\"/continue\"></form>" |> parse in
-      assert_equal (soup $$ "form[action=/continue]" |> count) 1);
+      assert_equal ~printer:string_of_int
+        (soup $$ "form[action=/continue]" |> count) 1);
 
     ("select_one" >:: fun _ ->
       let soup = page "list" |> parse in
@@ -320,6 +357,7 @@ let suites = [
       in
 
       value "body" "class" (Some "lists");
+      value "body" "my:attr" (Some "value");
       value "li#two" "id" (Some "two");
       value "html" "id" None;
 
@@ -347,7 +385,8 @@ let suites = [
     ("matches-selector" >:: fun _ ->
       let soup = parse "<div> <p id='foo'>bar</p> </div>" in
       let elem = select_one "div p#foo" soup |> unwrap_option in
-      assert_bool "element matches selector" (matches_selector soup "div p#foo" elem)
+      assert_bool "element matches selector"
+        (matches_selector soup "div p#foo" elem)
     );
 
     ("fold_attributes" >:: fun _ ->
@@ -754,7 +793,9 @@ let suites = [
       set_attribute "id" "foo" element;
       set_attribute "class" "foo bar" element;
 
+      assert_bool "not is_document" (is_document element |> not);
       assert_bool "is_element" (is_element element);
+      assert_bool "not is_text" (is_text element |> not);
       assert_equal (name element) "p";
 
       set_name "li" element;
@@ -770,7 +811,10 @@ let suites = [
     ("create_text" >:: fun _ ->
       let node = create_text "foo" in
 
+      assert_bool "not is_document" (is_document node |> not);
       assert_bool "not is_element" (is_element node |> not);
+      assert_bool "is_text" (is_text node);
+
       assert_equal (node |> leaf_text) (Some "foo");
       assert_equal (node |> texts) ["foo"];
       assert_equal (node |> parent) None;
@@ -779,7 +823,10 @@ let suites = [
     ("create_soup" >:: fun _ ->
       let soup = create_soup () in
 
+      assert_bool "is_document" (is_document soup);
       assert_bool "not is_element" (is_element soup |> not);
+      assert_bool "not is_text" (is_text soup |> not);
+
       assert_equal (soup |> children |> count) 0);
 
     ("create_element-fancy" >:: fun _ ->
@@ -868,6 +915,12 @@ let suites = [
       assert_equal
         (element |> texts)
         ["five"; "three"; "four"; "one"; "six"; "two"; "seven"]);
+
+    ("append-prepend-root" >:: fun _ ->
+      let soup = parse "test2" in
+      append_root soup (parse "test3");
+      prepend_root soup (parse "test1");
+      assert_equal (soup |> texts) ["test1"; "test2"; "test3"]);
 
     ("delete" >:: fun _ ->
       let body = page "list" |> parse $ "body" in

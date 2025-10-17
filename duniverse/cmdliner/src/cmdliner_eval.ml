@@ -1,10 +1,11 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2022 The cmdliner programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 type 'a eval_ok = [ `Ok of 'a | `Version | `Help ]
 type eval_error = [ `Parse | `Term | `Exn ]
+type 'a eval_exit = [ `Ok of 'a  | `Exit of Cmdliner_info.Exit.code ]
 
 let err_help s = "Term error, help requested for unknown command " ^ s
 let err_argv = "argv array must have at least one element"
@@ -247,6 +248,11 @@ let exit_status_of_result ?(term_err = Cmdliner_info.Exit.cli_error) = function
 | Error `Parse -> Cmdliner_info.Exit.cli_error
 | Error `Exn -> Cmdliner_info.Exit.internal_error
 
+let eval_value' ?help ?err ?catch ?env ?argv ?term_err cmd =
+  match eval_value ?help ?err ?catch ?env ?argv cmd with
+  | Ok (`Ok _ as v) -> v
+  | ret -> `Exit (exit_status_of_result ?term_err ret)
+
 let eval ?help ?err ?catch ?env ?argv ?term_err cmd =
   exit_status_of_result ?term_err @@
   eval_value ?help ?err ?catch ?env ?argv cmd
@@ -274,19 +280,3 @@ let eval_result'
   | Ok (`Ok (Ok c)) -> c
   | Ok (`Ok (Error msg)) -> pp_err err cmd ~msg; Cmdliner_info.Exit.some_error
   | r -> exit_status_of_result ?term_err r
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2022 The cmdliner programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

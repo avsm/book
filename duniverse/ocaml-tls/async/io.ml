@@ -3,10 +3,20 @@ open! Async
 include Io_intf
 
 module Tls_error = struct
+  module Alert = struct
+    type t = Tls.Packet.alert_type
+    let sexp_of_t a =
+      Sexplib.Sexp.Atom (Tls.Packet.alert_type_to_string a)
+  end
+  module Fail = struct
+    type t = Tls.Engine.failure
+    let sexp_of_t a =
+      Sexplib.Sexp.Atom (Tls.Engine.string_of_failure a)
+  end
   type t =
-    | Tls_alert of Tls.Packet.alert_type
+    | Tls_alert of Alert.t
     (** [Tls_alert] exception received from the other endpoint *)
-    | Tls_failure of Tls.Engine.failure
+    | Tls_failure of Fail.t
     (** [Tls_failure] exception while processing incoming data *)
     | Connection_closed
     | Connection_not_ready
@@ -29,8 +39,8 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
   type t =
     { fd : Fd.t
     ; mutable state : State.t
-    ; mutable linger : Cstruct.t option
-    ; recv_buf : Cstruct.t
+    ; mutable linger : string option
+    ; recv_buf : bytes
     }
 
   let tls_error = Fn.compose Deferred.Or_error.error_s Tls_error.sexp_of_t
@@ -38,12 +48,11 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
   let rec read_react t =
     let handle tls buf =
       match Tls.Engine.handle_tls tls buf with
-      | Ok (state, `Response resp, `Data data) ->
+      | Ok (state, eof, `Response resp, `Data data) ->
         t.state
-        <- (match state with
-          | `Ok tls -> Active tls
-          | `Eof -> Eof
-          | `Alert a -> Error (Tls_alert a));
+        <- (match eof with
+          | None -> Active state
+          | Some `Eof -> Eof);
         let%map () =
           match resp with
           | None -> return ()
@@ -51,7 +60,7 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
         in
         `Ok data
       | Error (alert, `Response resp) ->
-        t.state <- Error (Tls_failure alert);
+        t.state <- Error (match alert with `Alert a -> Tls_alert a | f -> Tls_failure f);
         let%bind () = Fd.write_full t.fd resp in
         read_react t
     in
@@ -64,18 +73,17 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
        | Active _, `Eof ->
          t.state <- Eof;
          return `Eof
-       | Active tls, `Ok n -> handle tls (Cstruct.sub t.recv_buf 0 n)
+       | Active tls, `Ok n -> handle tls (Stdlib.Bytes.sub_string t.recv_buf 0 n)
        | Error e, _ -> tls_error e
        | Eof, _ -> return `Eof)
   ;;
 
   let rec read t buf =
     let writeout res =
-      let open Cstruct in
-      let rlen = length res in
-      let n = min (length buf) rlen in
-      blit res 0 buf 0 n;
-      t.linger <- (if n < rlen then Some (sub res n (rlen - n)) else None);
+      let rlen = String.length res in
+      let n = min (Bytes.length buf) rlen in
+      Stdlib.Bytes.blit_string res 0 buf 0 n;
+      t.linger <- (if n < rlen then Some (Stdlib.String.sub res n (rlen - n)) else None);
       return n
     in
     match t.linger with
@@ -111,7 +119,7 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
       match mcs, t.linger with
       | None, _ -> ()
       | scs, None -> t.linger <- scs
-      | Some cs, Some l -> t.linger <- Some (Cstruct.append l cs)
+      | Some cs, Some l -> t.linger <- Some (l ^ cs)
     in
     match t.state with
     | Active tls when not (Tls.Engine.handshake_in_progress tls) -> return t
@@ -164,7 +172,7 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
       { state = Active (Tls.Engine.server config)
       ; fd
       ; linger = None
-      ; recv_buf = Cstruct.create 4096
+      ; recv_buf = Bytes.create 4096
       }
   ;;
 
@@ -174,7 +182,7 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
       | None -> config
       | Some host -> Tls.Config.peer config host
     in
-    let t = { state = Eof; fd; linger = None; recv_buf = Cstruct.create 4096 } in
+    let t = { state = Eof; fd; linger = None; recv_buf = Bytes.create 4096 } in
     let tls, init = Tls.Engine.client config' in
     let t = { t with state = Active tls } in
     let%bind () = Fd.write_full t.fd init in
@@ -183,10 +191,9 @@ module Make (Fd : Fd) : S with module Fd := Fd = struct
 
   let epoch t =
     match t.state with
-    | Active tls ->
-      (match Tls.Engine.epoch tls with
-       | `InitialEpoch -> assert false (* can never occur! *)
-       | `Epoch data -> Ok data)
+    | Active tls -> (match Tls.Engine.epoch tls with
+       | Ok _ as o -> o
+       | Error () -> Or_error.error_string "no TLS state available yet")
     | Eof -> Or_error.error_string "TLS state is end of file"
     | Error _ -> Or_error.error_string "TLS state is error"
   ;;

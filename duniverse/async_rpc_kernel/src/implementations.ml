@@ -21,26 +21,6 @@ let defer_result : 'a 'b. ('a Deferred.t, 'b) Result.t -> ('a, 'b) Result.t Defe
        | Some d -> return (Ok d))
 ;;
 
-module Deferred_immediate = Monad.Make (struct
-    type 'a t = 'a Deferred.t
-
-    let return = return
-
-    let bind d ~f =
-      match Deferred.peek d with
-      | None -> d >>= f
-      | Some x -> f x
-    ;;
-
-    let map d ~f =
-      match Deferred.peek d with
-      | None -> d >>| f
-      | Some x -> return (f x)
-    ;;
-
-    let map = `Custom map
-  end)
-
 module Responder = Implementation.Expert.Responder
 
 type 'connection_state on_unknown_rpc =
@@ -95,7 +75,8 @@ module Instance = struct
     ; connection_state : 'a
     ; connection_description : Info.t
     ; connection_close_started : Info.t Deferred.t
-    ; mutable last_dispatched_implementation :
+    ; mutable
+      last_dispatched_implementation :
         (Description.t * ('a Implementation.t[@sexp.opaque])) option
     (* [packed_self] is here so we can essentially pack an unpacked instance without doing
        any additional allocation. *)
@@ -126,12 +107,12 @@ module Instance = struct
       send_write_error t id ([%sexp_of: unit Transport.Send_result.t] r)
   ;;
 
-  let write_message t ~id bin_writer x =
+  let write_message t bin_writer x ~id =
     if not t.stopped
     then Writer.send_bin_prot t.writer bin_writer x |> handle_send_result t id
   ;;
 
-  let write_message_expert t ~id bin_writer x ~buf ~pos ~len =
+  let write_message_expert t bin_writer x ~buf ~pos ~len ~id =
     if not t.stopped
     then
       Writer.send_bin_prot_and_bigstring t.writer bin_writer x ~buf ~pos ~len
@@ -145,26 +126,15 @@ module Instance = struct
     write_message t ~id bin_writer (Response { id; data })
   ;;
 
-  module Cached_stream_writer : sig
-    type instance
-    type 'a t = 'a Implementation_types.Cached_stream_writer.t
+  module Cached_bin_writer : sig
+    type 'a t = 'a Implementation_types.Cached_bin_writer.t
 
     val create : id:P.Query_id.t -> bin_writer:'a Bin_prot.Type_class.writer -> 'a t
-    val write : 'a t -> instance -> P.Query_id.t -> 'a -> unit
-
-    val write_expert
-      :  'a t
-      -> instance
-      -> P.Query_id.t
-      -> buf:Bigstring.t
-      -> pos:int
-      -> len:int
-      -> unit
-
-    val write_string : 'a t -> instance -> P.Query_id.t -> string -> unit
-  end
-  with type instance := t = struct
-    type 'a t = 'a Implementation_types.Cached_stream_writer.t =
+    val prep_write : 'a t -> 'a -> ('a t * 'a) Bin_prot.Type_class.writer
+    val prep_write_expert : 'a t -> len:int -> 'a t Bin_prot.Type_class.writer
+    val prep_write_string : 'a t -> string -> ('a t * string) Bin_prot.Type_class.writer
+  end = struct
+    type 'a t = 'a Implementation_types.Cached_bin_writer.t =
       { header_prefix : string (* Bin_protted constant prefix of the message *)
       ; (* Length of the user data part. We set this field when sending a message. This
            relies on the fact that the message is serialized immediately (which is the
@@ -293,21 +263,19 @@ module Instance = struct
       { size = bin_size_message_as_string; write = bin_write_message_as_string }
     ;;
 
-    (* [write] and [write_string] both allocate 3 words for the tuples. [write_expert]
-       does not allocate. *)
-    let write t (T instance) id data =
+    let prep_write t data =
       t.data_len <- Nat0.of_int_exn (t.bin_writer.size data);
-      write_message instance ~id bin_writer_message (t, data)
+      bin_writer_message
     ;;
 
-    let write_string t (T instance) id str =
+    let prep_write_string t str =
       t.data_len <- Nat0.of_int_exn (String.length str);
-      write_message instance ~id bin_writer_message_as_string (t, str)
+      bin_writer_message_as_string
     ;;
 
-    let write_expert t (T instance) id ~buf ~pos ~len =
+    let prep_write_expert t ~len =
       t.data_len <- Nat0.of_int_exn len;
-      write_message_expert instance ~id bin_writer_nat0_header t ~buf ~pos ~len
+      bin_writer_nat0_header
     ;;
   end
 
@@ -322,7 +290,7 @@ module Instance = struct
       ; closed : unit Ivar.t
       ; instance : Instance.t
       ; query_id : P.Query_id.t
-      ; stream_writer : 'a Cached_stream_writer.t
+      ; stream_writer : 'a Cached_bin_writer.t
       ; groups : 'a group_entry Bag.t
       }
 
@@ -345,16 +313,38 @@ module Instance = struct
       write_response instance query_id P.Stream_response_data.bin_writer_nat0_t (Ok `Eof)
     ;;
 
-    let write_message { instance; stream_writer; query_id; _ } x =
-      Cached_stream_writer.write stream_writer instance query_id x
+    (* [write_message_string] and [write_message] both allocate 3 words for the tuples.
+       [write_message_expert] does not allocate. *)
+
+    let write_message_string t x =
+      let bin_writer_message_as_string =
+        Cached_bin_writer.prep_write_string t.stream_writer x
+      in
+      let (T instance) = t.instance in
+      write_message
+        instance
+        ~id:t.query_id
+        bin_writer_message_as_string
+        (t.stream_writer, x)
     ;;
 
-    let write_message_string { instance; stream_writer; query_id; _ } x =
-      Cached_stream_writer.write_string stream_writer instance query_id x
+    let write_message t x =
+      let bin_writer_message = Cached_bin_writer.prep_write t.stream_writer x in
+      let (T instance) = t.instance in
+      write_message instance ~id:t.query_id bin_writer_message (t.stream_writer, x)
     ;;
 
-    let write_message_expert { instance; stream_writer; query_id; _ } ~buf ~pos ~len =
-      Cached_stream_writer.write_expert stream_writer instance query_id ~buf ~pos ~len
+    let write_message_expert t ~buf ~pos ~len =
+      let bin_writer_message = Cached_bin_writer.prep_write_expert t.stream_writer ~len in
+      let (T instance) = t.instance in
+      write_message_expert
+        instance
+        ~id:t.query_id
+        bin_writer_message
+        t.stream_writer
+        ~buf
+        ~pos
+        ~len
     ;;
 
     let close_without_removing_from_instance t =
@@ -439,7 +429,109 @@ module Instance = struct
     | Error _ | Ok _ -> ()
   ;;
 
-  let apply_implementation
+  let authorization_failure_result error ~rpc_kind =
+    let exn = Error.to_exn error in
+    Rpc_result.uncaught_exn
+      exn
+      ~location:[%string "server-side %{rpc_kind} authorization"]
+  ;;
+
+  let apply_streaming_implementation
+        t
+        { Implementation.F.bin_query_reader; bin_init_writer; bin_update_writer; impl }
+        ~len
+        ~read_buffer
+        ~read_buffer_pos_ref
+        ~id
+        ~(on_exception : On_exception.t)
+        ~close_connection_monitor
+    =
+    let data =
+      bin_read_from_bigstring
+        bin_query_reader
+        read_buffer
+        ~pos_ref:read_buffer_pos_ref
+        ~len
+        ~location:"streaming_rpc server-side query un-bin-io'ing"
+    in
+    let (T instance) = t.packed_self in
+    let stream_writer = Cached_bin_writer.create ~id ~bin_writer:bin_update_writer in
+    let impl_with_state =
+      match impl with
+      | Pipe f -> `Pipe f
+      | Direct f ->
+        let writer : _ Direct_stream_writer.t =
+          { id = Direct_stream_writer.Id.create ()
+          ; state = Not_started (Queue.create ())
+          ; closed = Ivar.create ()
+          ; instance = t.packed_self
+          ; query_id = id
+          ; groups = Bag.create ()
+          ; stream_writer
+          }
+        in
+        Hashtbl.set t.open_streaming_responses ~key:id ~data:(Direct writer);
+        `Direct (f, writer)
+    in
+    let run_impl impl split_ok handle_ok =
+      let result =
+        Rpc_result.try_with
+          ?on_background_exception:on_exception.callback
+          (fun () -> defer_result (data >>|~ impl))
+          ~location:"server-side pipe_rpc computation"
+      in
+      Eager_deferred.upon result (function
+        | Error (Rpc_error.Uncaught_exn sexp as err) ->
+          Hashtbl.remove t.open_streaming_responses id;
+          write_response t id bin_init_writer (Error err);
+          On_exception.handle_exn
+            on_exception
+            ~close_connection_monitor
+            (Exn.create_s sexp)
+        | Error err ->
+          Hashtbl.remove t.open_streaming_responses id;
+          write_response t id bin_init_writer (Error err)
+        | Ok (Or_not_authorized.Not_authorized error) ->
+          Hashtbl.remove t.open_streaming_responses id;
+          write_response
+            t
+            id
+            bin_init_writer
+            (authorization_failure_result error ~rpc_kind:"pipe_rpc")
+        | Ok (Authorized (Error error)) ->
+          Hashtbl.remove t.open_streaming_responses id;
+          write_response t id bin_init_writer (Ok error)
+        | Ok (Authorized (Ok ok)) ->
+          let initial, rest = split_ok ok in
+          write_response t id bin_init_writer (Ok initial);
+          handle_ok rest)
+    in
+    match impl_with_state with
+    | `Pipe f ->
+      run_impl
+        (fun data -> f t.connection_state data)
+        Fn.id
+        (fun pipe_r ->
+           Hashtbl.set t.open_streaming_responses ~key:id ~data:(Pipe pipe_r);
+           don't_wait_for
+             (Writer.transfer t.writer pipe_r (fun data ->
+                let bin_writer_message = Cached_bin_writer.prep_write stream_writer data in
+                write_message instance ~id bin_writer_message (stream_writer, data)));
+           Pipe.closed pipe_r
+           >>> fun () ->
+           Pipe.upstream_flushed pipe_r
+           >>> function
+           | `Ok | `Reader_closed ->
+             write_response t id P.Stream_response_data.bin_writer_nat0_t (Ok `Eof);
+             Hashtbl.remove t.open_streaming_responses id)
+    | `Direct (f, writer) ->
+      run_impl
+        (fun data -> f t.connection_state data writer)
+        (fun x -> x, ())
+        (fun () -> Direct_stream_writer.start writer)
+  ;;
+
+  let apply_implementation'
         t
         implementation
         ~(query : Nat0.t P.Query.t)
@@ -464,7 +556,12 @@ module Instance = struct
        | Error _ as err -> Stop err
        | Ok q ->
          (try
-            f t.connection_state q;
+            (* We don't close connections on unauthorized RPCs. Since there is no way to
+               communicate failure back to the sender in one-way rpcs, we do nothing. The
+               deferred (and any deferred exceptions) are dropped here as a consequence of
+               [lift_deferred] existing for one-way rpcs. We use [Eager_deferred] so in
+               the non-blocking cases this will still run synchronously. *)
+            let (_ : _ Or_not_authorized.t Deferred.t) = f t.connection_state q in
             Continue
           with
           | exn ->
@@ -479,7 +576,9 @@ module Instance = struct
     | Implementation.F.One_way_expert f ->
       (try
          let len = (query.data :> int) in
-         f t.connection_state read_buffer ~pos:!read_buffer_pos_ref ~len;
+         let (_ : _ Or_not_authorized.t Deferred.t) =
+           f t.connection_state read_buffer ~pos:!read_buffer_pos_ref ~len
+         in
          read_buffer_pos_ref := !read_buffer_pos_ref + len;
          Continue
        with
@@ -501,11 +600,15 @@ module Instance = struct
           ~len:query.data
           ~location:"server-side rpc query un-bin-io'ing"
       in
+      let or_not_authorized_to_rpc_result = function
+        | Or_not_authorized.Authorized result -> Ok result
+        | Not_authorized error -> authorization_failure_result error ~rpc_kind:"rpc"
+      in
       (match result_mode with
        | Implementation.F.Blocking ->
          (try
-            query_contents
-            >>|~ f t.connection_state
+            Result.bind query_contents ~f:(fun query ->
+              f t.connection_state query |> or_not_authorized_to_rpc_result)
             |> write_response t id bin_response_writer
           with
           | exn ->
@@ -534,7 +637,13 @@ module Instance = struct
              ?on_background_exception:on_exception.callback
              ~run:`Now
              ~location:"server-side rpc computation"
-             (fun () -> defer_result (query_contents >>|~ f t.connection_state))
+             (fun () ->
+                match query_contents with
+                | Error err -> Deferred.return (Error err)
+                | Ok query ->
+                  Eager_deferred.map
+                    (f t.connection_state query)
+                    ~f:or_not_authorized_to_rpc_result)
          in
          (* In the common case that the implementation returns a value immediately, we will
             write the response immediately as well (this is also why the above [try_with]
@@ -571,10 +680,10 @@ module Instance = struct
           | Implementation.F.Deferred -> result
           | Implementation.F.Blocking -> Deferred.return result)
       in
-      let handle_exn ~is_uncaught_exn exn =
-        let result =
-          Rpc_result.uncaught_exn exn ~location:"server-side rpc expert computation"
-        in
+      let computation_failure_result exn =
+        Rpc_result.uncaught_exn exn ~location:"server-side rpc expert computation"
+      in
+      let handle_exn result =
         let result =
           if responder.responded
           then result
@@ -582,8 +691,6 @@ module Instance = struct
             write_response t id bin_writer_unit result;
             Ok ())
         in
-        if is_uncaught_exn
-        then On_exception.handle_exn on_exception ~close_connection_monitor exn;
         result
       in
       let check_responded () =
@@ -591,13 +698,12 @@ module Instance = struct
         then Ok ()
         else
           handle_exn
-            ~is_uncaught_exn:false
-            (Failure "Expert implementation did not reply")
+            (computation_failure_result (Failure "Expert implementation did not reply"))
       in
       let d =
-        let open Deferred_immediate.Let_syntax in
+        let open Eager_deferred.Let_syntax in
         match%map d with
-        | Ok result ->
+        | Ok (Authorized result) ->
           let d =
             match result with
             | Replied -> Deferred.unit
@@ -615,7 +721,12 @@ module Instance = struct
                    ~connection_close_started:t.connection_close_started
               |> ok_exn);
             Ok ())
-        | Error exn -> handle_exn ~is_uncaught_exn:true exn
+        | Ok (Not_authorized error) ->
+          handle_exn (authorization_failure_result error ~rpc_kind:"rpc expert")
+        | Error exn ->
+          let result = handle_exn (computation_failure_result exn) in
+          On_exception.handle_exn on_exception ~close_connection_monitor exn;
+          result
       in
       (match Deferred.peek d with
        | None ->
@@ -632,8 +743,7 @@ module Instance = struct
          (match result with
           | Ok () -> Continue
           | Error _ -> Stop result))
-    | Implementation.F.Streaming_rpc
-        (bin_query_reader, bin_init_writer, bin_update_writer, impl) ->
+    | Implementation.F.Streaming_rpc streaming_rpc ->
       let stream_query =
         bin_read_from_bigstring
           P.Stream_query.bin_reader_nat0_t
@@ -658,83 +768,36 @@ module Instance = struct
            | Pipe pipe -> Pipe.close_read pipe
            | Direct w -> Direct_stream_writer.close w)
        | Ok (`Query len) ->
-         let data =
-           bin_read_from_bigstring
-             bin_query_reader
-             read_buffer
-             ~pos_ref:read_buffer_pos_ref
-             ~len
-             ~location:"streaming_rpc server-side query un-bin-io'ing"
-         in
-         let stream_writer =
-           Cached_stream_writer.create ~id ~bin_writer:bin_update_writer
-         in
-         let impl_with_state =
-           match impl with
-           | Pipe f -> `Pipe f
-           | Direct f ->
-             let writer : _ Direct_stream_writer.t =
-               { id = Direct_stream_writer.Id.create ()
-               ; state = Not_started (Queue.create ())
-               ; closed = Ivar.create ()
-               ; instance = t.packed_self
-               ; query_id = id
-               ; groups = Bag.create ()
-               ; stream_writer
-               }
-             in
-             Hashtbl.set t.open_streaming_responses ~key:query.id ~data:(Direct writer);
-             `Direct (f, writer)
-         in
-         let run_impl impl split_ok handle_ok =
-           Rpc_result.try_with
-             ?on_background_exception:on_exception.callback
-             (fun () -> defer_result (data >>|~ impl))
-             ~location:"server-side pipe_rpc computation"
-           >>> function
-           | Error (Uncaught_exn sexp as err) ->
-             Hashtbl.remove t.open_streaming_responses id;
-             write_response t id bin_init_writer (Error err);
-             On_exception.handle_exn
-               on_exception
-               ~close_connection_monitor
-               (Exn.create_s sexp)
-           | Error err ->
-             Hashtbl.remove t.open_streaming_responses id;
-             write_response t id bin_init_writer (Error err)
-           | Ok (Error err) ->
-             Hashtbl.remove t.open_streaming_responses id;
-             write_response t id bin_init_writer (Ok err)
-           | Ok (Ok ok) ->
-             let initial, rest = split_ok ok in
-             write_response t id bin_init_writer (Ok initial);
-             handle_ok rest
-         in
-         (match impl_with_state with
-          | `Pipe f ->
-            run_impl
-              (fun data -> f t.connection_state data)
-              Fn.id
-              (fun pipe_r ->
-                 Hashtbl.set t.open_streaming_responses ~key:id ~data:(Pipe pipe_r);
-                 don't_wait_for
-                   (Writer.transfer
-                      t.writer
-                      pipe_r
-                      (Cached_stream_writer.write stream_writer t.packed_self id));
-                 Pipe.closed pipe_r
-                 >>> fun () ->
-                 Pipe.upstream_flushed pipe_r
-                 >>> function
-                 | `Ok | `Reader_closed ->
-                   write_response t id P.Stream_response_data.bin_writer_nat0_t (Ok `Eof);
-                   Hashtbl.remove t.open_streaming_responses id)
-          | `Direct (f, writer) ->
-            run_impl
-              (fun data -> f t.connection_state data writer)
-              (fun x -> x, ())
-              (fun () -> Direct_stream_writer.start writer)));
+         apply_streaming_implementation
+           t
+           streaming_rpc
+           ~len
+           ~read_buffer
+           ~read_buffer_pos_ref
+           ~id
+           ~on_exception
+           ~close_connection_monitor);
       Continue
+  ;;
+
+  let apply_implementation
+        t
+        implementation
+        ~(query : Nat0.t P.Query.t)
+        ~read_buffer
+        ~read_buffer_pos_ref
+        ~close_connection_monitor
+        ~on_exception
+    : _ Transport.Handler_result.t
+    =
+    apply_implementation'
+      t
+      implementation
+      ~query
+      ~read_buffer
+      ~read_buffer_pos_ref
+      ~close_connection_monitor
+      ~on_exception
   ;;
 
   let flush (T t) =
@@ -811,7 +874,9 @@ module Instance = struct
        | None ->
          (match on_unknown_rpc with
           | `Expert impl ->
-            let { P.Query.tag; version; id; data = len } = query in
+            let { P.Query.tag; version; id; metadata = (_ : string option); data = len } =
+              query
+            in
             let d =
               let responder = Responder.create id t.writer in
               impl
@@ -832,7 +897,7 @@ module Instance = struct
 
   let handle_query
         (T t)
-        ~query
+        ~(query : Nat0.t P.Query.t)
         ~read_buffer
         ~read_buffer_pos_ref
         ~close_connection_monitor
@@ -840,12 +905,13 @@ module Instance = struct
     if t.stopped || Writer.is_closed t.writer
     then Transport.Handler_result.Stop (Ok ())
     else
-      handle_query_internal
-        t
-        ~query
-        ~read_buffer
-        ~read_buffer_pos_ref
-        ~close_connection_monitor
+      Rpc_metadata.Private.with_metadata query.metadata ~f:(fun () ->
+        handle_query_internal
+          t
+          ~query
+          ~read_buffer
+          ~read_buffer_pos_ref
+          ~close_connection_monitor)
   ;;
 end
 
@@ -864,11 +930,7 @@ let create ~implementations:i's ~on_unknown_rpc =
     | `Duplicate -> Hash_set.add dups description);
   if not (Hash_set.is_empty dups)
   then Error (`Duplicate_implementations (Hash_set.to_list dups))
-  else
-    Ok
-      { implementations
-      ; on_unknown_rpc = (on_unknown_rpc :> _ on_unknown_rpc_with_expert)
-      }
+  else Ok { implementations; on_unknown_rpc :> _ on_unknown_rpc_with_expert }
 ;;
 
 let instantiate

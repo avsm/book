@@ -37,9 +37,9 @@ module V1_types = struct
         be treated like a regular [Sys.argv], so the array must have at least
         one element, and the first element will be treated as if it was the
         command name and thus ignored for the purposes of option processing. So
-        [~argv:\[||\]] is an error, [~argv:\[| "--verbose" |\]] will have no
-        effect, and [~argv:\[| "ignored"; "--verbose" |\]] will successfully
-        pass the verbose option. *)
+        [~argv:[||]] is an error, [~argv:[| "--verbose" |]] will have no effect,
+        and [~argv:[| "ignored"; "--verbose" |]] will successfully pass the
+        verbose option. *)
 
     val run_with_args :
       (?argv:string array ->
@@ -54,7 +54,7 @@ module V1_types = struct
         using the CLI. *)
   end
 
-  module type MAKER = functor (P : Platform.MAKER) (M : Monad.S) ->
+  module type MAKER = functor (_ : Platform.MAKER) (M : Monad.S) ->
     S with type return = unit M.t
 end
 
@@ -63,7 +63,7 @@ module type Cli = sig
     module type S = V1_types.S
     module type MAKER = V1_types.MAKER
 
-    module Make (P : Platform.MAKER) (M : Monad.S) :
+    module Make (_ : Platform.MAKER) (M : Monad.S) :
       V1_types.S with type return = unit M.t
   end
 end

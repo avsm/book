@@ -17,31 +17,27 @@ end
 module Callback_arity = struct
   type _ t =
     | Arity1 : ('a -> unit) t
+    | Arity1_local : (('a[@local]) -> unit) t
     | Arity2 : ('a -> 'b -> unit) t
     | Arity3 : ('a -> 'b -> 'c -> unit) t
     | Arity4 : ('a -> 'b -> 'c -> 'd -> unit) t
     | Arity5 : ('a -> 'b -> 'c -> 'd -> 'e -> unit) t
   [@@deriving sexp_of]
-end
 
-module On_subscription_after_first_write = struct
-  type t =
-    | Allow
-    | Allow_and_send_last_value
-    | Raise
-  [@@deriving enumerate, sexp_of]
-
-  let allow_subscription_after_first_write = function
-    | Allow -> true
-    | Allow_and_send_last_value -> true
-    | Raise -> false
+  let uses_local_args : type a. a t -> bool = function
+    | Arity1 -> false
+    | Arity1_local -> true
+    | Arity2 -> false
+    | Arity3 -> false
+    | Arity4 -> false
+    | Arity5 -> false
   ;;
 end
 
 module Last_value : sig
   type 'callback t
 
-  val create : 'callback Callback_arity.t -> 'callback t
+  val create_exn : 'callback Callback_arity.t -> 'callback t
   val set1 : ('a -> unit) t -> 'a -> unit
   val set2 : ('a -> 'b -> unit) t -> 'a -> 'b -> unit
   val set3 : ('a -> 'b -> 'c -> unit) t -> 'a -> 'b -> 'c -> unit
@@ -80,7 +76,14 @@ end = struct
 
   type 'callback t = 'callback tuple option ref
 
-  let create (type callback) (_arity : callback Callback_arity.t) : callback t = ref None
+  let create_exn (type callback) (arity : callback Callback_arity.t) : callback t =
+    if Callback_arity.uses_local_args arity
+    then
+      raise_s
+        [%message
+          "Cannot save last value when using local args" (arity : _ Callback_arity.t)];
+    ref None
+  ;;
 
   let set1 t a =
     match !t with
@@ -137,6 +140,27 @@ end = struct
   ;;
 end
 
+module On_subscription_after_first_write = struct
+  type t =
+    | Allow
+    | Allow_and_send_last_value
+    | Raise
+  [@@deriving enumerate, sexp_of]
+
+  let allow_subscription_after_first_write = function
+    | Allow -> true
+    | Allow_and_send_last_value -> true
+    | Raise -> false
+  ;;
+
+  let save_last_value_exn t callback_arity =
+    match t with
+    | Allow_and_send_last_value -> Some (Last_value.create_exn callback_arity)
+    | Allow -> None
+    | Raise -> None
+  ;;
+end
+
 module Bus_id = Unique_id.Int63 ()
 
 module Subscriber = struct
@@ -172,8 +196,8 @@ module Subscriber = struct
       ; [%message
         ""
           ~subscribers_index:
-            (if am_running_inline_test then None else Some subscribers_index
-                                                      : (int option[@sexp.option]))
+            (if Ppx_inline_test_lib.am_running then None else Some subscribers_index
+                                                              : (int option[@sexp.option]))
           (on_callback_raise : ((Error.t -> unit) option[@sexp.option]))
           ~extract_exn:
             (if extract_exn then Some true else None : (bool option[@sexp.option]))
@@ -490,6 +514,20 @@ let write_non_optimized t callbacks a1 =
   finish_write t
 ;;
 
+let write_local_non_optimized t callbacks (a1 [@local]) =
+  let len = t.num_subscribers in
+  let i = ref 0 in
+  while !i < len do
+    try
+      let callback = unsafe_get_callback callbacks !i in
+      incr i;
+      callback a1
+    with
+    | exn -> callback_raised t !i exn
+  done;
+  finish_write t
+;;
+
 let write2_non_optimized t callbacks a1 a2 =
   let len = t.num_subscribers in
   let i = ref 0 in
@@ -557,16 +595,35 @@ let[@inline always] write t a1 =
   match t.state with
   | Closed | Write_in_progress -> start_write_failing t
   | Ok_to_write ->
-    t.state <- Write_in_progress;
-    if t.num_subscribers = 1
+    if t.num_subscribers > 0
     then (
-      (try (unsafe_get_callback callbacks 0) a1 with
-       | exn -> callback_raised t 1 exn);
-      finish_write t)
-    else (write_non_optimized [@inlined never]) t callbacks a1;
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write_non_optimized [@inlined never]) t callbacks a1);
     (match t.last_value with
      | None -> ()
      | Some last_value -> Last_value.set1 last_value a1)
+;;
+
+let[@inline always] write_local t (a1 [@local]) =
+  let callbacks = t.callbacks in
+  t.write_ever_called <- true;
+  match t.state with
+  | Closed | Write_in_progress -> start_write_failing t
+  | Ok_to_write ->
+    if t.num_subscribers > 0
+    then (
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write_local_non_optimized [@inlined never]) t callbacks a1)
 ;;
 
 let[@inline always] write2 t a1 a2 =
@@ -575,13 +632,15 @@ let[@inline always] write2 t a1 a2 =
   match t.state with
   | Closed | Write_in_progress -> start_write_failing t
   | Ok_to_write ->
-    t.state <- Write_in_progress;
-    if t.num_subscribers = 1
+    if t.num_subscribers > 0
     then (
-      (try (unsafe_get_callback callbacks 0) a1 a2 with
-       | exn -> callback_raised t 1 exn);
-      finish_write t)
-    else (write2_non_optimized [@inlined never]) t callbacks a1 a2;
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 a2 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write2_non_optimized [@inlined never]) t callbacks a1 a2);
     (match t.last_value with
      | None -> ()
      | Some last_value -> Last_value.set2 last_value a1 a2)
@@ -593,13 +652,15 @@ let[@inline always] write3 t a1 a2 a3 =
   match t.state with
   | Closed | Write_in_progress -> start_write_failing t
   | Ok_to_write ->
-    t.state <- Write_in_progress;
-    if t.num_subscribers = 1
+    if t.num_subscribers > 0
     then (
-      (try (unsafe_get_callback callbacks 0) a1 a2 a3 with
-       | exn -> callback_raised t 1 exn);
-      finish_write t)
-    else (write3_non_optimized [@inlined never]) t callbacks a1 a2 a3;
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 a2 a3 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write3_non_optimized [@inlined never]) t callbacks a1 a2 a3);
     (match t.last_value with
      | None -> ()
      | Some last_value -> Last_value.set3 last_value a1 a2 a3)
@@ -611,13 +672,15 @@ let[@inline always] write4 t a1 a2 a3 a4 =
   match t.state with
   | Closed | Write_in_progress -> start_write_failing t
   | Ok_to_write ->
-    t.state <- Write_in_progress;
-    if t.num_subscribers = 1
+    if t.num_subscribers > 0
     then (
-      (try (unsafe_get_callback callbacks 0) a1 a2 a3 a4 with
-       | exn -> callback_raised t 1 exn);
-      finish_write t)
-    else (write4_non_optimized [@inlined never]) t callbacks a1 a2 a3 a4;
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 a2 a3 a4 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write4_non_optimized [@inlined never]) t callbacks a1 a2 a3 a4);
     (match t.last_value with
      | None -> ()
      | Some last_value -> Last_value.set4 last_value a1 a2 a3 a4)
@@ -629,13 +692,15 @@ let[@inline always] write5 t a1 a2 a3 a4 a5 =
   match t.state with
   | Closed | Write_in_progress -> start_write_failing t
   | Ok_to_write ->
-    t.state <- Write_in_progress;
-    if t.num_subscribers = 1
+    if t.num_subscribers > 0
     then (
-      (try (unsafe_get_callback callbacks 0) a1 a2 a3 a4 a5 with
-       | exn -> callback_raised t 1 exn);
-      finish_write t)
-    else (write5_non_optimized [@inlined never]) t callbacks a1 a2 a3 a4 a5;
+      t.state <- Write_in_progress;
+      if t.num_subscribers = 1
+      then (
+        (try (unsafe_get_callback callbacks 0) a1 a2 a3 a4 a5 with
+         | exn -> callback_raised t 1 exn);
+        finish_write t)
+      else (write5_non_optimized [@inlined never]) t callbacks a1 a2 a3 a4 a5);
     (match t.last_value with
      | None -> ()
      | Some last_value -> Last_value.set5 last_value a1 a2 a3 a4 a5)
@@ -646,7 +711,7 @@ let allow_subscription_after_first_write t =
     t.on_subscription_after_first_write
 ;;
 
-let create
+let create_exn
       ?name
       created_from
       callback_arity
@@ -654,10 +719,9 @@ let create
       ~on_callback_raise
   =
   let last_value =
-    match on_subscription_after_first_write with
-    | Allow_and_send_last_value -> Some (Last_value.create callback_arity)
-    | Allow -> None
-    | Raise -> None
+    On_subscription_after_first_write.save_last_value_exn
+      on_subscription_after_first_write
+      callback_arity
   in
   { bus_id = Bus_id.create ()
   ; name
@@ -807,7 +871,7 @@ let%test_module _ =
        another library and run with X_LIBRARY_INLINING=false, it fails. *)
     let%test_unit "write doesn't allocate when inlined" =
       let create created_from arity =
-        create
+        create_exn
           created_from
           arity
           ~on_subscription_after_first_write:Raise

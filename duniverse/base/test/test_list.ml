@@ -347,6 +347,26 @@ let%test_unit _ =
 ;;
 
 let%test_unit _ =
+  [%test_result: string]
+    (fold_right2_exn
+       ~f:(fun e1 e2 acc -> e1 ^ e2 ^ acc)
+       [ "1"; "2" ]
+       [ "a"; "b" ]
+       ~init:"3c")
+    ~expect:"1a2b3c"
+;;
+
+let%test_unit _ =
+  [%test_result: string Or_unequal_lengths.t]
+    (fold_right2
+       ~f:(fun e1 e2 acc -> e1 ^ e2 ^ acc)
+       [ "1"; "2" ]
+       [ "a"; "b"; "c" ]
+       ~init:"#")
+    ~expect:Or_unequal_lengths.Unequal_lengths
+;;
+
+let%test_unit _ =
   let l1 = Test_values.l1 in
   [%test_result: int list * int list]
     (unzip (zip_exn l1 (List.rev l1)))
@@ -459,8 +479,12 @@ let%test_module "group" =
 let%test_module "sort_and_group" =
   (module struct
     let%expect_test _ =
-      let compare =
-        Comparable.lift String.compare ~f:(String.rstrip ~drop:Char.is_digit)
+      let compare a b =
+        Comparable.lift
+          String.compare
+          ~f:(fun s -> String.rstrip ~drop:Char.is_digit s)
+          a
+          b
       in
       [%test_result: string list list]
         (sort_and_group [ "b1"; "c1"; "a1"; "a2"; "b2"; "a3" ] ~compare)
@@ -605,8 +629,9 @@ let%test_unit _ =
 
 let%test_unit _ =
   [%test_result: ((int * char) * (int * char)) option]
-    (find_consecutive_duplicate [ 0, 'a'; 1, 'b'; 2, 'b' ] ~equal:(fun (_, a) (_, b) ->
-       Char.( = ) a b))
+    (find_consecutive_duplicate
+       [ 0, 'a'; 1, 'b'; 2, 'b' ]
+       ~equal:(fun (_, a) (_, b) -> Char.( = ) a b))
     ~expect:(Some ((1, 'b'), (2, 'b')))
 ;;
 
@@ -773,16 +798,18 @@ let%test_unit _ =
 let%test_unit _ =
   [%test_result: int]
     (length
-       (dedup_and_sort [ 0, 1; 2, 2; 0, 2; 4, 1 ] ~compare:(fun (a, _) (b, _) ->
-          Int.compare a b)))
+       (dedup_and_sort
+          [ 0, 1; 2, 2; 0, 2; 4, 1 ]
+          ~compare:(fun (a, _) (b, _) -> Int.compare a b)))
     ~expect:3
 ;;
 
 let%test_unit _ =
   [%test_result: int]
     (length
-       (dedup_and_sort [ 0, 1; 2, 2; 0, 2; 4, 1 ] ~compare:(fun (_, a) (_, b) ->
-          Int.compare a b)))
+       (dedup_and_sort
+          [ 0, 1; 2, 2; 0, 2; 4, 1 ]
+          ~compare:(fun (_, a) (_, b) -> Int.compare a b)))
     ~expect:2
 ;;
 
@@ -880,8 +907,9 @@ let%test_unit _ =
 
 let%test_unit _ =
   [%test_result: bool]
-    (contains_dup [ 0, 1; 2, 2; 0, 2; 4, 1 ] ~compare:(fun (_, a) (_, b) ->
-       Int.compare a b))
+    (contains_dup
+       [ 0, 1; 2, 2; 0, 2; 4, 1 ]
+       ~compare:(fun (_, a) (_, b) -> Int.compare a b))
     ~expect:true
 ;;
 
@@ -928,16 +956,18 @@ let%test_unit _ =
 let%test_unit _ =
   [%test_result: int]
     (length
-       (find_all_dups [ 0, 1; 2, 2; 0, 2; 4, 1 ] ~compare:(fun (_, a) (_, b) ->
-          Int.compare a b)))
+       (find_all_dups
+          [ 0, 1; 2, 2; 0, 2; 4, 1 ]
+          ~compare:(fun (_, a) (_, b) -> Int.compare a b)))
     ~expect:2
 ;;
 
 let%test_unit _ =
   [%test_result: int]
     (length
-       (find_all_dups [ 0, 1; 2, 2; 0, 2; 4, 1 ] ~compare:(fun (a, _) (b, _) ->
-          Int.compare a b)))
+       (find_all_dups
+          [ 0, 1; 2, 2; 0, 2; 4, 1 ]
+          ~compare:(fun (a, _) (b, _) -> Int.compare a b)))
     ~expect:1
 ;;
 

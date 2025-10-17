@@ -25,26 +25,31 @@ let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
     ; length = length__009_
     ; elts = elts__011_
     } ->
-    let bnds__002_ = [] in
+    let bnds__002_ = ([] : _ Stdlib.List.t) in
     let bnds__002_ =
       let arg__012_ = Option_array.sexp_of_t _of_a__001_ elts__011_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "elts"; arg__012_ ] :: bnds__002_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "elts"; arg__012_ ] :: bnds__002_
+       : _ Stdlib.List.t)
     in
     let bnds__002_ =
       let arg__010_ = sexp_of_int length__009_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "length"; arg__010_ ] :: bnds__002_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "length"; arg__010_ ] :: bnds__002_
+       : _ Stdlib.List.t)
     in
     let bnds__002_ =
       let arg__008_ = sexp_of_int mask__007_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "mask"; arg__008_ ] :: bnds__002_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "mask"; arg__008_ ] :: bnds__002_
+       : _ Stdlib.List.t)
     in
     let bnds__002_ =
       let arg__006_ = sexp_of_int front__005_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "front"; arg__006_ ] :: bnds__002_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "front"; arg__006_ ] :: bnds__002_
+       : _ Stdlib.List.t)
     in
     let bnds__002_ =
       let arg__004_ = sexp_of_int num_mutations__003_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "num_mutations"; arg__004_ ] :: bnds__002_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "num_mutations"; arg__004_ ] :: bnds__002_
+       : _ Stdlib.List.t)
     in
     Sexplib0.Sexp.List bnds__002_
 ;;
@@ -169,7 +174,7 @@ let invariant invariant_a t =
 let create (type a) ?capacity () : a t =
   let capacity =
     match capacity with
-    | None -> 1
+    | None -> 2
     | Some capacity ->
       if capacity < 0
       then
@@ -197,23 +202,25 @@ let blit_to_array ~src dst =
   Option_array.blit ~len:rest_len ~src:src.elts ~src_pos:0 ~dst ~dst_pos:front_len
 ;;
 
+let set_capacity_internal t new_capacity =
+  let dst = Option_array.create ~len:new_capacity in
+  blit_to_array ~src:t dst;
+  t.front <- 0;
+  t.mask <- new_capacity - 1;
+  t.elts <- dst
+;;
+
 let set_capacity t desired_capacity =
   (* We allow arguments less than 1 to [set_capacity], but translate them to 1 to simplify
      the code that relies on the array length being a power of 2. *)
   inc_num_mutations t;
   let new_capacity = Int.ceil_pow2 (max 1 (max desired_capacity t.length)) in
-  if new_capacity <> capacity t
-  then (
-    let dst = Option_array.create ~len:new_capacity in
-    blit_to_array ~src:t dst;
-    t.front <- 0;
-    t.mask <- new_capacity - 1;
-    t.elts <- dst)
+  if new_capacity <> capacity t then set_capacity_internal t new_capacity
 ;;
 
 let enqueue t a =
   inc_num_mutations t;
-  if t.length = capacity t then set_capacity t (2 * t.length);
+  if t.length = capacity t then set_capacity_internal t (2 * t.length);
   unsafe_set t t.length a;
   t.length <- t.length + 1
 ;;
@@ -229,14 +236,15 @@ let dequeue_nonempty t =
   res
 ;;
 
-let dequeue_exn t = if is_empty t then raise Caml.Queue.Empty else dequeue_nonempty t
+let dequeue_exn t = if is_empty t then raise Stdlib.Queue.Empty else dequeue_nonempty t
 let dequeue t = if is_empty t then None else Some (dequeue_nonempty t)
+let dequeue_and_ignore_exn (type elt) (t : elt t) = ignore (dequeue_exn t : elt)
 let front_nonempty t = Option_array.unsafe_get_some_exn t.elts t.front
 let last_nonempty t = unsafe_get t (t.length - 1)
 let peek t = if is_empty t then None else Some (front_nonempty t)
-let peek_exn t = if is_empty t then raise Caml.Queue.Empty else front_nonempty t
+let peek_exn t = if is_empty t then raise Stdlib.Queue.Empty else front_nonempty t
 let last t = if is_empty t then None else Some (last_nonempty t)
-let last_exn t = if is_empty t then raise Caml.Queue.Empty else last_nonempty t
+let last_exn t = if is_empty t then raise Stdlib.Queue.Empty else last_nonempty t
 
 let clear t =
   inc_num_mutations t;
@@ -308,7 +316,7 @@ let foldi t ~init ~f =
   fold t ~init ~f:(fun acc a ->
     let acc = f !i acc a in
     i := !i + 1;
-    acc)
+    acc) [@nontail]
 ;;
 
 
@@ -476,11 +484,11 @@ let mapi t ~f =
   map t ~f:(fun a ->
     let result = f !i a in
     i := !i + 1;
-    result)
+    result) [@nontail]
 ;;
 
 let singleton x =
-  let t = create () in
+  let t = create ~capacity:1 () in
   enqueue t x;
   t
 ;;

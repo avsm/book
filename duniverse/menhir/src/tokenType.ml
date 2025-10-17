@@ -16,6 +16,12 @@ open BasicSyntax
 open IL
 open CodeBits
 
+(* The name of the interpreter sub-module, when the table back-end
+   is used. This name is later re-exported as [Interface.interpreter]. *)
+
+let interpreter =
+  "MenhirInterpreter"
+
 (* This is the conventional name of the [token] type, with no prefix. *)
 
 let tctoken =
@@ -38,6 +44,40 @@ let ttokengadt a =
 
 let ttokengadtdata token =
   "T_" ^ token
+
+(* The token type and the token GADTs can be referred to via a short
+   (unqualified) name, regardless of how they have been defined (either
+   directly or as an abbreviation). However, their data constructors must
+   be qualified if [--external-tokens] is set. *)
+
+(* When [--external-tokens M] is set, the data constructors of the type
+   [token] must be prefixed with [M.] and the data constructors of the type
+   [_ terminal] must be prefixed with [M.MenhirInterpreter]. This was fixed
+   on 2023/04/28. *)
+
+let tokenprefix id =
+  match Settings.token_type_mode with
+  | Settings.CodeOnly m ->
+      m ^ "." ^ id
+  | Settings.TokenTypeAndCode ->
+      id
+  | Settings.TokenTypeOnly ->
+      id (* irrelevant, really *)
+
+let tokendata =
+  tokenprefix
+
+let tokengadtprefix id =
+  match Settings.token_type_mode with
+  | Settings.CodeOnly m ->
+      m ^ "." ^ interpreter ^ "." ^ id
+  | Settings.TokenTypeAndCode ->
+      id
+  | Settings.TokenTypeOnly ->
+      id (* irrelevant, really *)
+
+let tokengadtdata token =
+  tokengadtprefix (ttokengadtdata token)
 
 (* This is the definition of the type of tokens. It is defined as an algebraic
    data type, unless [--external-tokens M] is set, in which case it is defined
@@ -129,13 +169,13 @@ let tokengadtdef grammar =
           }) (typed_tokens grammar)
         )
 
-    | Settings.CodeOnly m ->
+    | Settings.CodeOnly _ ->
 
         (* Type abbreviation. *)
 
         let param = "a" in
         param,
-        TAbbrev (TypApp (m ^ "." ^ tctokengadt, [ TypVar param ]))
+        TAbbrev (TypApp (tokengadtprefix tctokengadt, [ TypVar param ]))
 
   in
   [
@@ -161,9 +201,9 @@ let produce_tokentypes grammar =
 
       let i =
         tokentypedef grammar @
-        MList.ifnlazy Settings.inspection (fun () ->
-          tokengadtdef grammar
-        )
+        MList.ifnlazy Settings.inspection (fun () -> [
+              IIModule ("MenhirInterpreter", MTSigEnd (tokengadtdef grammar))
+            ])
       in
 
       let module P =
@@ -191,23 +231,3 @@ let produce_tokentypes grammar =
   | Settings.CodeOnly _
   | Settings.TokenTypeAndCode ->
       ()
-
-(* The token type and the token GADTs can be referred to via a short
-   (unqualified) name, regardless of how they have been defined (either
-   directly or as an abbreviation). However, their data constructors must
-   be qualified if [--external-tokens] is set. *)
-
-let tokenprefix id =
-  match Settings.token_type_mode with
-  | Settings.CodeOnly m ->
-      m ^ "." ^ id
-  | Settings.TokenTypeAndCode ->
-      id
-  | Settings.TokenTypeOnly ->
-      id (* irrelevant, really *)
-
-let tokendata =
-  tokenprefix
-
-let tokengadtdata token =
-  tokenprefix (ttokengadtdata token)

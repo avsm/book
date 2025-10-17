@@ -15,11 +15,13 @@
 #define random_t unsigned long long
 #define _rdseed_step _rdseed64_step
 #define _rdrand_step _rdrand64_step
+#define fill_bytes(buf, bufsz, off, data) memcpy(_bp_uint8_off(buf, off), data, 8)
 
 #elif defined (__i386__)
 #define random_t unsigned int
 #define _rdseed_step _rdseed32_step
 #define _rdrand_step _rdrand32_step
+#define fill_bytes(buf, bufsz, off, data) memcpy(_bp_uint8_off(buf, off), data, 4)
 
 #endif
 #endif /* __i386__ || __x86_64__ */
@@ -40,6 +42,25 @@
    output.
 */
 
+#if defined (_MSC_VER)
+#include <immintrin.h>
+#include <memory.h>
+
+#if defined (_WIN64)
+#define random_t unsigned long long
+#define _rdseed_step _rdseed64_step
+#define _rdrand_step _rdrand64_step
+#define fill_bytes(buf, bufsz, off, data) memcpy_s(_bp_uint8_off(buf, off), bufsz, data, 8)
+
+#elif defined (_WIN32)
+#define random_t unsigned int
+#define _rdseed_step _rdseed32_step
+#define _rdrand_step _rdrand32_step
+#define fill_bytes(buf, bufsz, off, data) memcpy_s(_bp_uint8_off(buf, off), bufsz, data, 4)
+#endif
+
+#endif /* _MSC_VER */
+
 #if defined (__arm__)
 /*
  * The ideal timing source on ARM are the performance counters, but these are
@@ -59,7 +80,7 @@
   __asm__ __volatile__ ("mrc p15, 0, %0, c9, c13, 0": "=r" (res));
 */
 #if defined(__ocaml_freestanding__) || defined(__ocaml_solo5__)
-static inline uint32_t read_virtual_count ()
+static inline uint32_t read_virtual_count (void)
 {
   uint32_t c_lo, c_hi;
   __asm__ __volatile__("mrrc p15, 1, %0, %1, c14":"=r"(c_lo), "=r"(c_hi));
@@ -72,7 +93,7 @@ https://chromium.googlesource.com/external/gperftools/+/master/src/base/cycleclo
    a kernel module also in user mode). Use clock_gettime as fallback.
  */
 #include <time.h>
-static inline uint32_t read_virtual_count ()
+static inline uint32_t read_virtual_count (void)
 {
   uint32_t pmccntr;
   uint32_t pmuseren;
@@ -118,10 +139,15 @@ static inline uint64_t read_cycle_counter(void)
 #endif
 
 #if defined (__riscv) && (64 == __riscv_xlen)
-static inline uint64_t rdcycle64(void)
+//since rdcycle is a privileged instruction since linux 6.6, we use rdtime when in user-space
+static inline uint64_t cycle_count(void)
 {
   uint64_t rval;
+#if defined(__ocaml_freestanding__) || defined(__ocaml_solo5__)
   __asm__ __volatile__ ("rdcycle %0" : "=r" (rval));
+#else
+  __asm__ __volatile__ ("rdtime %0" : "=r" (rval));
+#endif /* __ocaml_freestanding__ || __ocaml_solo5__ */
   return rval;
 }
 #endif
@@ -136,26 +162,36 @@ static inline uint64_t getticks(void)
 #endif
 
 #if defined (__mips__)
-static inline unsigned long get_count() {
+static inline unsigned long get_count(void) {
   unsigned long count;
   __asm__ __volatile__ ("rdhwr %[rt], $2" : [rt] "=d" (count));
   return count;
 }
 #endif
 
+#if defined (__loongarch_lp64)
+static inline unsigned long get_count(void) {
+  unsigned long count;
+  __asm__ __volatile__ ("rdtime.d %0, $zero\n" : "=r" (count));
+
+  return count;
+}
+#endif
 
 CAMLprim value mc_cycle_counter (value __unused(unit)) {
-#if defined (__i386__) || defined (__x86_64__)
+#if defined (__i386__) || defined (__x86_64__) || defined (_MSC_VER)
   return Val_long (__rdtsc ());
 #elif defined (__arm__) || defined (__aarch64__)
   return Val_long (read_virtual_count ());
 #elif defined(__powerpc64__)
   return Val_long (read_cycle_counter ());
 #elif defined(__riscv) && (64 == __riscv_xlen)
-  return Val_long (rdcycle64 ());
+  return Val_long (cycle_count ());
 #elif defined (__s390x__)
   return Val_long (getticks ());
 #elif defined(__mips__)
+  return Val_long (get_count());
+#elif defined(__loongarch_lp64)
   return Val_long (get_count());
 #else
 #error ("No known cycle-counting instruction.")
@@ -172,16 +208,14 @@ enum cpu_rng_t {
 
 static int __cpu_rng = RNG_NONE;
 
-#define RETRIES 10
-
-static void detect () {
+static void detect (void) {
 #ifdef __mc_ENTROPY__
   random_t r = 0;
 
   if (mc_detected_cpu_features.rdrand)
     /* AMD Ryzen 3000 bug where RDRAND always returns -1
        https://arstechnica.com/gadgets/2019/10/how-a-months-old-amd-microcode-bug-destroyed-my-weekend/ */
-    for (int i = 0; i < RETRIES; i++)
+    for (int i = 0; i < 10; i++)
       if (_rdrand_step(&r) == 1 && r != (random_t) (-1)) {
         __cpu_rng = RNG_RDRAND;
         break;
@@ -190,7 +224,7 @@ static void detect () {
   if (mc_detected_cpu_features.rdseed)
     /* RDSEED could return -1, thus we test it here
        https://www.reddit.com/r/Amd/comments/cmza34/agesa_1003_abb_fixes_rdrandrdseed/ */
-    for (int i = 0; i < RETRIES; i++)
+    for (int i = 0; i < 100; i++)
       if (_rdseed_step(&r) == 1 && r != (random_t) (-1)) {
         __cpu_rng |= RNG_RDSEED;
         break;
@@ -198,29 +232,35 @@ static void detect () {
 #endif
 }
 
-CAMLprim value mc_cpu_rdseed (value __unused(unit)) {
+CAMLprim value mc_cpu_rdseed (value buf, value off) {
 #ifdef __mc_ENTROPY__
   random_t r = 0;
   int ok = 0;
-  int i = RETRIES;
+  int i = 100;
   do { ok = _rdseed_step (&r); _mm_pause (); } while ( !(ok | !--i) );
-  return Val_long(r);
+  fill_bytes(buf, sizeof(r), off, &r);
+  return Val_bool (ok);
 #else
   /* ARM: CPU-assisted randomness here. */
-  return Val_long (0);
+  (void)buf;
+  (void)off;
+  return Val_false;
 #endif
 }
 
-CAMLprim value mc_cpu_rdrand (value __unused(unit)) {
+CAMLprim value mc_cpu_rdrand (value buf, value off) {
 #ifdef __mc_ENTROPY__
   random_t r = 0;
   int ok = 0;
-  int i = RETRIES;
+  int i = 10;
   do { ok = _rdrand_step (&r); } while ( !(ok | !--i) );
-  return Val_long(r);
+  fill_bytes(buf, sizeof(r), off, &r);
+  return Val_bool (ok);
 #else
   /* ARM: CPU-assisted randomness here. */
-  return Val_long (0);
+  (void)buf;
+  (void)off;
+  return Val_false;
 #endif
 }
 

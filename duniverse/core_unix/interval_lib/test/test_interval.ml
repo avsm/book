@@ -72,8 +72,8 @@ let%test_module _ =
            let equal = [%compare.equal: t]
 
            let tests =
-             let t1 = Time.Ofday.create ~hr:7 ~min:30 ~sec:7 ~ms:12 ~us:5 () in
-             let t2 = Time.Ofday.create ~hr:9 ~min:45 ~sec:8 ~ms:0 ~us:1 () in
+             let t1 = Time_float.Ofday.create ~hr:7 ~min:30 ~sec:7 ~ms:12 ~us:5 () in
+             let t2 = Time_float.Ofday.create ~hr:9 ~min:45 ~sec:8 ~ms:0 ~us:1 () in
              make_stable_unit_tests_v1
                ~coerce:V1.Private.to_ofday
                ~non_empty:
@@ -249,9 +249,7 @@ let%test_module "vs array" =
         interval_and_nearby_int
         ~sexp_of:[%sexp_of: t * int]
         ~f:(fun (t, i) ->
-          [%test_result: bool]
-            ~expect:(Array.mem ~equal:Int.equal (to_array t) i)
-            (mem t i))
+          [%test_result: bool] ~expect:(Array.mem ~equal:Int.equal (to_array t) i) (mem t i))
     ;;
 
     let%test_unit "binary_search" =
@@ -313,7 +311,6 @@ let%test_module _ =
     ;;
 
     let intervals = [ Int.empty; Int.empty ]
-
     let%test _ = Int.is_empty (Int.convex_hull intervals)
   end)
 ;;

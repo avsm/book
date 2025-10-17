@@ -1,6 +1,29 @@
 (** An interruptor provides a file descriptor that can be used to cause a
     file-descr-watcher to detect the file descriptor is ready for reading.  We use an
-    interruptor when a thread needs the Async scheduler to service a request. *)
+    interruptor when a thread needs the Async scheduler to service a request.
+
+    Knock, knock.
+    Who's there?
+    Interruptor cow.
+    Interrup-
+    {v
+       _________________________
+      /                         \
+      |   __  __  ____   ____   |
+      |  |  \/  |/ __ \ / __ \  |
+      |  | \  / | |  | | |  | | |
+      |  | |\/| | |  | | |  | | |
+      |  | |  | | |__| | |__| | |
+      |  |_|  |_|\____/ \____/  |
+      \                         /
+       -------------------------
+              \   ^__^
+               \  (oo)\_______
+                  (__)\       )\/\
+                      ||----w |
+                      ||     ||
+    v}
+*)
 
 open! Core
 open! Import
@@ -19,3 +42,7 @@ val thread_safe_interrupt : t -> unit
     any calls to [thread_safe_interrupt] after [clear t] returns (and prior to another
     call to [clear t]) will cause [read_fd] to become ready for reading. *)
 val clear : t -> unit
+
+(** [already_interrupted t] is true if [thread_safe_interrupt t] has completed since the
+    last call to [clear t]. *)
+val already_interrupted : t -> bool

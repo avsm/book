@@ -7,7 +7,7 @@ module Stable = struct
         | Next_fit
         | First_fit
         | Best_fit
-      [@@deriving bin_io, compare, equal, hash, sexp]
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
   end
 
@@ -15,7 +15,7 @@ module Stable = struct
     [%%if ocaml_version < (4, 12, 0)]
 
     module V1 = struct
-      type t = Caml.Gc.stat =
+      type t = Stdlib.Gc.stat =
         { minor_words : float
         ; promoted_words : float
         ; major_words : float
@@ -33,7 +33,7 @@ module Stable = struct
         ; top_heap_words : int
         ; stack_size : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp]
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     module V2 = struct
@@ -56,7 +56,7 @@ module Stable = struct
         ; stack_size : int
         ; forced_major_collections : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp]
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     [%%else]
@@ -80,11 +80,11 @@ module Stable = struct
         ; top_heap_words : int
         ; stack_size : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp]
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     module V2 = struct
-      type t = Caml.Gc.stat =
+      type t = Stdlib.Gc.stat =
         { minor_words : float
         ; promoted_words : float
         ; major_words : float
@@ -103,17 +103,19 @@ module Stable = struct
         ; stack_size : int
         ; forced_major_collections : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp]
+      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
     end
 
     [%%endif]
   end
 
   module Control = struct
+    [%%if ocaml_version < (5, 0, 0)]
+
     module V1 = struct
       [@@@ocaml.warning "-3"]
 
-      type t = Caml.Gc.control =
+      type t = Stdlib.Gc.control =
         { mutable minor_heap_size : int
         ; mutable major_heap_increment : int
         ; mutable space_overhead : int
@@ -126,18 +128,41 @@ module Stable = struct
         ; custom_minor_ratio : int
         ; custom_minor_max_size : int
         }
-      [@@deriving bin_io, compare, equal, sexp]
+      [@@deriving bin_io, compare, equal, sexp, stable_witness]
     end
+
+    [%%else]
+
+    module V1 = struct
+      [@@@ocaml.warning "-3"]
+
+      type t = Stdlib.Gc.control =
+        { minor_heap_size : int
+        ; major_heap_increment : int
+        ; space_overhead : int
+        ; verbose : int
+        ; max_overhead : int
+        ; stack_limit : int
+        ; allocation_policy : int
+        ; window_size : int
+        ; custom_major_ratio : int
+        ; custom_minor_ratio : int
+        ; custom_minor_max_size : int
+        }
+      [@@deriving bin_io, compare, equal, sexp, stable_witness]
+    end
+
+    [%%endif]
   end
 end
 
-include Caml.Gc
+include Stdlib.Gc
 
 module Stat = struct
   module T = struct
     [%%if ocaml_version < (4, 12, 0)]
 
-    type t = Caml.Gc.stat =
+    type t = Stdlib.Gc.stat =
       { minor_words : float
       ; promoted_words : float
       ; major_words : float
@@ -159,7 +184,7 @@ module Stat = struct
 
     [%%else]
 
-    type t = Caml.Gc.stat =
+    type t = Stdlib.Gc.stat =
       { minor_words : float
       ; promoted_words : float
       ; major_words : float
@@ -188,58 +213,63 @@ module Stat = struct
 
   [%%if ocaml_version < (4, 12, 0)]
 
-  let diff after before =
-    { minor_words = after.minor_words -. before.minor_words
-    ; promoted_words = after.promoted_words -. before.promoted_words
-    ; major_words = after.major_words -. before.major_words
-    ; minor_collections = after.minor_collections - before.minor_collections
-    ; major_collections = after.major_collections - before.major_collections
-    ; heap_words = after.heap_words - before.heap_words
-    ; heap_chunks = after.heap_chunks - before.heap_chunks
-    ; live_words = after.live_words - before.live_words
-    ; live_blocks = after.live_blocks - before.live_blocks
-    ; free_words = after.free_words - before.free_words
-    ; free_blocks = after.free_blocks - before.free_blocks
-    ; largest_free = after.largest_free - before.largest_free
-    ; fragments = after.fragments - before.fragments
-    ; compactions = after.compactions - before.compactions
-    ; top_heap_words = after.top_heap_words - before.top_heap_words
-    ; stack_size = after.stack_size - before.stack_size
+  let combine first second ~float_f ~int_f =
+    { minor_words = float_f first.minor_words second.minor_words
+    ; promoted_words = float_f first.promoted_words second.promoted_words
+    ; major_words = float_f first.major_words second.major_words
+    ; minor_collections = int_f first.minor_collections second.minor_collections
+    ; major_collections = int_f first.major_collections second.major_collections
+    ; heap_words = int_f first.heap_words second.heap_words
+    ; heap_chunks = int_f first.heap_chunks second.heap_chunks
+    ; live_words = int_f first.live_words second.live_words
+    ; live_blocks = int_f first.live_blocks second.live_blocks
+    ; free_words = int_f first.free_words second.free_words
+    ; free_blocks = int_f first.free_blocks second.free_blocks
+    ; largest_free = int_f first.largest_free second.largest_free
+    ; fragments = int_f first.fragments second.fragments
+    ; compactions = int_f first.compactions second.compactions
+    ; top_heap_words = int_f first.top_heap_words second.top_heap_words
+    ; stack_size = int_f first.stack_size second.stack_size
     }
   ;;
 
   [%%else]
 
-  let diff after before =
-    { minor_words = after.minor_words -. before.minor_words
-    ; promoted_words = after.promoted_words -. before.promoted_words
-    ; major_words = after.major_words -. before.major_words
-    ; minor_collections = after.minor_collections - before.minor_collections
-    ; major_collections = after.major_collections - before.major_collections
-    ; heap_words = after.heap_words - before.heap_words
-    ; heap_chunks = after.heap_chunks - before.heap_chunks
-    ; live_words = after.live_words - before.live_words
-    ; live_blocks = after.live_blocks - before.live_blocks
-    ; free_words = after.free_words - before.free_words
-    ; free_blocks = after.free_blocks - before.free_blocks
-    ; largest_free = after.largest_free - before.largest_free
-    ; fragments = after.fragments - before.fragments
-    ; compactions = after.compactions - before.compactions
-    ; top_heap_words = after.top_heap_words - before.top_heap_words
-    ; stack_size = after.stack_size - before.stack_size
+  let combine first second ~float_f ~int_f =
+    { minor_words = float_f first.minor_words second.minor_words
+    ; promoted_words = float_f first.promoted_words second.promoted_words
+    ; major_words = float_f first.major_words second.major_words
+    ; minor_collections = int_f first.minor_collections second.minor_collections
+    ; major_collections = int_f first.major_collections second.major_collections
+    ; heap_words = int_f first.heap_words second.heap_words
+    ; heap_chunks = int_f first.heap_chunks second.heap_chunks
+    ; live_words = int_f first.live_words second.live_words
+    ; live_blocks = int_f first.live_blocks second.live_blocks
+    ; free_words = int_f first.free_words second.free_words
+    ; free_blocks = int_f first.free_blocks second.free_blocks
+    ; largest_free = int_f first.largest_free second.largest_free
+    ; fragments = int_f first.fragments second.fragments
+    ; compactions = int_f first.compactions second.compactions
+    ; top_heap_words = int_f first.top_heap_words second.top_heap_words
+    ; stack_size = int_f first.stack_size second.stack_size
     ; forced_major_collections =
-        after.forced_major_collections - before.forced_major_collections
+        int_f first.forced_major_collections second.forced_major_collections
     }
   ;;
 
   [%%endif]
+
+  let add = combine ~float_f:Float.( + ) ~int_f:Int.( + )
+  let diff = combine ~float_f:Float.( - ) ~int_f:Int.( - )
 end
 
 module Control = struct
+  [%%if ocaml_version < (5, 0, 0)]
+
   module T = struct
     [@@@ocaml.warning "-3"]
 
-    type t = Caml.Gc.control =
+    type t = Stdlib.Gc.control =
       { mutable minor_heap_size : int
       ; mutable major_heap_increment : int
       ; mutable space_overhead : int
@@ -254,6 +284,29 @@ module Control = struct
       }
     [@@deriving compare, sexp_of, fields]
   end
+
+  [%%else]
+
+  module T = struct
+    [@@@ocaml.warning "-3"]
+
+    type t = Stdlib.Gc.control =
+      { minor_heap_size : int
+      ; major_heap_increment : int
+      ; space_overhead : int
+      ; verbose : int
+      ; max_overhead : int
+      ; stack_limit : int
+      ; allocation_policy : int
+      ; window_size : int
+      ; custom_major_ratio : int
+      ; custom_minor_ratio : int
+      ; custom_minor_max_size : int
+      }
+    [@@deriving compare, sexp_of, fields]
+  end
+
+  [%%endif]
 
   include T
   include Comparable.Make_plain (T)
@@ -339,14 +392,24 @@ external major_words : unit -> int = "core_gc_major_words" [@@noalloc]
 external promoted_words : unit -> int = "core_gc_promoted_words" [@@noalloc]
 external minor_collections : unit -> int = "core_gc_minor_collections" [@@noalloc]
 external major_collections : unit -> int = "core_gc_major_collections" [@@noalloc]
-external heap_words : unit -> int = "core_gc_heap_words" [@@noalloc]
-external heap_chunks : unit -> int = "core_gc_heap_chunks" [@@noalloc]
 external compactions : unit -> int = "core_gc_compactions" [@@noalloc]
-external top_heap_words : unit -> int = "core_gc_top_heap_words" [@@noalloc]
 external major_plus_minor_words : unit -> int = "core_gc_major_plus_minor_words"
 external allocated_words : unit -> int = "core_gc_allocated_words"
 external run_memprof_callbacks : unit -> unit = "core_gc_run_memprof_callbacks"
 
+[%%if ocaml_version < (5, 0, 0)]
+
+external heap_words : unit -> int = "core_gc_heap_words" [@@noalloc]
+external heap_chunks : unit -> int = "core_gc_heap_chunks" [@@noalloc]
+external top_heap_words : unit -> int = "core_gc_top_heap_words" [@@noalloc]
+
+[%%endif]
+
+let stat_size_lazy =
+  lazy (Obj.reachable_words (Obj.repr (Stdlib.Gc.quick_stat () : Stat.t)))
+;;
+
+let stat_size () = Lazy.force stat_size_lazy
 let zero = Sys.opaque_identity (int_of_string "0")
 
 (* The compiler won't optimize int_of_string away so it won't
@@ -354,18 +417,6 @@ let zero = Sys.opaque_identity (int_of_string "0")
 let rec keep_alive o = if zero <> 0 then keep_alive (Sys.opaque_identity o)
 
 module For_testing = struct
-  let prepare_heap_to_count_minor_allocation () =
-    (* We call [minor] to empty the minor heap, so that our allocation is unlikely to
-       trigger a minor gc. *)
-    minor ();
-    (* We allocate two words in case the [Gc.minor] finishes a major gc cycle, in which
-       case it requests a minor gc to occur at the next minor allocation.  We don't want
-       the subsequent minor allocation to trigger a minor GC, because there is a bug
-       (https://github.com/ocaml/ocaml/issues/7798) in the OCaml runtime that double
-       counts [Gc.minor_words] in that case. *)
-    ignore (Sys.opaque_identity (ref (Sys.opaque_identity 1)) : int ref)
-  ;;
-
   (* We disable inlining for this function so the GC stats and the call to [f] are never
      rearranged. *)
   let[@cold] measure_internal ~on_result f =
@@ -384,11 +435,7 @@ module For_testing = struct
   let is_zero_alloc (type a) (f : unit -> a) =
     (* Instead of using [Allocation_report.measure], and matching on the result, we use
        this construction, in order to have [is_zero_alloc] not allocate itself. This
-       enables [is_zero_alloc] to be used in a nested way.
-
-       This also means we cannot call [prepare_heap_to_count_minor_allocation]. This is
-       okay, since we do not need a precise count, we only need to check if the count is
-       zero or not. *)
+       enables [is_zero_alloc] to be used in a nested way. *)
     measure_internal
       f
       ~on_result:(fun ~major_words_allocated ~minor_words_allocated value ->
@@ -409,7 +456,6 @@ module For_testing = struct
   end
 
   let measure_allocation f =
-    prepare_heap_to_count_minor_allocation ();
     measure_internal f ~on_result:(fun ~major_words_allocated ~minor_words_allocated x ->
       x, Allocation_report.create ~major_words_allocated ~minor_words_allocated)
   ;;
@@ -429,11 +475,11 @@ module For_testing = struct
     let log : Allocation_log.t list ref = ref []
     and major_allocs = ref 0
     and minor_allocs = ref 0 in
-    let on_alloc ~is_major (info : Caml.Gc.Memprof.allocation) =
+    let on_alloc ~is_major (info : Stdlib.Gc.Memprof.allocation) =
       if is_major
       then major_allocs := !major_allocs + info.n_samples
       else minor_allocs := !minor_allocs + info.n_samples;
-      let backtrace = Caml.Printexc.raw_backtrace_to_string info.callstack in
+      let backtrace = Stdlib.Printexc.raw_backtrace_to_string info.callstack in
       (* Make backtraces easier to read by deleting everything below this function *)
       let backtrace =
         match String.substr_index backtrace ~pattern:"measure_and_log_allocation" with
@@ -453,12 +499,12 @@ module For_testing = struct
       None
     in
     let tracker =
-      { Caml.Gc.Memprof.null_tracker with
+      { Stdlib.Gc.Memprof.null_tracker with
         alloc_minor = on_alloc ~is_major:false
       ; alloc_major = on_alloc ~is_major:true
       }
     in
-    Caml.Gc.Memprof.start ~sampling_rate:1.0 tracker;
+    Stdlib.Gc.Memprof.start ~sampling_rate:1.0 tracker;
     (* Exn.protect, manually inlined to guarantee no allocations *)
     let result =
       match f () with
@@ -467,11 +513,11 @@ module For_testing = struct
            delayed if they happened during C code and there has been no allocation since),
            so we explictly flush them *)
         run_memprof_callbacks ();
-        Caml.Gc.Memprof.stop ();
+        Stdlib.Gc.Memprof.stop ();
         x
       | exception e ->
         run_memprof_callbacks ();
-        Caml.Gc.Memprof.stop ();
+        Stdlib.Gc.Memprof.stop ();
         raise e
     in
     ( result
@@ -493,7 +539,7 @@ end
 
 module Expert = struct
   let add_finalizer x f =
-    try Caml.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
+    try Stdlib.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
     | Invalid_argument _ ->
       (* The type of add_finalizer ensures that the only possible failure
          is due to [x] being static data. In this case, we simply drop the
@@ -507,7 +553,7 @@ module Expert = struct
      receives a heap block, which ensures that it will not raise, while
      [add_finalizer_exn] accepts any type, and so may raise. *)
   let add_finalizer_exn x f =
-    try Caml.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
+    try Stdlib.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
     | Invalid_argument _ ->
       ignore (Heap_block.create x : _ Heap_block.t option);
       (* If [Heap_block.create] succeeds then [x] is static data and so
@@ -516,7 +562,7 @@ module Expert = struct
   ;;
 
   let add_finalizer_last x f =
-    try Caml.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
+    try Stdlib.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
     | Invalid_argument _ ->
       (* The type of add_finalizer_last ensures that the only possible failure
          is due to [x] being static data. In this case, we simply drop the
@@ -526,7 +572,7 @@ module Expert = struct
   ;;
 
   let add_finalizer_last_exn x f =
-    try Caml.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
+    try Stdlib.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
     | Invalid_argument _ ->
       ignore (Heap_block.create x : _ Heap_block.t option);
       (* If [Heap_block.create] succeeds then [x] is static data and so
@@ -534,7 +580,7 @@ module Expert = struct
       ()
   ;;
 
-  let finalize_release = Caml.Gc.finalise_release
+  let finalize_release = Stdlib.Gc.finalise_release
 
   module Alarm = struct
     type t = alarm

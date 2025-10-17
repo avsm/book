@@ -59,18 +59,18 @@ module Pipe_simple_test = struct
         in
         let reader, writer = Pipe.create () in
         let total_msgs = ref 0 in
-        let start = Time.now () in
+        let start = Time_float.now () in
         Pipe.set_size_budget reader 1000;
         let string = String.init bytes ~f:(fun _ -> 'A') in
         let stop = Pipe.closed writer in
-        Clock.every ~stop (Time.Span.of_sec 1.) (fun () ->
+        Clock.every ~stop (Time_float.Span.of_sec 1.) (fun () ->
           Log.Global.printf "Queue size: %d" (Pipe.length reader));
-        Clock.every ~stop (Time.Span.of_sec 1.) (fun () ->
+        Clock.every ~stop (Time_float.Span.of_sec 1.) (fun () ->
           Log.Global.printf
             "Messages per sec: %f"
             (Float.of_int !total_msgs
-             /. Time.Span.to_sec (Time.diff (Time.now ()) start)));
-        let prev = ref (Time.now ()) in
+             /. Time_float.Span.to_sec (Time_float.diff (Time_float.now ()) start)));
+        let prev = ref (Time_float.now ()) in
         let () =
           match t with
           | None ->
@@ -82,10 +82,10 @@ module Pipe_simple_test = struct
             in
             loop ()
           | Some t ->
-            Clock.every' ~stop (Time.Span.of_sec 1.) (fun () ->
+            Clock.every' ~stop (Time_float.Span.of_sec 1.) (fun () ->
               let msgs =
-                let new_time = Time.now () in
-                let diff = Time.Span.to_sec (Time.diff new_time !prev) in
+                let new_time = Time_float.now () in
+                let diff = Time_float.Span.to_sec (Time_float.diff new_time !prev) in
                 Log.Global.printf "The diff is %f\n" diff;
                 prev := new_time;
                 Int.of_float (diff *. Int.to_float t.msgs_per_sec)
@@ -122,7 +122,7 @@ module Pipe_simple_test = struct
     let init () =
       let major_cycles = ref 0 in
       ignore (Gc.Alarm.create (fun () -> incr major_cycles));
-      Clock.every (Time.Span.of_sec 5.) (fun () ->
+      Clock.every (Time_float.Span.of_sec 5.) (fun () ->
         Log.Global.printf "%d major cycles" !major_cycles)
     ;;
   end
@@ -142,11 +142,11 @@ module Pipe_simple_test = struct
       | Error t -> Nothing.unreachable_code t
       | Ok (pipe, _) ->
         let msgs = ref 0 in
-        let start = Time.now () in
+        let start = Time_float.now () in
         let _msg_size = Byte_units.bytes_int_exn bytes in
-        Clock.every (Time.Span.of_sec 1.) (fun () ->
-          let now = Time.now () in
-          let secs = Time.Span.to_sec (Time.diff now start) in
+        Clock.every (Time_float.Span.of_sec 1.) (fun () ->
+          let now = Time_float.now () in
+          let secs = Time_float.Span.to_sec (Time_float.diff now start) in
           Log.Global.printf "%f msgs per sec" (Float.of_int !msgs /. secs));
         Pipe.iter_without_pushback pipe ~f:(fun _string -> incr msgs)
     ;;
@@ -162,6 +162,7 @@ module Pipe_simple_test = struct
           +> flag "port" (required int) ~doc:""
           ++ Rpc_impl.spec ())
         main
+        ~behave_nicely_in_pipeline:false
     ;;
   end
 
@@ -193,6 +194,7 @@ module Pipe_simple_test = struct
         ~summary:"test server"
         Command.Spec.(empty +> flag "port" (required int) ~doc:"" ++ Rpc_impl.spec ())
         main
+        ~behave_nicely_in_pipeline:false
     ;;
   end
 
@@ -251,6 +253,7 @@ module Heartbeat_pipe_test = struct
       ~summary:"test that heartbeat handlers are installed correctly"
       Command.Spec.empty
       main
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -316,7 +319,11 @@ module Pipe_closing_test = struct
   ;;
 
   let command =
-    Command.async_spec ~summary:"test behavior of closing pipes" Command.Spec.empty main
+    Command.async_spec
+      ~summary:"test behavior of closing pipes"
+      Command.Spec.empty
+      main
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -326,7 +333,7 @@ module Pipe_iter_test = struct
       ()
       ~name:"dispatch-iter-test"
       ~version:1
-      ~bin_query:Time.Span.bin_t
+      ~bin_query:Time_float.Span.bin_t
       ~bin_response:Int.bin_t
       ~bin_error:Nothing.bin_t
   ;;
@@ -371,7 +378,7 @@ module Pipe_iter_test = struct
          let next_expected : [ `Update of int | `Closed_remotely ] ref = ref (`Update 0) in
          let finished = Ivar.create () in
          let%bind (_ : Pipe_rpc.Id.t) =
-           dispatch_exn Time.Span.millisecond (function
+           dispatch_exn Time_float.Span.millisecond (function
              | Update n ->
                (match !next_expected with
                 | `Update n' ->
@@ -390,7 +397,7 @@ module Pipe_iter_test = struct
          let%bind () = Ivar.read finished in
          let finished = Ivar.create () in
          let%bind id =
-           dispatch_exn Time.Span.second (function
+           dispatch_exn Time_float.Span.second (function
              | Update _ -> assert false
              | Closed `By_remote_side ->
                Ivar.fill finished ();
@@ -401,7 +408,7 @@ module Pipe_iter_test = struct
          let%bind () = Ivar.read finished in
          let finished = Ivar.create () in
          let%bind (_ : Pipe_rpc.Id.t) =
-           dispatch_exn Time.Span.second (function
+           dispatch_exn Time_float.Span.second (function
              | Update _ | Closed `By_remote_side -> assert false
              | Closed (`Error _) ->
                Ivar.fill finished ();
@@ -413,7 +420,11 @@ module Pipe_iter_test = struct
   ;;
 
   let command =
-    Command.async_spec ~summary:"test behavior of dispatch_iter" Command.Spec.empty main
+    Command.async_spec
+      ~summary:"test behavior of dispatch_iter"
+      Command.Spec.empty
+      main
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -441,7 +452,8 @@ module Pipe_direct_test = struct
          | `Close -> Pipe_rpc.Direct_stream_writer.close writer
          | `Expect_auto_close n ->
            let ivar = auto_close_was_ok.(n) in
-           upon (Clock.after Time.Span.second) (fun () -> Ivar.fill_if_empty ivar false);
+           upon (Clock.after Time_float.Span.second) (fun () ->
+             Ivar.fill_if_empty ivar false);
            upon (Pipe_rpc.Direct_stream_writer.closed writer) (fun () ->
              Ivar.fill_if_empty ivar true));
         return (Ok ()))
@@ -495,6 +507,7 @@ module Pipe_direct_test = struct
       ~summary:"test behavior of implement_direct"
       Command.Spec.empty
       main
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -659,7 +672,9 @@ module Rpc_performance_measurements = struct
       ~summary:"test server for one-way and regular rpcs"
       Command.Spec.(empty +> flag "port" (required int) ~doc:"" ++ Rpc_impl.spec ())
       Server.main
+      ~behave_nicely_in_pipeline:false
   ;;
+
 
   let client_flags =
     let open Command.Spec in
@@ -674,15 +689,26 @@ module Rpc_performance_measurements = struct
     Command.group
       ~summary:"Clients"
       [ ( "one-way"
-        , Command.async_spec ~summary:"client for one-way rpc" client_flags one_way_client
+        , Command.async_spec
+            ~summary:"client for one-way rpc"
+            client_flags
+            one_way_client
+            ~behave_nicely_in_pipeline:false
         )
       ; ( "rpc"
-        , Command.async_spec ~summary:"client for regular rpc" client_flags rpc_client )
+        , Command.async_spec
+            ~summary:"client for regular rpc"
+            client_flags
+            rpc_client
+            ~behave_nicely_in_pipeline:false
+        )
       ; ( "pipe"
         , Command.async_spec
             ~summary:"client for pipe rpc"
             client_flags
-            Pipe_rpc_performance_measurements.Client.main )
+            Pipe_rpc_performance_measurements.Client.main
+            ~behave_nicely_in_pipeline:false
+        )
       ]
   ;;
 end
@@ -788,34 +814,37 @@ module Rpc_expert_test = struct
     let%bind result =
       Rpc_impl.with_client rpc_impl "127.0.0.1" port (fun conn ->
         let%bind () =
-          Deferred.List.iter [ unknown_raw_rpc; raw_rpc; normal_rpc ] ~f:(fun rpc ->
-            Log.debug log "sending %s query normally" (Rpc.name rpc);
-            let%bind response = Rpc.dispatch_exn rpc conn the_query in
-            Log.debug log "got response";
-            [%test_result: string] response ~expect:the_response;
-            let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
-            Log.debug log "sending %s query via Expert interface" (Rpc.name rpc);
-            let%map response =
-              Deferred.create (fun i ->
-                ignore
-                  (Rpc.Expert.schedule_dispatch
-                     conn
-                     ~rpc_tag:(Rpc.name rpc)
-                     ~version:(Rpc.version rpc)
-                     buf
-                     ~pos:0
-                     ~len:(Bigstring.length buf)
-                     ~handle_error:(fun e -> Ivar.fill i (Error e))
-                     ~handle_response:(fun buf ~pos ~len ->
-                       let pos_ref = ref pos in
-                       let response = String.bin_read_t buf ~pos_ref in
-                       assert (!pos_ref - pos = len);
-                       Ivar.fill i (Ok response);
-                       Deferred.unit)
-                   : [ `Connection_closed | `Flushed of unit Deferred.t ]))
-            in
-            Log.debug log "got response";
-            [%test_result: string Or_error.t] response ~expect:(Ok the_response))
+          Deferred.List.iter
+            ~how:`Sequential
+            [ unknown_raw_rpc; raw_rpc; normal_rpc ]
+            ~f:(fun rpc ->
+              Log.debug log "sending %s query normally" (Rpc.name rpc);
+              let%bind response = Rpc.dispatch_exn rpc conn the_query in
+              Log.debug log "got response";
+              [%test_result: string] response ~expect:the_response;
+              let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
+              Log.debug log "sending %s query via Expert interface" (Rpc.name rpc);
+              let%map response =
+                Deferred.create (fun i ->
+                  ignore
+                    (Rpc.Expert.schedule_dispatch
+                       conn
+                       ~rpc_tag:(Rpc.name rpc)
+                       ~version:(Rpc.version rpc)
+                       buf
+                       ~pos:0
+                       ~len:(Bigstring.length buf)
+                       ~handle_error:(fun e -> Ivar.fill i (Error e))
+                       ~handle_response:(fun buf ~pos ~len ->
+                         let pos_ref = ref pos in
+                         let response = String.bin_read_t buf ~pos_ref in
+                         assert (!pos_ref - pos = len);
+                         Ivar.fill i (Ok response);
+                         Deferred.unit)
+                     : [ `Connection_closed | `Flushed of unit Deferred.t ]))
+              in
+              Log.debug log "got response";
+              [%test_result: string Or_error.t] response ~expect:(Ok the_response))
         in
         let%bind () =
           let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
@@ -842,28 +871,28 @@ module Rpc_expert_test = struct
           Log.debug log "got response";
           [%test_result: string Or_error.t] response ~expect:(Ok the_response)
         in
-        Deferred.List.iter [ raw_one_way_rpc; normal_one_way_rpc ] ~f:(fun rpc ->
-          Log.debug log "sending %s query normally" (One_way.name rpc);
-          One_way.dispatch_exn rpc conn the_query;
-          let%bind () = assert_one_way_rpc_received () in
-          Log.debug log "sending %s query via Expert.dispatch" (One_way.name rpc);
-          let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
-          let pos = 0 in
-          let len = Bigstring.length buf in
-          (match One_way.Expert.dispatch rpc conn buf ~pos ~len with
-           | `Ok -> ()
-           | `Connection_closed -> assert false);
-          let%bind () = assert_one_way_rpc_received () in
-          Log.debug
-            log
-            "sending %s query via Expert.schedule_dispatch"
-            (One_way.name rpc);
-          let%bind () =
-            match One_way.Expert.schedule_dispatch rpc conn buf ~pos ~len with
-            | `Flushed f -> f
-            | `Connection_closed -> assert false
-          in
-          assert_one_way_rpc_received ()))
+        Deferred.List.iter
+          ~how:`Sequential
+          [ raw_one_way_rpc; normal_one_way_rpc ]
+          ~f:(fun rpc ->
+            Log.debug log "sending %s query normally" (One_way.name rpc);
+            One_way.dispatch_exn rpc conn the_query;
+            let%bind () = assert_one_way_rpc_received () in
+            Log.debug log "sending %s query via Expert.dispatch" (One_way.name rpc);
+            let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
+            let pos = 0 in
+            let len = Bigstring.length buf in
+            (match One_way.Expert.dispatch rpc conn buf ~pos ~len with
+             | `Ok -> ()
+             | `Connection_closed -> assert false);
+            let%bind () = assert_one_way_rpc_received () in
+            Log.debug log "sending %s query via Expert.schedule_dispatch" (One_way.name rpc);
+            let%bind () =
+              match One_way.Expert.schedule_dispatch rpc conn buf ~pos ~len with
+              | `Flushed f -> f
+              | `Connection_closed -> assert false
+            in
+            assert_one_way_rpc_received ()))
     in
     Result.ok_exn result;
     Rpc_impl.Server.close server
@@ -874,6 +903,7 @@ module Rpc_expert_test = struct
       ~summary:"connect basic and low-level clients"
       Command.Spec.(empty +> flag "debug" no_arg ~doc:"" ++ Rpc_impl.spec ())
       main
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -911,19 +941,21 @@ module Connection_closing_test = struct
     in
     let dispatch_never_returns conn =
       let response = Rpc.dispatch never_returns conn () in
-      let%bind () = Clock.after Time.Span.second in
+      let%bind () = Clock.after Time_float.Span.second in
       assert (not (Deferred.is_determined response));
       return response
     in
     let check_response_is_error here conn response_deferred =
-      match%bind Clock.with_timeout Time.Span.second (Connection.close_finished conn) with
+      match%bind
+        Clock.with_timeout Time_float.Span.second (Connection.close_finished conn)
+      with
       | `Timeout ->
         failwithf
           !"%{Source_code_position} timed out waiting for connection to close"
           here
           ()
       | `Result () ->
-        (match%map Clock.with_timeout Time.Span.second response_deferred with
+        (match%map Clock.with_timeout Time_float.Span.second response_deferred with
          | `Timeout ->
            failwithf
              !"%{Source_code_position} timed out waiting for response to be determined"
@@ -953,6 +985,7 @@ module Connection_closing_test = struct
     Command.async
       ~summary:"test that responses are determined when connections are closed"
       (Command.Param.return main)
+      ~behave_nicely_in_pipeline:false
   ;;
 end
 
@@ -967,7 +1000,9 @@ let all_regression_tests =
        let%bind () = Pipe_direct_test.main () in
        let%bind () = Rpc_expert_test.main debug ~rpc_impl () in
        Connection_closing_test.main ())
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 let () =
   Command_unix.run

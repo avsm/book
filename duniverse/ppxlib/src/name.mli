@@ -27,7 +27,9 @@ val split_path : string -> string * string option
 val dot_suffixes : string -> string list
 (** [fold_dot_suffixes "foo.@bar.blah" ~init ~f] is
 
-    {[ [ "bar.blah"; "foo.bar.blah" ] ]} *)
+    {[
+      [ "bar.blah"; "foo.bar.blah" ]
+    ]} *)
 
 module Registrar : sig
   type 'context t
@@ -96,6 +98,8 @@ module Allowlisted : sig
 end
 
 module Reserved_namespaces : sig
+  (** Small module to reserve namespaces in attribute names. *)
+
   val reserve : string -> unit
   (** [reserve "foo"] has two implications:
 
@@ -105,7 +109,8 @@ module Reserved_namespaces : sig
       This is here to insure that the rewriter cohabits well with other rewriter
       or tools (e.g. merlin) which might leave attribute on the AST.
 
-      N.B. the "merlin" namespace is reserved by default. *)
+      N.B. the following namespaces are reserved by default: [merlin], [reason],
+      [refmt] [ns], [res], [metaocaml], [ocamlformat] and [ppxlib]. *)
 
   val is_in_reserved_namespaces : string -> bool
 end

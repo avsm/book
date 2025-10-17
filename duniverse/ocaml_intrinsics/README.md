@@ -4,21 +4,28 @@ ocaml_intrinsics - a library of intrinsics for OCaml
 The ocaml_intrinsics library provides an OCaml interface to operations
 that have dedicated hardware instructions on some micro-architectures.
 Currently, it provides the following operations:
+
 * count leading zeros of an integer
+
 * count trailing zeros of an integer
+
 * count set bits of an integer
+
 * performance monitoring
+
 * cyclic redundancy check
+
+* memory fences
 
 Some operations require more than one instruction to implement.
 
 On x86_64 architecture, the integer operations are implemented
 using `bsf`, `bsr`, and `popcnt` instructions.  Additionally, the
-library supports performance monitoring instructions `rdtsc` and
-`rdpmc`, as well as `crc32` for the x86_64 architecture only.
+library supports performance monitoring instructions `rdtsc`/`rdpmc`, 
+`crc32`, and `s/l/mfence` for the x86_64 architecture only. 
 
 The library provides default implementations using C stubs for all
-targets.  Ocaml compiler with support for intrinsics intercepts calls
+targets.  OCaml compiler with support for intrinsics intercepts calls
 to these C stubs and emits inline assembly instead.
 
 The library and the compiler support was only tested on x86_64 Linux

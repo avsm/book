@@ -16,12 +16,18 @@
  *)
 
 module Client = struct
-  let default_ctx = `Ssl_not_available
+  type verify = { hostname : bool; ip : bool }
+
+  let default_verify = { hostname = true; ip = true }
+
+  type context = Ssl_not_available
+
+  let default_ctx = Ssl_not_available
   let create_ctx ?certfile:_ ?keyfile:_ ?password:_ () = default_ctx
 
-  let connect ?(ctx = default_ctx) ?src:_ ?hostname:_ _sa =
+  let connect ?(ctx = default_ctx) ?src:_ ?hostname:_ ?ip:_ ?verify:_ _sa =
     ignore ctx;
-    Lwt.fail_with "Ssl not available"
+    failwith "Ssl not available"
 end
 
 module Server = struct
@@ -30,7 +36,7 @@ module Server = struct
   let init ?(ctx = default_ctx) ?backlog:_ ?password:_ ~certfile:_ ~keyfile:_
       ?stop:_ ?timeout:_ _sa _cb =
     ignore ctx;
-    Lwt.fail_with "Ssl not available"
+    failwith "Ssl not available"
 end
 
 let available = false

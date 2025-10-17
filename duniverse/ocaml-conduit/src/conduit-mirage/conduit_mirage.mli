@@ -38,11 +38,11 @@ type server =
 [@@deriving sexp]
 (** The type for server configuration values. *)
 
-module Endpoint (P : Mirage_clock.PCLOCK) : sig
+module Endpoint : sig
   val nss_authenticator : X509.Authenticator.t
   (** [nss_authenticator] is the validator using the
       {{:https://github.com/mirage/ca-certs-nss} trust anchors extracted from
-      Mozilla's NSS}. *)
+        Mozilla's NSS}. *)
 
   val client :
     ?tls_authenticator:X509.Authenticator.t -> Conduit.endp -> client Lwt.t

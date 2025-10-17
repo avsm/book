@@ -88,6 +88,10 @@ val create : ?size_budget:int -> ?info:Sexp.t -> unit -> 'a Reader.t * 'a Writer
 (** [empty ()] returns a closed pipe reader with no contents. *)
 val empty : unit -> _ Reader.t
 
+(** [of_queue queue] returns a closed pipe reader filled with the contents of [queue]. Any
+    mutation of the [queue] after the call won't affect the pipe's content. *)
+val of_queue : 'a Queue.t -> 'a Reader.t
+
 (** [of_list l] returns a closed pipe reader filled with the contents of [l]. *)
 val of_list : 'a list -> 'a Reader.t
 
@@ -386,12 +390,12 @@ val read_exn : ?consumer:Consumer.t -> 'a Reader.t -> 'a Deferred.t
 
 
 (** [read_exactly r ~num_values] reads exactly [num_values] items, unless EOF is
-    encountered.  [read_exactly] performs a sequence of [read_at_most] operations, so
-    there is no guarantee that the queue of values it returns comprise a contiguous
-    segment of the written stream of values -- other readers might pick off elements
-    in-between [read_exactly]'s atomic reads.  [read_exactly] raises if [num_values <= 0].
-    The [consumer] is used to extend the meaning of values being flushed (see the
-    [Consumer] module above). *)
+    encountered. [read_exactly] performs a sequence of [read'] operations, so there is no
+    guarantee that the queue of values it returns comprise a contiguous segment of the
+    written stream of values -- other readers might pick off elements in-between
+    [read_exactly]'s atomic reads. [read_exactly] raises if [num_values <= 0]. The
+    [consumer] is used to extend the meaning of values being flushed (see the [Consumer]
+    module above). *)
 val read_exactly
   :  ?consumer:Consumer.t
   -> 'a Reader.t
@@ -771,6 +775,17 @@ val size_budget : (_, _) t -> int
 (** [set_size_budget t i] changes the size budget of [t] to [i].  Any nonnegative value is
     allowed. *)
 val set_size_budget : (_, _) t -> int -> unit
+
+(** {2 Reserved space} *)
+
+(** It is possible to reserve space for a value in a pipe before actually writing the
+    value yet. Reserved space behaves like a temporary reduction in the pipe's size budget
+    that is restored as values are written to the pipe. *)
+val reserved_space : (_, _) t -> int
+
+(** [reserve_space writer n] increases the reserved space of [writer] by [n]. [n] must be
+    nonnegative. *)
+val reserve_space : _ Writer.t -> int -> unit
 
 (** {2 Debugging} *)
 

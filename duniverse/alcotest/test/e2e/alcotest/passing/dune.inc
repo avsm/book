@@ -15,15 +15,17 @@
    isatty
    json_output
    list_tests
+   match_raises
    only_monadic_effects
    quick_only
    quick_only_regex
    separator_testname
+   skip_in_test
    unicode_testname
    verbose_newlines
  )
  (libraries alcotest alcotest.stdlib_ext alcotest.engine)
- (modes native js)
+ (modes exe js)
  (modules
    and_exit_false
    and_exit_true
@@ -40,10 +42,12 @@
    isatty
    json_output
    list_tests
+   match_raises
    only_monadic_effects
    quick_only
    quick_only_regex
    separator_testname
+   skip_in_test
    unicode_testname
    verbose_newlines
  )
@@ -620,6 +624,44 @@
    (diff list_tests-js.expected list_tests-js.processed)))
 
 (rule
+ (target match_raises.actual)
+ (action
+  (with-outputs-to %{target}
+   (with-accepted-exit-codes (or 0 124 125)
+    (run %{dep:match_raises.exe})))))
+
+(rule
+ (target match_raises.processed)
+ (action
+  (with-outputs-to %{target}
+   (run ../../strip_randomness.exe %{dep:match_raises.actual}))))
+
+(rule
+ (alias runtest)
+ (package alcotest)
+ (action
+   (diff match_raises.expected match_raises.processed)))
+
+(rule
+ (target match_raises-js.actual)
+ (action
+  (with-outputs-to %{target}
+   (with-accepted-exit-codes (or 0 124 125)
+    (run node %{dep:match_raises.bc.js})))))
+
+(rule
+ (target match_raises-js.processed)
+ (action
+  (with-outputs-to %{target}
+   (run ../../strip_randomness.exe %{dep:match_raises-js.actual}))))
+
+(rule
+ (alias runtest-js)
+ (package alcotest)
+ (action
+   (diff match_raises-js.expected match_raises-js.processed)))
+
+(rule
  (target only_monadic_effects.actual)
  (action
   (with-outputs-to %{target}
@@ -770,6 +812,44 @@
  (package alcotest)
  (action
    (diff separator_testname-js.expected separator_testname-js.processed)))
+
+(rule
+ (target skip_in_test.actual)
+ (action
+  (with-outputs-to %{target}
+   (with-accepted-exit-codes (or 0 124 125)
+    (run %{dep:skip_in_test.exe})))))
+
+(rule
+ (target skip_in_test.processed)
+ (action
+  (with-outputs-to %{target}
+   (run ../../strip_randomness.exe %{dep:skip_in_test.actual}))))
+
+(rule
+ (alias runtest)
+ (package alcotest)
+ (action
+   (diff skip_in_test.expected skip_in_test.processed)))
+
+(rule
+ (target skip_in_test-js.actual)
+ (action
+  (with-outputs-to %{target}
+   (with-accepted-exit-codes (or 0 124 125)
+    (run node %{dep:skip_in_test.bc.js})))))
+
+(rule
+ (target skip_in_test-js.processed)
+ (action
+  (with-outputs-to %{target}
+   (run ../../strip_randomness.exe %{dep:skip_in_test-js.actual}))))
+
+(rule
+ (alias runtest-js)
+ (package alcotest)
+ (action
+   (diff skip_in_test-js.expected skip_in_test-js.processed)))
 
 (rule
  (target unicode_testname.actual)

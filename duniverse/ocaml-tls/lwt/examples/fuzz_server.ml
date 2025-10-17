@@ -9,9 +9,9 @@ let add_to_cache, find_in_cache =
   let c = ref [] in
   (fun ticket session ->
      let id = ticket.Tls.Core.identifier in
-     Logs.info (fun m -> m "adding id %a to cache" Cstruct.hexdump_pp id) ;
+     Logs.info (fun m -> m "adding id %a to cache" Ohex.pp id) ;
      c := (id, (ticket, session)) :: !c),
-  (fun id -> match List.find_opt (fun (id', _) -> Cstruct.compare id id' = 0) !c with
+  (fun id -> match List.find_opt (fun (id', _) -> String.compare id id' = 0) !c with
      | None -> None
      | Some (_, ep) -> Some ep)
 
@@ -53,7 +53,7 @@ let serve_ssl port callback =
 
   yap ~tag ("-> start @ " ^ string_of_int port) >>= fun () ->
   let rec loop s =
-    let config = Tls.Config.server ~ticket_cache ~reneg:true ~certificates:(`Single cert) ~version:(`TLS_1_2, `TLS_1_3) ~zero_rtt:32768l () in
+    let config = get_ok (Tls.Config.server ~ticket_cache ~reneg:true ~certificates:(`Single cert) ~version:(`TLS_1_2, `TLS_1_3) ~zero_rtt:32768l ()) in
     (Lwt.catch
        (fun () -> Tls_lwt.Unix.accept config s >|= fun r -> `R r)
        (function
@@ -94,7 +94,7 @@ let port =
 
 let cmd =
   let term = Term.(ret (const jump $ setup_log $ port))
-  and info = Cmd.info "server" ~version:"0.15.3"
+  and info = Cmd.info "fuzz_server" ~version:"2.0.3"
   in
   Cmd.v info term
 

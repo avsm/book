@@ -8,12 +8,13 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Attribute
 open Syntax
 
-(* This is the abstract syntax for an unparameterized grammar, that is,
-   a grammar that does not have any parameterized nonterminal symbols.
-   Such a grammar is obtained as the result of an expansion phase, which
-   is implemented in [ParameterizedGrammar]. *)
+(* This is the abstract syntax for an unparameterized grammar, that is, a
+   grammar that does not have any parameterized nonterminal symbols. Such a
+   grammar is obtained as the result of an expansion phase, which takes
+   place in two steps, implemented in [SelectiveExpansion] and [Drop]. *)
 
 (* In an unparameterized grammar, %attribute declarations can be desugared
    away. This is also done during the above-mentioned expansion phase.
@@ -24,7 +25,8 @@ open Syntax
    - with the grammar:          field [gr_attributes] of [grammar]
    - with a terminal symbol:    field [tk_attributes] of [token_properties]
    - with a nonterminal symbol: field [attributes] of [rule]
-   - with a producer:           field [producer_attributes] of [producer]   *)
+   - with a producer:           field [producer_attributes] of [producer]
+   - with a branch:             field [br_attributes] of [branch]           *)
 
 (* ------------------------------------------------------------------------ *)
 
@@ -32,7 +34,8 @@ open Syntax
    syntax, it could be [e = expr], for instance. It carries a number of
    attributes. *)
 
-type producer = {
+type producer =
+  {
     producer_identifier : identifier located;
     producer_symbol     : symbol;
     producer_attributes : attributes;
@@ -46,12 +49,14 @@ type producers =
 (* A branch contains a series of producers and a semantic action. It is the
    same as in the surface syntax; see [Syntax]. *)
 
-type branch = {
-    branch_position         : Positions.t;
-    producers               : producers;
-    action                  : action;
-    branch_prec_annotation  : branch_prec_annotation;
-    branch_production_level : branch_production_level
+type branch =
+  {
+    branch_position  : Positions.t;
+    producers        : producers;
+    action           : action;
+    prec_annotation  : prec_annotation;
+    production_level : production_level;
+    br_attributes    : attributes;
   }
 
 type branches =
@@ -64,7 +69,8 @@ type branches =
 
 (* The [%inline] flag is no longer relevant after [NonTerminalInlining]. *)
 
-type rule = {
+type rule =
+  {
     branches    : branches;
     positions   : Positions.t list;
     inline_flag : bool;
@@ -77,7 +83,8 @@ type rule = {
    The main difference is that [%attribute] declarations, represented by
    the field [p_symbol_attributes] in the surface syntax, have disappeared. *)
 
-type grammar =  {
+type grammar =
+  {
     preludes        : Stretch.t list;
     postludes       : Syntax.postlude list;
     parameters      : Stretch.t list;
@@ -117,6 +124,8 @@ let transform_branches f rule =
 
 (* -------------------------------------------------------------------------- *)
 
+(* Terminal symbols. *)
+
 (* [tokens grammar] is a list of all (real) tokens in the grammar
    [grammar]. The special tokens "#" and "error" are not included.
    Pseudo-tokens (used in %prec declarations, but never declared
@@ -135,14 +144,57 @@ let typed_tokens grammar =
     if properties.tk_is_declared then (token, properties.tk_ocamltype) :: tokens else tokens
   ) grammar.tokens []
 
+(* [ocamltype_of_token grammar symbol] produces the OCaml type
+   of the terminal symbol [symbol] in the grammar [grammar].
+   This terminal symbol must exist and must not be a pseudo-token.
+   [None] is returned if and only if this token does not carry a
+   semantic value. *)
+
+let ocamltype_of_token grammar symbol : Stretch.ocamltype option =
+  try
+    let properties = StringMap.find symbol grammar.tokens in
+    assert properties.tk_is_declared;
+    properties.tk_ocamltype
+  with Not_found ->
+    assert false
+
+(* [alias grammar symbol] returns the token alias of the terminal symbol
+   [symbol], if there is one. This terminal symbol must exist and must not
+   be a pseudo-token. *)
+
+let alias grammar symbol : alias =
+  try
+    let properties = StringMap.find symbol grammar.tokens in
+    assert properties.tk_is_declared;
+    properties.tk_alias
+  with Not_found ->
+    assert false
+
+let unquoted_alias grammar symbol : alias =
+  alias grammar symbol
+  |> Option.map Misc.unquote
+
+(* -------------------------------------------------------------------------- *)
+
+(* Nonterminal symbols. *)
+
 (* [nonterminals grammar] is a list of all nonterminal symbols in the
-   grammar [grammar]. *)
+   grammar [grammar]. It does not include the artificial start symbols
+   [S']. *)
 
 let nonterminals grammar : nonterminal list =
   StringMap.fold (fun nt _ rules -> nt :: rules) grammar.rules []
 
+(* [is_nonterminal grammar symbol] tests whether the symbol [symbol]
+   is a nonterminal symbol. It is assumed that this symbol exists,
+   that is, it is either a terminal symbol or a nonterminal symbol. *)
+
+let is_nonterminal grammar symbol =
+  StringMap.mem symbol grammar.rules
+
 (* [ocamltype_of_symbol grammar symbol] produces the OCaml type
-   of the symbol [symbol] in the grammar [grammar], if it is known. *)
+   of the nonterminal symbol [symbol] in the grammar [grammar],
+   if it is known. *)
 
 let ocamltype_of_symbol grammar symbol : Stretch.ocamltype option =
   try
@@ -194,3 +246,29 @@ let names (producers : producers) : StringSet.t =
     assert (not (StringSet.mem id ids));
     StringSet.add id ids
   ) StringSet.empty producers
+
+(* -------------------------------------------------------------------------- *)
+
+(* Productions. *)
+
+(* [print_production nt branch] prints the production whose left-hand side
+   is the nonterminal symbol [nt] and whose right-hand side is [branch]. *)
+
+let rec print_production nt branch =
+  Printf.sprintf "%s ->%s" nt (print_production_rhs branch.producers)
+
+and print_production_rhs producers =
+  let b = Buffer.create 80 in
+  List.iter (fun producer ->
+    Printf.bprintf b " %s" producer.producer_symbol
+  ) producers;
+  Buffer.contents b
+
+(* [error_free branch] determines whether the branch [branch] does *not*
+   contain the [error] token. *)
+
+let rec error_free branch =
+  List.for_all error_free_producer branch.producers
+
+and error_free_producer producer =
+  producer.producer_symbol <> "error"

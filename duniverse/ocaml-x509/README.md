@@ -1,6 +1,6 @@
 ## X.509 - Public Key Infrastructure purely in OCaml
 
-v0.16.0
+v1.0.6
 X.509 is a public key infrastructure used mostly on the Internet.  It consists
 of certificates which include public keys and identifiers, signed by an
 authority.  Authorities must be exchanged over a second channel to establish the
@@ -11,7 +11,7 @@ trust relationship.  This library implements most parts of
 defines encoding and decoding in ASN.1 DER and PEM format, which is also
 implemented by this library - namely PKCS 1, PKCS 7, PKCS 8, PKCS 9 and PKCS 10.
 
-Read [further](https://nqsb.io) and our [Usenix Security 2015 paper](https://usenix15.nqsb.io).
+Read our [Usenix Security 2015 paper](https://www.usenix.org/conference/usenixsecurity15/technical-sessions/presentation/kaloper-mersinjak).
 
 ## Documentation
 

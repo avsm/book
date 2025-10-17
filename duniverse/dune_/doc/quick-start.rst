@@ -2,9 +2,23 @@
 Quickstart
 **********
 
+.. TODO(diataxis)
+
+   Split this into:
+
+   - :doc:`tutorials/from-zero-to-opam`
+   - :doc:`tutorials/developing-with-dune`
+   - :doc:`howto/changing-flags`
+   - an how-to guide about ``cppo``
+   - an how-to guide about staged programming / generators
+   - an how-to guide about testing
+
 This document gives simple usage examples of Dune. You can also look at
 `examples <https://github.com/ocaml/dune/tree/master/example>`__ for complete
-examples of projects using Dune.
+examples of projects using Dune with `CRAM stanzas <https://ocaml.org/p/craml/1.0.0>`__.
+
+To try these examples, you will need to have Dune installed. See
+:doc:`howto/install-dune`.
 
 Initializing Projects
 =====================
@@ -21,9 +35,9 @@ Initializing an Executable
 To initialize a project that will build an executable program, run the following
 (replacing ``project_name`` with the name of your project):
 
-.. code:: shell
+.. code:: console
 
-    dune init proj project_name
+  $ dune init proj project_name
 
 This creates a project directory that includes the following contents:
 
@@ -33,7 +47,7 @@ This creates a project directory that includes the following contents:
     ├── dune-project
     ├── test
     │   ├── dune
-    │   └── project_name.ml
+    │   └── test_project_name.ml
     ├── lib
     │   └── dune
     ├── bin
@@ -43,27 +57,29 @@ This creates a project directory that includes the following contents:
 
 Now, enter your project's directory:
 
-.. code:: shell
+.. code:: console
 
-   cd project_name
+  $ cd project_name
 
 Then, you can build your project with:
 
-.. code:: shell
+.. code:: console
 
-   dune build
+  $ dune build
 
 You can run your tests with:
 
-.. code:: shell
+.. code:: console
 
-   dune test
+  $ dune test
 
 You can run your program with:
 
-.. code:: shell
+.. code:: console
 
-   dune exec project_name
+  $ dune exec project_name
+
+This simple project will print "Hello World" in your shell.
 
 The following itemization of the generated content isn't necessary to review at
 this point. But whenever you are ready, it will provide jump-off points from
@@ -71,27 +87,30 @@ which you can dive deeper into Dune's capabilities:
 
 * The ``dune-project`` file specifies metadata about the project, including its
   name, packaging data (including dependencies), and information about the
-  authors and maintainers.  You should open this in your editor to fill in the
-  placeholder values. See :ref:`dune-project` for details.
+  authors and maintainers. Open this in your editor to fill in the
+  placeholder values. See :doc:`/reference/dune-project/index` for
+  details.
 * The ``test`` directory contains a skeleton for your project's tests. Add to
-  the tests by editing ``test/project_name.ml``. See :ref:`writing-tests` for
+  the tests by editing ``test/test_project_name.ml``. See :ref:`writing-tests` for
   details on testing.
-* The ``lib`` directory will hold the library you write to provide the core
-  functionality of your executable. Add modules to your library by creating new
-  ``.ml`` files in this directory. See :ref:`library` for details on specifying
-  libraries manually.
+* The ``lib`` directory will hold the library you write to provide your executable's core
+  functionality. Add modules to your library by creating new
+  ``.ml`` files in this directory. See :doc:`/reference/dune/library` for
+  details on specifying libraries manually.
 * The ``bin`` directory holds a skeleton for the executable program. Within the
   modules in this directory, you can access the modules in your ``lib`` under
-  the namespace ``Project_name.Mod``, where ``Project_name`` is replaced with
+  the namespace ``project_name.Mod``, where ``project_name`` is replaced with
   the name of your project and ``Mod`` corresponds to the name of the file in
   the ``lib`` directory. You can run the executable with ``dune exec
   project_name``.  See :ref:`hello-world-program` for an example of specifying
-  an executable manually and :ref:`executable` for details.
+  an executable manually and :doc:`/reference/dune/executable` for
+  details.
 * The ``project_name.opam`` file will be freshly generated from the
   ``dune-project`` file whenever you build your project. You shouldn't need to
-  worry about this, but you can see :ref:`opam-generation` for details.
+  worry about this, but you can see :doc:`explanation/opam-integration` for
+  details.
 * The ``dune`` files in each directory specify the component to be built with
-  the files in that directory. For details on dune files, see :ref:`dune-files`.
+  the files in that directory. For details on ``dune`` files, see :doc:`/reference/dune/index`.
 
 Initializing a Library
 ----------------------
@@ -99,9 +118,9 @@ Initializing a Library
 To initialize a project for an OCaml library, run the following (replacing
 ``project_name`` with the name of your project):
 
-.. code:: shell
+.. code:: console
 
-    dune init proj --kind=lib project_name
+  $ dune init proj --kind=lib project_name
 
 This creates a project directory that includes the following contents:
 
@@ -113,45 +132,45 @@ This creates a project directory that includes the following contents:
     │   └── dune
     ├── test
     │   ├── dune
-    │   └── project_name.ml
+    │   └── test_project_name.ml
     └── project_name.opam
 
 Now, enter your project's directory:
 
-.. code:: shell
+.. code:: console
 
-   cd project_name
+  $ cd project_name
 
 Then, you can build your project with:
 
-.. code:: shell
+.. code:: console
 
-   dune build
+  $ dune build
 
 You can run your tests with:
 
-.. code:: shell
+.. code:: console
 
-   dune test
-
+  $ dune test
 
 All of the subcomponents generated are the same as those described in
 :ref:`initializing-an-executable`, with the following exceptions:
 
 * There is no ``bin`` directory generated.
 * The ``dune`` file in the ``lib`` directory specifies that the library should
-  be *public*. See :ref:`library` for details.
+  be *public*. See :doc:`/reference/dune/library` for details.
 
 .. _hello-world-program:
 
-Building a Hello World Program
-==============================
+Building a Hello World Program From Scratch
+===========================================
 
+Create a new directory within a Dune project (:ref:`initializing-an-executable`).
 Since OCaml is a compiled language, first create a ``dune`` file in Nano, Vim, 
-or your preferred text editor. Declare the ``hello_world`` executable by including following stanza 
-(shown below). Name this initial file ``dune`` and save it in a directory of your choice. 
+or your preferred text editor. Declare the ``hello_world`` executable by including the following stanza 
+(shown below). Name this initial file ``dune`` and save it. 
 
-.. code:: scheme
+.. code:: dune
 
     (executable
      (name hello_world))
@@ -165,34 +184,24 @@ the .ml extension). It will implement the executable stanza in the ``dune`` file
 
 Next, build your new program in a shell using this command:
 
-.. code:: bash
+.. code:: console
 
-    dune build hello_world.exe
+   $ dune build hello_world.exe
 
-The executable will create a directory called "build" and create the 
+This will create a directory called ``_build`` and build the 
 program: ``_build/default/hello_world.exe``. Note that
 native code executables will have the ``.exe`` extension on all platforms
 (including non-Windows systems). 
 
 Finally, run it with the following command to see that it worked. In 
 fact, the executable can both be built and run in a single
-step with ``dune exec ./hello_world.exe``.
+step:
 
-Please note: if you have Dune, opam, and OCaml installed, but you 
-get an error that the ``dune`` command isn't recognized, it will be necessary 
-to run ``eval $(opam config env)`` to enable Dune in your directory. Find more 
-information in the `Dune ReadMe  <https://github.com/ocaml/dune>`.
+.. code:: console
 
-Verify OCaml installation with ``ocaml -version``
-Verify opam installation with ``opam --version``
+   $ dune exec -- ./hello_world.exe
 
-If you still get an error that the ``dune`` command isn't recognized, try running 
-the following in this order:
-``opam switch create . ocaml-base-compiler``
-``opam install merlin ocp-indent dune utop``
-Then run ``eval $(opam config env)`` again before trying to build and run 
-your new hello_world.exe program. 
-
+Voila! This should print "Hello, world!" in the command line.
 
 Building a Hello World Program Using Lwt
 ========================================
@@ -201,7 +210,7 @@ Lwt is a concurrent library in OCaml.
 
 In a directory of your choice, write this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (executable
      (name hello_world)
@@ -215,9 +224,9 @@ This ``hello_world.ml`` file:
 
 And build it with:
 
-.. code:: bash
+.. code:: console
 
-    dune build hello_world.exe
+  $ dune build hello_world.exe
 
 The executable will be built as ``_build/default/hello_world.exe``
 
@@ -226,7 +235,7 @@ Building a Hello World Program Using Core and Jane Street PPXs
 
 Write this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (executable
      (name hello_world)
@@ -245,9 +254,9 @@ This ``hello_world.ml`` file:
 
 And build it with:
 
-.. code:: bash
+.. code:: console
 
-    dune build hello_world.exe
+  $ dune build hello_world.exe
 
 The executable will be built as ``_build/default/hello_world.exe``
 
@@ -257,7 +266,7 @@ Defining a Library Using Lwt and ``ocaml-re``
 
 Write this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (library
      (name        mylib)
@@ -276,7 +285,7 @@ Building a Hello World Program in Bytecode
 
 In a directory of your choice, write this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     ;; This declares the hello_world executable implemented by hello_world.ml
     ;; to be build as native (.exe) or bytecode (.bc) version.
@@ -292,9 +301,9 @@ This ``hello_world.ml`` file:
 
 And build it with:
 
-.. code:: bash
+.. code:: console
 
-    dune build hello_world.bc
+  $ dune build hello_world.bc
 
 The executable will be built as ``_build/default/hello_world.bc``.
 The executable can be built and run in a single
@@ -306,7 +315,7 @@ Setting the OCaml Compilation Flags Globally
 
 Write this ``dune`` file at the root of your project:
 
-.. code:: scheme
+.. code:: dune
 
     (env
      (dev
@@ -318,7 +327,7 @@ Write this ``dune`` file at the root of your project:
 can be selected from the command line with ``--profile foo`` or from a
 `dune-workspace` file by writing:
 
-.. code:: scheme
+.. code:: dune
 
     (profile foo)
 
@@ -327,22 +336,23 @@ Using Cppo
 
 Add this field to your ``library`` or ``executable`` stanzas:
 
-.. code:: lisp
+.. code:: dune
 
     (preprocess (action (run %{bin:cppo} -V OCAML:%{ocaml_version} %{input-file})))
 
 Additionally, if you want to include a ``config.h`` file, you need to
 declare the dependency to this file via:
 
-.. code:: scheme
+.. code:: dune
 
     (preprocessor_deps config.h)
 
 Using the ``.cppo.ml`` Style Like the ``ocamlbuild`` Plugin
+-----------------------------------------------------------
 
 Write this in your ``dune`` file:
 
-.. code:: lisp
+.. code:: dune
 
     (rule
      (targets foo.ml)
@@ -356,7 +366,7 @@ Assuming you have a file called ``mystubs.c``, that you need to pass
 ``-I/blah/include`` to compile it and ``-lblah`` at link time, write
 this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (library
      (name            mylib)
@@ -374,7 +384,7 @@ Defining a Library with C Stubs using ``pkg-config``
 Same context as before, but using ``pkg-config`` to query the
 compilation and link flags. Write this ``dune`` file:
 
-.. code:: lisp
+.. code:: dune
 
     (library
      (name            mylib)
@@ -392,7 +402,7 @@ compilation and link flags. Write this ``dune`` file:
 
 Then create a ``config`` subdirectory and write this ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (executable
      (name discover)
@@ -430,7 +440,7 @@ Using a Custom Code Generator
 
 To generate a file ``foo.ml`` using a program from another directory:
 
-.. code:: lisp
+.. code:: dune
 
     (rule
      (targets foo.ml)
@@ -442,15 +452,15 @@ Defining Tests
 
 Write this in your ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (test (name my_test_program))
 
 And run the tests with:
 
-.. code:: bash
+.. code:: console
 
-    dune runtest
+  $ dune runtest
 
 It will run the test program (the main module is ``my_test_program.ml``) and
 error if it exits with a nonzero code.
@@ -460,9 +470,9 @@ to the standard output of the test program and the differences will be
 displayed. It is possible to replace the ``.expected`` file with the last output
 using:
 
-.. code:: bash
+.. code:: console
 
-    dune promote
+  $ dune promote
 
 Building a Custom Toplevel
 ==========================
@@ -473,7 +483,7 @@ be built in bytecode.
 
 As a result, write this in your ``dune`` file:
 
-.. code:: scheme
+.. code:: dune
 
     (executable
      (name       mytoplevel)
@@ -481,7 +491,7 @@ As a result, write this in your ``dune`` file:
      (link_flags (-linkall))
      (modes      byte))
 
-And write this in ``mytoplevel.ml``
+And write this in ``mytoplevel.ml``:
 
 .. code:: ocaml
 

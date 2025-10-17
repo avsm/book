@@ -3,7 +3,7 @@ open Bus
 
 let create_with_subscribers (type a) (arity : a Callback_arity.t) ~num_subscribers =
   let t =
-    create
+    create_exn
       [%here]
       arity
       ~on_subscription_after_first_write:Allow
@@ -20,6 +20,7 @@ let create_with_subscribers (type a) (arity : a Callback_arity.t) ~num_subscribe
           ~f:
             (match arity with
              | Arity1 -> fun _ -> ()
+             | Arity1_local -> fun _ -> ()
              | Arity2 -> fun _ _ -> ()
              | Arity3 -> fun _ _ _ -> ()
              | Arity4 -> fun _ _ _ _ -> ()
@@ -30,12 +31,17 @@ let create_with_subscribers (type a) (arity : a Callback_arity.t) ~num_subscribe
 
 let create arity ~num_subscribers = fst (create_with_subscribers arity ~num_subscribers)
 
-let%bench_fun "Bus.create (Arity 1)" =
+let%bench_fun "Bus.create_exn (Arity 1)" =
   fun () -> ignore (create Arity1 ~num_subscribers:0 : _ Read_write.t)
 ;;
 
-let%bench_fun "Bus.create (Arity 4)" =
+let%bench_fun "Bus.create_exn (Arity 4)" =
   fun () -> ignore (create Arity4 ~num_subscribers:0 : _ Read_write.t)
+;;
+
+let%bench_fun "Bus.write [int] to 0 subs" =
+  let t = create Arity1 ~num_subscribers:0 in
+  fun () -> write t 1
 ;;
 
 let%bench_fun "Bus.write [int] to 1 sub" =
@@ -66,6 +72,21 @@ let%bench_fun "Bus.write4 to 300 subs" =
 let%bench_fun "Bus.write5 to 300 subs" =
   let t = create Arity5 ~num_subscribers:300 in
   fun () -> write5 t 1 2 3 4 5
+;;
+
+let%bench_fun "Bus.write_local [int * int] to 0 subs" =
+  let t = create Arity1_local ~num_subscribers:0 in
+  fun () -> write_local t (1, 2)
+;;
+
+let%bench_fun "Bus.write_local [int * int] to 1 sub" =
+  let t = create Arity1_local ~num_subscribers:1 in
+  fun () -> write_local t (1, 2)
+;;
+
+let%bench_fun "Bus.write_local [int * int] to 300 subs" =
+  let t = create Arity1_local ~num_subscribers:300 in
+  fun () -> write_local t (1, 2)
 ;;
 
 let%bench_fun "Bus.subscribe_exn 300 times" = fun () -> create Arity1 ~num_subscribers:300

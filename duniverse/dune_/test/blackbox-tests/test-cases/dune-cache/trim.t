@@ -34,7 +34,7 @@ Function to reset build tree and cache.
 Check that trimming does not crash when the cache directory does not exist.
 
   $ dune cache trim --size 0B
-  Freed 0 bytes
+  Freed 0B (0 files removed)
 
 Check that the digest scheme for executable and non-executable digests hasn't
 changed. If it has, make sure to increment the version of the cache. Note that
@@ -43,8 +43,8 @@ the current digests for both files match those computed by Jenga.
   $ dune build exe non-exe
 
   $ (cd "$PWD/.xdg-cache/dune/db/files/v4"; grep -rws . -e 'content' | sort)
-  ./5e/5e5bb3a0ec0e689e19a59c3ee3d7fca8:content
-  ./62/6274851067c88e9990e912be27cce386:content
+  ./5e/5ef8de0800908475d94747fef67940ed:content
+  ./e2/e293405959cb01f8de0d237b687714c8:content
 
 Move all current entries to v3 and v4 to test trimming of old versions of cache.
 
@@ -76,11 +76,14 @@ value in [build_system.ml].
 You will also need to make sure that the cache trimmer treats new and old cache
 entries uniformly.
 
-  $ (cd "$PWD/.xdg-cache/dune/db/meta/v5"; grep -rws . -e 'metadata' | sort)
-  ./77/77a1ce64781f6677ebe61716b37d5a0c:((8:metadata)(5:files(8:target_a32:5637dd9730e430c7477f52d46de3909c)))
-  ./7b/7b3580618a908d38b3b4a8019a7faa51:((8:metadata)(5:files(8:target_b32:8a53bfae3829b48866079fa7f2d97781)))
+  $ (cd "$PWD/.xdg-cache/dune/db/meta/v5"; grep -rws . -e 'metadata' | sort ) > out
+  $ cat out
+  ./23/2342c7575f2061e6e3396d6dcf8f0d5f:((8:metadata)(5:files(8:target_a32:7b362c0c7d2035084c9fc2d0e6815be5)))
+  ./f5/f54153a11ae41a60aa095c4671180b84:((8:metadata)(5:files(8:target_b32:d5b73f7b5d75090e1da54099e4458db3)))
 
-  $ dune_cmd stat size "$PWD/.xdg-cache/dune/db/meta/v5/7b/7b3580618a908d38b3b4a8019a7faa51"
+  $ digest="$(awk -F: '/target_b/ { digest=$1 } END { print digest }' < out)"
+
+  $ dune_cmd stat size "$PWD/.xdg-cache/dune/db/meta/v5/$digest"
   70
 
 Trimming the cache at this point should not remove any file entries because all
@@ -91,7 +94,7 @@ all metadata entries in [meta/v4] since they are broken: remember, we moved all
   $ find "$PWD/.xdg-cache/dune/db/meta/v4" -mindepth 2 -maxdepth 2 -type f | dune_cmd count-lines
   4
   $ dune cache trim --trimmed-size 1B
-  Freed 287 bytes
+  Freed 287B (4 files removed)
   $ dune_cmd stat hardlinks _build/default/target_a
   2
   $ dune_cmd stat hardlinks _build/default/target_b
@@ -104,7 +107,7 @@ trimmed.
 
   $ rm -f _build/default/target_a _build/default/beacon_a _build/default/beacon_b
   $ dune cache trim --trimmed-size 1B
-  Freed 79 bytes
+  Freed 79B (2 files removed)
   $ dune build target_a target_b
   $ dune_cmd stat hardlinks _build/default/target_a
   2
@@ -150,7 +153,7 @@ by the existence of [beacon_b].
   $ dune_cmd wait-for-fs-clock-to-advance
   $ rm -f _build/default/beacon_a _build/default/target_a
   $ dune cache trim --trimmed-size 1B
-  Freed 79 bytes
+  Freed 79B (2 files removed)
   $ dune build target_a target_b
   $ dune_cmd stat hardlinks _build/default/target_a
   2
@@ -170,7 +173,7 @@ thus making the trimmer delete [target_a] instead of [target_b] as above.
   $ dune_cmd wait-for-fs-clock-to-advance
   $ rm -f _build/default/beacon_b _build/default/target_b
   $ dune cache trim --trimmed-size 1B
-  Freed 79 bytes
+  Freed 79B (2 files removed)
   $ dune build target_a target_b
   $ dune_cmd stat hardlinks _build/default/target_a
   2
@@ -188,19 +191,7 @@ are part of the same rule.
   $ dune build multi_a multi_b
   $ rm -f _build/default/multi_a _build/default/multi_b
   $ dune cache trim --trimmed-size 1B
-  Freed 123 bytes
+  Freed 123B (2 files removed)
 
 TODO: Test trimming priority in the [copy] mode. In PR #4497 we added a test but
 it turned out to be flaky so we subsequently deleted it in #4511.
-
-Test the error message when using removed subcommands [start] and [stop].
-
-  $ dune cache start
-  Error: Dune no longer uses the cache daemon, and so the `start` and `stop`
-  subcommands of `dune cache` were removed.
-  [1]
-
-  $ dune cache stop
-  Error: Dune no longer uses the cache daemon, and so the `start` and `stop`
-  subcommands of `dune cache` were removed.
-  [1]

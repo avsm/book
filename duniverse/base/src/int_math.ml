@@ -18,11 +18,11 @@ let int_pow base exponent =
 ;;
 
 module Int64_with_comparisons = struct
-  include Caml.Int64
+  include Stdlib.Int64
 
-  external ( < ) : int64 -> int64 -> bool = "%lessthan"
-  external ( > ) : int64 -> int64 -> bool = "%greaterthan"
-  external ( >= ) : int64 -> int64 -> bool = "%greaterequal"
+  external ( < ) : (int64[@local_opt]) -> (int64[@local_opt]) -> bool = "%lessthan"
+  external ( > ) : (int64[@local_opt]) -> (int64[@local_opt]) -> bool = "%greaterthan"
+  external ( >= ) : (int64[@local_opt]) -> (int64[@local_opt]) -> bool = "%greaterequal"
 end
 
 (* we don't do [abs] in int64 case to avoid allocation *)
@@ -32,11 +32,11 @@ let int64_pow base exponent =
   if (base > 1L || base < -1L)
   && (exponent > 63L
       || (base >= 0L
-          && base > Pow_overflow_bounds.int64_positive_overflow_bounds.(to_int exponent)
-         )
+          && base
+             > Pow_overflow_bounds.int64_positive_overflow_bounds.(to_int exponent))
       || (base < 0L
-          && base < Pow_overflow_bounds.int64_negative_overflow_bounds.(to_int exponent)
-         ))
+          && base
+             < Pow_overflow_bounds.int64_negative_overflow_bounds.(to_int exponent)))
   then overflow ();
   int_math_int64_pow base exponent
 ;;
@@ -128,7 +128,7 @@ module Make (X : Make_arg) = struct
     else i - remainder
   ;;
 
-  let round ?(dir = `Nearest) i ~to_multiple_of =
+  let[@inline always] round ?(dir = `Nearest) i ~to_multiple_of =
     match dir with
     | `Nearest -> round_nearest i ~to_multiple_of
     | `Down -> round_down i ~to_multiple_of

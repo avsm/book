@@ -1,9 +1,7 @@
-(executable
+(test
  (name test)
- (preprocess (pps ppx_let))
+ (package lwt_ppx__ppx_let_tests)
+ (build_if %{lib-available:ppx_let})
+ (preprocess
+  (pps ppx_let))
  (libraries lwt lwt.unix))
-
-(alias
- (name runtest)
- (package lwt_ppx_let)
- (action (run %{exe:test.exe})))

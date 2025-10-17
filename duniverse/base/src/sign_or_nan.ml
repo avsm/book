@@ -55,7 +55,7 @@ module T = struct
     }
   ;;
 
-  let compare = (Ppx_compare_lib.polymorphic_compare : t -> t -> int)
+  let compare = (Stdlib.compare : t -> t -> int)
 
   let (hash_fold_t : Ppx_hash_lib.Std.Hash.state -> t -> Ppx_hash_lib.Std.Hash.state) =
     (fun hsv arg ->
@@ -135,6 +135,13 @@ let ( * ) t t' =
   match t, t' with
   | Nan, _ | _, Nan -> Nan
   | _ -> of_sign (Sign.( * ) (to_sign_exn t) (to_sign_exn t'))
+;;
+
+let to_string_hum = function
+  | Neg -> "negative"
+  | Zero -> "zero"
+  | Pos -> "positive"
+  | Nan -> "not-a-number"
 ;;
 
 (* Include [Replace_polymorphic_compare] at the end, after any functor applications that

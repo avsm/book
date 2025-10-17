@@ -23,13 +23,9 @@ external bswap64 : int64 -> int64 = "%bswap_int64"
 (*$ open Bin_prot_cinaps $*)
 
 let code_NEG_INT8 = (*$ Code.char NEG_INT8 *) '\xff' (*$*)
-
 let code_INT16 = (*$ Code.char INT16 *) '\xfe' (*$*)
-
 let code_INT32 = (*$ Code.char INT32 *) '\xfd' (*$*)
-
 let code_INT64 = (*$ Code.char INT64 *) '\xfc' (*$*)
-
 let arch_sixtyfour = Sys.word_size = 64
 let arch_big_endian = Sys.big_endian
 
@@ -486,10 +482,6 @@ let bin_write_network64_int64 buf ~pos n =
   check_next buf next;
   unsafe_set64be buf pos n;
   next
-;;
-
-let bin_write_array_no_length bin_write_el buf ~pos ar =
-  bin_write_array_loop bin_write_el buf ~els_pos:pos ~n:(Array.length ar) ar
 ;;
 
 external unsafe_string_get32 : string -> int -> int32 = "%caml_string_get32u"

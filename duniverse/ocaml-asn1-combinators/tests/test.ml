@@ -1,38 +1,15 @@
 (* Copyright (c) 2014-2019 David Kaloper Meršinjak. All rights reserved.
    See LICENSE.md. *)
 
-let pp_hex_cs ppf =
-  let pp ppf cs =
-    for i = 0 to Cstruct.length cs - 1 do
-      Format.fprintf ppf "%02x@ " (Cstruct.get_uint8 cs i)
-    done in
-  Format.fprintf ppf "@[%a@]" pp
-
-let pp_hex_s ppf =
-  let pp ppf = String.iter @@ fun c ->
-    Format.fprintf ppf "%02x@ " (Char.code c) in
-  Format.fprintf ppf "@[%a@]" pp
-
-let x s =
-  let rec go buf sb =
-    match Scanf.bscanf sb " %02x" Char.chr with
-      b -> Buffer.add_char buf b; go buf sb
-    | exception End_of_file -> Buffer.contents buf in
-  go (Buffer.create 17) (Scanf.Scanning.from_string s)
-
-let x_cs s = Cstruct.of_string (x s)
-
-let cstruct = Alcotest.testable pp_hex_cs Cstruct.equal
+let octets = Alcotest.testable Ohex.pp String.equal
 let err = Alcotest.testable Asn.pp_error (fun (`Parse _) (`Parse _) -> true)
-let dec t = Alcotest.(result (pair t cstruct) err)
+let dec t = Alcotest.(result (pair t octets) err)
 let testable ?(pp = fun ppf _ -> Fmt.pf ppf "*shrug*") ?(cmp = (=)) () =
   Alcotest.testable pp cmp
 
 let pp_e ppf = function
   | #Asn.error as e -> Asn.pp_error ppf e
-  | `Leftover b     -> Format.fprintf ppf "Leftover: %a" pp_hex_cs b
-
-let get = function Some x -> x | _ -> assert false
+  | `Leftover b     -> Format.fprintf ppf "Leftover: %a" Ohex.pp b
 
 type 'a cmp = 'a -> 'a -> bool
 
@@ -50,8 +27,8 @@ let accepts_eq name enc cases =
   let tests = cases |> List.map @@ fun (CEQ (name, alc, asn, xs)) ->
     let codec = Asn.codec enc asn
     and t = dec alc in
-    let f () = xs |> List.iter @@ fun (x, s) ->
-      Alcotest.check t name (Ok (x, Cstruct.empty)) (Asn.decode codec (x_cs s)) in
+    let f () = xs |> List.iter @@ fun (exp, s) ->
+      Alcotest.check t name (Ok (exp, "")) (Asn.decode codec (Ohex.decode s)) in
     (name, `Quick, f) in
   (name, tests)
 
@@ -60,16 +37,17 @@ let rejects name enc cases =
     let codec = Asn.codec enc asn
     and t = dec (testable ()) in
     let f () = ss |> List.iter @@ fun s ->
-      Alcotest.check t name (Error (`Parse "...")) (Asn.decode codec (x_cs s)) in
+      Alcotest.check t name (Error (`Parse "..."))
+        (Asn.decode codec (Ohex.decode s)) in
     (name, `Quick, f) in
   (name, tests)
 
 let accepts name enc cases =
   let tests = cases |> List.map @@ fun (C (name, asn, ss)) ->
     let f () = ss |> List.iter @@ fun s ->
-      match Asn.(decode (codec enc asn)) (x_cs s) with
+      match Asn.(decode (codec enc asn)) (Ohex.decode s) with
         Ok (_, t) ->
-          Alcotest.check cstruct "no remainder" Cstruct.empty t
+          Alcotest.check octets "no remainder" "" t
       | Error e ->
           Alcotest.failf "decode failed with: %a" pp_e e in
     (name, `Quick, f) in
@@ -81,18 +59,15 @@ let inverts1 ?(iters = 1000) name enc cases =
     let f () =
       for _ = 1 to iters do
         let x = Asn.random asn in
-        Alcotest.check t "invert" (Ok (x, Cstruct.empty))
+        Alcotest.check t "invert" (Ok (x, ""))
           (Asn.decode codec (Asn.encode codec x))
       done in
     (name, `Quick, f) in
   (name, tests)
 
 let time ?(frac=0) dtz =
-  Ptime.(add_span (of_date_time dtz |> get)
-    (Span.v (0, Int64.(mul (of_int frac) 1_000_000_000L))) |> get)
-
-let v32 = Z.of_int32
-let (<+) z1 i64 = Z.((z1 lsl 64) lor (extract (of_int64 i64) 0 64))
+  Ptime.(add_span (of_date_time dtz |> Option.get)
+    (Span.v (0, Int64.(mul (of_int frac) 1_000_000_000L))) |> Option.get)
 
 let cases = [
 
@@ -101,35 +76,59 @@ let cases = [
     true , "0101ff"
   ];
 
-  case_eq "integer" Asn.S.integer [
+  case_eq "integer" ~pp:Ohex.pp ~cmp:String.equal Asn.S.integer [
 
-    v32 0x000000_00l, "0201 00";
-    v32 0x000000_7fl, "0201 7f";
-    v32 0xffffff_80l, "0201 80";
-    v32 0xffffff_ffl, "0201 ff";
+    "\x00", "0201 00";
+    "\x7f", "0201 7f";
+    "\x80", "0201 80";
+    "\xff", "0201 ff";
 
-    v32 0x0000_0080l, "0202 0080";
-    v32 0x0000_7fffl, "0202 7fff";
-    v32 0xffff_8000l, "0202 8000";
-    v32 0xffff_ff7fl, "0202 ff7f";
+    "\x00\x80", "0202 0080";
+    "\x7f\xff", "0202 7fff";
+    "\x80\x00", "0202 8000";
+    "\xff\x7f", "0202 ff7f";
 
-    v32 0x00_008000l, "0203 008000";
-    v32 0x00_00ffffl, "0203 00ffff";
-    v32 0xff_800000l, "0203 800000";
-    v32 0xff_ff7fffl, "0203 ff7fff";
+    "\x00\x80\x00", "0203 008000";
+    "\x00\xff\xff", "0203 00ffff";
+    "\x80\x00\x00", "0203 800000";
+    "\xff\x7f\xff", "0203 ff7fff";
 
-    v32 0x00800000l, "0204 00800000";
-    v32 0x7fffffffl, "0204 7fffffff";
-    v32 0x80000000l, "0204 80000000";
-    v32 0xff7fffffl, "0204 ff7fffff";
+    "\x00\x80\x00\x00", "0204 00800000";
+    "\x7f\xff\xff\xff", "0204 7fffffff";
+    "\x80\x00\x00\x00", "0204 80000000";
+    "\xff\x7f\xff\xff", "0204 ff7fffff";
 
-    v32 0x00800000l <+ 0x00000000_00000000L, "020c 00800000 00000000 00000000";
-    v32 0x00ffffffl <+ 0xffffffff_ffffffffL, "020c 00ffffff ffffffff ffffffff";
-    v32 0x00ffffffl <+ 0x7fffffff_ffffffffL, "020c 00ffffff 7fffffff ffffffff";
-    v32 0x00ffffffl <+ 0xffffffff_7fffffffL, "020c 00ffffff ffffffff 7fffffff";
-    v32 0x80ffffffl <+ 0xffffffff_ffffffffL, "020c 80ffffff ffffffff ffffffff";
-    v32 0xff7fffffl <+ 0xffffffff_ffffffffL, "020c ff7fffff ffffffff ffffffff";
+    "\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", "020c 00800000 00000000 00000000";
+    "\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", "020c 00ffffff ffffffff ffffffff";
+    "\x00\xff\xff\xff\x7f\xff\xff\xff\xff\xff\xff\xff", "020c 00ffffff 7fffffff ffffffff";
+    "\x00\xff\xff\xff\xff\xff\xff\xff\x7f\xff\xff\xff", "020c 00ffffff ffffffff 7fffffff";
+    "\x80\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", "020c 80ffffff ffffffff ffffffff";
+    "\xff\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", "020c ff7fffff ffffffff ffffffff";
   ];
+
+  case_eq "unsigned_integer" ~pp:Ohex.pp ~cmp:String.equal Asn.S.unsigned_integer [
+    "", "0201 00";
+    "\x01", "0201 01";
+    "\x80", "0202 0080";
+  ];
+
+  case_eq "int" ~pp:Format.pp_print_int ~cmp:Int.equal Asn.S.int ([
+      0, "020100";
+      127, "02017F";
+      128, "02020080";
+      256, "02020100";
+      -128, "020180";
+      -129, "0202FF7F";
+      1073741823 (* 0x3FFFFFFF *), "02043FFFFFFF";
+      -1073741824, "0204C0000000";
+    ] @ (if Sys.word_size = 64 then
+           [ Int64.to_int 4294967295L, "020500FFFFFFFF";
+             Int64.to_int 4611686018427387903L, "02083FFFFFFFFFFFFFFF";
+             Int64.to_int (-4611686018427387904L), "0208C000000000000000";
+           ]
+         else
+           [])
+    );
 
   case_eq "null" Asn.S.null [
     (), "0500";
@@ -300,39 +299,45 @@ let cases = [
     ] );
 
   case_eq "octets" Asn.S.octet_string [
-    x_cs "0123456789abcdef", "0408 0123456789abcdef" ;
-    x_cs "0123456789abcdef", "048108 0123456789abcdef";
-    x_cs "0123456789abcdef", "240c 040401234567 040489abcdef" ];
+    Ohex.decode "0123456789abcdef", "0408 0123456789abcdef" ;
+    Ohex.decode "0123456789abcdef", "048108 0123456789abcdef";
+    Ohex.decode "0123456789abcdef", "240c 040401234567 040489abcdef" ];
 
-  case_eq "utc time" ~cmp:Ptime.equal Asn.S.utc_time [
+  case_eq "utc time" ~cmp:Ptime.equal ~pp:Ptime.pp Asn.S.utc_time [
 
     ( time ((1991, 5, 6), ((23, 45, 40), 0)),
-      "170d3931303530363233343534305a " ) ;
+      "170d393130353036 3233343534305a" ) ;
     ( time ((1991, 5, 6), ((16, 45, 40), -7 * 3600)),
-      "17113931303530363136343534302D30373030 " );
+      "1711393130353036 313634353430 2D30373030" );
     ( time ((1991, 5, 6), ((16, 45, 0), 9000)),
-      "170f393130353036313634352b30323330");
+      "170f393130353036 31363435 2b30323330");
+    ( time ((1950, 5, 6), ((23, 45, 40), 0)),
+      "170d353030353036 3233343534305a" ) ;
 
   ] ;
 
-  case_eq "generalized time" ~cmp:Ptime.equal Asn.S.generalized_time [
+  case_eq "generalized time" ~cmp:Ptime.equal ~pp:(Ptime.pp_human ~frac_s:3 ()) Asn.S.generalized_time [
 
     ( time ((1991, 5, 6), ((16, 0, 0), 0)),
-      "180a313939313035303631 36");
+      "180a3139393130353036 3136");
     ( time ((1991, 5, 6), ((16, 0, 0), 0)),
-      "180b313939313035303631 365a ");
+      "180b3139393130353036 31365a ");
     ( time ((1991, 5, 6), ((16, 0, 0), 15 * 60)),
-      "180f313939313035303631 362b30303135");
+      "180f3139393130353036 3136 2b30303135");
     ( time ((1991, 5, 6), ((16, 45, 0), 15 * 60)),
-      "1811313939313035303631 3634352b30303135");
+      "18113139393130353036 31363435 2b30303135");
     ( time ((1991, 5, 6), ((16, 45, 40), -15 * 60)),
-      "1813313939313035303631 36343534302d30303135");
+      "18133139393130353036 313634353430 2d30303135");
     ( time ~frac:001 ((1991, 5, 6), ((16, 45, 40), -(10 * 3600 + 10 * 60))),
-      "1817313939313035303631 36343534302e3030312d31 303130");
+      "18173139393130353036 313634353430 2e303031 2d31303130");
     ( Ptime.min,
-      "1817303030303031303130 30303030302e3030302b30 303030");
+      "18173030303030313031 303030303030 2e303030 2b30303030");
     ( Ptime.(truncate ~frac_s:3 max),
-      "1817393939393132333132 33353935392e3939392b30 303030")
+      "18173939393931323331 323335393539 2e393939 2b30303030");
+    ( time ~frac:766 ((0452, 05, 15), ((00, 30, 56), 0)),
+      "18133034353230353135 303033303536 2e3736365a");
+    ( time ~frac:234 ((0452, 05, 15), ((00, 30, 56), 0)),
+      "18133034353230353135 303033303536 2e3233345a");
   ] ;
 
 ]
@@ -374,7 +379,16 @@ let anticases = [
   case "32 bit length overflow"
   Asn.S.(sequence2 (required integer) (required integer))
   [ "30850100000006020180020180" ];
-]
+
+] @ (if Sys.word_size = 32 then
+       [ case "int overflow" Asn.S.int
+           [ "02047FFFFFFF" ; "020440000000" ;
+             "02050080000000" ; "0204BFFFFFFF" ] ]
+     else
+       [ case "int overflow" Asn.S.int
+           [ "02087FFFFFFFFFFFFFFF" ; "02084000000000000000" ;
+             "0209008000000000000000" ; "0208BFFFFFFFFFFFFFFF" ] ])
+
 
 let der_anticases = [
   case "constructed string 1" Asn.S.octet_string
@@ -388,7 +402,7 @@ let der_anticases = [
 
   case "redundant length" Asn.S.octet_string
   [ "048200ff" ^
-    Fmt.strf "%a" pp_hex_s (String.init 0xff (fun _ -> '\xaa')) ];
+    Format.asprintf "%a" Ohex.pp (String.init 0xff (fun _ -> '\xaa')) ];
 ]
 
 let certs = List.map (fun s -> case "cert" X509.certificate [s]) X509.examples

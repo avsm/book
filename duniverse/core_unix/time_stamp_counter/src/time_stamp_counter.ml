@@ -97,7 +97,9 @@ let zero = Int63.zero
 [%%ifdef JSC_ARCH_SIXTYFOUR]
 
 (* noalloc on x86_64 only *)
-let now () = Ocaml_intrinsics.Perfmon.rdtsc () |> Stdlib.Int64.to_int |> Int63.of_int
+let[@inline] now () =
+  Ocaml_intrinsics.Perfmon.rdtsc () |> Stdlib.Int64.to_int |> Int63.of_int
+;;
 
 module Calibrator = struct
   (* performance hack: prevent writes to this record from boxing floats by making all
@@ -150,13 +152,14 @@ module Calibrator = struct
   ;;
 
   let tsc_to_nanos_since_epoch =
-    let convert t tsc base mul =
+    let[@inline] convert t tsc base mul =
       (* Scale an int by a float without intermediate allocation and overflow. *)
-      Int63.( + )
+      (Int63.( + ) [@inlined hint])
         base
-        (Float.int63_round_nearest_exn (mul *. Int63.to_float (diff tsc t.tsc)))
+        ((Float.int63_round_nearest_exn [@inlined hint])
+           (mul *. (Int63.to_float [@inlined hint]) (diff tsc t.tsc)))
     in
-    fun t tsc ->
+    fun [@inline] t tsc ->
       if tsc < t.monotonic_until_tsc
       then convert t tsc t.monotonic_time_nanos t.floats.monotonic_nanos_per_cycle
       else convert t tsc t.time_nanos t.floats.nanos_per_cycle
@@ -171,7 +174,10 @@ module Calibrator = struct
      frequency changes.  In this module we have chosen a value of alpha that varies with
      the duration of time, i.e. longer time samples are given more weight and shorter time
      samples are given lesser weight. *)
-  let alpha_for_interval time_diff = 0. +. Float.max 0. (1. -. exp (-0.5 *. time_diff))
+  let[@inline] alpha_for_interval time_diff =
+    0. +. Float.max 0. (1. -. exp (-0.5 *. time_diff))
+  ;;
+
   let catchup_cycles = 1E9
 
   let initial_alpha = 1.
@@ -189,7 +195,7 @@ module Calibrator = struct
   let iround_up_and_add int ~if_iround_up_fails float =
     if Float.( > ) float 0.0
     then (
-      let float' = Caml.ceil float in
+      let float' = Stdlib.ceil float in
       if Float.( <= ) float' Float.iround_ubound
       then Int63.( + ) int (Int63.of_float_unchecked float')
       else if_iround_up_fails)
@@ -390,7 +396,8 @@ module Span = struct
   [%%ifdef JSC_ARCH_SIXTYFOUR]
 
   let to_ns t ~(calibrator : Calibrator.t) =
-    Float.int63_round_nearest_exn (Int63.to_float t *. calibrator.floats.nanos_per_cycle)
+    (Float.int63_round_nearest_exn [@inlined hint])
+      (Int63.to_float t *. calibrator.floats.nanos_per_cycle)
   ;;
 
   (* If the calibrator has not been well calibrated and [ns] is a large value, the
@@ -422,13 +429,15 @@ let calibrator = Calibrator.t
 
 let to_time t ~calibrator =
   Calibrator.tsc_to_seconds_since_epoch calibrator t
-  |> Time.Span.of_sec
-  |> Time.of_span_since_epoch
+  |> Time_float.Span.of_sec
+  |> Time_float.of_span_since_epoch
 ;;
 
-let to_nanos_since_epoch t ~calibrator = Calibrator.tsc_to_nanos_since_epoch calibrator t
+let[@inline] to_nanos_since_epoch t ~calibrator =
+  Calibrator.tsc_to_nanos_since_epoch calibrator t
+;;
 
-let to_time_ns t ~calibrator =
+let[@inline] to_time_ns t ~calibrator =
   Time_ns.of_int63_ns_since_epoch (to_nanos_since_epoch ~calibrator t)
 ;;
 

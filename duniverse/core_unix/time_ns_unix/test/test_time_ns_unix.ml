@@ -1,7 +1,7 @@
 open! Core
 open! Int.Replace_polymorphic_compare
 open Expect_test_helpers_core
-module Time = Time_unix
+module Time = Time_float_unix
 module Time_ns = Time_ns_unix
 
 let%expect_test "zoned strings near min and max representable value" =
@@ -65,9 +65,7 @@ let%test_module "Core.Time_ns.Utc.to_date_and_span_since_start_of_day" =
             let kernel_ofday =
               Time_ns.Ofday.of_span_since_start_of_day_exn kernel_span_since_start_of_day
             in
-            let core_date, core_ofday =
-              Time_ns.to_date_ofday time_ns ~zone:Time.Zone.utc
-            in
+            let core_date, core_ofday = Time_ns.to_date_ofday time_ns ~zone:Time.Zone.utc in
             require_compare_equal
               [%here]
               (module struct
@@ -1011,162 +1009,6 @@ let%test_module "Time_ns.Span.to_string,of_string" =
   end)
 ;;
 
-let%expect_test "Time_ns.Span.Stable.V1" =
-  let module V = Time_ns.Span.Stable.V1 in
-  let make int64 = V.of_int63_exn (Int63.of_int64_exn int64) in
-  (* stable checks for values that round-trip *)
-  print_and_check_stable_int63able_type
-    [%here]
-    (module V)
-    [ make 0L
-    ; make 1_000L
-    ; make 1_000_000_000L
-    ; make 1_234_560_000_000L
-    ; make 71_623_008_000_000_000L
-    ; make 80_000_006_400_000_000L
-    ; make 1L
-    ];
-  [%expect
-    {|
-    (bin_shape_digest 2b528f4b22f08e28876ffe0239315ac2)
-    ((sexp   0s)
-     (bin_io "\000")
-     (int63  0))
-    ((sexp   0.001ms)
-     (bin_io "\254\232\003")
-     (int63  1000))
-    ((sexp   1s)
-     (bin_io "\253\000\202\154;")
-     (int63  1000000000))
-    ((sexp   20.576m)
-     (bin_io "\252\000\160\130q\031\001\000\000")
-     (int63  1234560000000))
-    ((sexp   828.97d)
-     (bin_io "\252\000\192\149\r\191t\254\000")
-     (int63  71623008000000000))
-    ((sexp   925.926d)
-     (bin_io "\252\000@\128\251\1487\028\001")
-     (int63  80000006400000000))
-    ((sexp   1e-06ms)
-     (bin_io "\001")
-     (int63  1)) |}];
-  (* stable checks for values that do not precisely round-trip *)
-  print_and_check_stable_int63able_type
-    [%here]
-    (module V)
-    ~cr:Comment
-    [ make 11_275_440_000L ];
-  [%expect
-    {|
-    (bin_shape_digest 2b528f4b22f08e28876ffe0239315ac2)
-    ((sexp   11.2754s)
-     (bin_io "\252\128\143\017\160\002\000\000\000")
-     (int63  11275440000))
-    (* require-failed: lib/time_ns_unix/test/test_time_ns_unix.ml:LINE:COL. *)
-    ("sexp serialization failed to round-trip"
-      (original       11.2754s)
-      (sexp           11.2754s)
-      (sexp_roundtrip 11.2754s)) |}];
-  (* make sure [of_int63_exn] allows all values *)
-  show_raise ~hide_positions:true (fun () -> V.of_int63_exn (Int63.succ Int63.min_value));
-  [%expect {| "did not raise" |}]
-;;
-
-let%test_module "Time_ns.Span.Stable.V2" =
-  (module struct
-    module V = Time_ns.Span.Stable.V2
-
-    let%expect_test "round-trip" =
-      quickcheck
-        [%here]
-        ~sexp_of:Time_ns.Span.sexp_of_t
-        ~examples:span_examples
-        span_gen
-        ~f:(fun span ->
-          let rt = V.t_of_sexp (V.sexp_of_t span) in
-          require_equal [%here] (module Time_ns.Span) span rt;
-          let rt = V.of_int63_exn (V.to_int63 span) in
-          require_equal [%here] (module Time_ns.Span) span rt);
-      [%expect {| |}]
-    ;;
-
-    let%expect_test "stability" =
-      let make int64 = V.of_int63_exn (Int63.of_int64_exn int64) in
-      print_and_check_stable_int63able_type
-        [%here]
-        (module V)
-        [ make 0L
-        ; make 1L
-        ; make (-499L)
-        ; make 500L
-        ; make (-1_000L)
-        ; make 987_654_321L
-        ; make (-123_456_789_012L)
-        ; make 52_200_010_101_101L
-        ; make (-86_399_999_999_999L)
-        ; make 86_400_000_000_000L
-        ; make (-1_000_000_222_000_333L)
-        ; make 80_000_006_400_000_000L
-        ; make (-1_381_156_200_010_101_000L)
-        ; make 4_110_307_199_999_999_000L
-        ; make (Int63.to_int64 Int63.max_value)
-        ; make (Int63.to_int64 Int63.min_value)
-        ];
-      [%expect
-        {|
-        (bin_shape_digest 2b528f4b22f08e28876ffe0239315ac2)
-        ((sexp   0s)
-         (bin_io "\000")
-         (int63  0))
-        ((sexp   1ns)
-         (bin_io "\001")
-         (int63  1))
-        ((sexp   -499ns)
-         (bin_io "\254\r\254")
-         (int63  -499))
-        ((sexp   500ns)
-         (bin_io "\254\244\001")
-         (int63  500))
-        ((sexp   -1us)
-         (bin_io "\254\024\252")
-         (int63  -1000))
-        ((sexp   987.654321ms)
-         (bin_io "\253\177h\222:")
-         (int63  987654321))
-        ((sexp   -2m3.456789012s)
-         (bin_io "\252\236\229fA\227\255\255\255")
-         (int63  -123456789012))
-        ((sexp   14h30m10.101101ms)
-         (bin_io "\252m1\015\195y/\000\000")
-         (int63  52200010101101))
-        ((sexp   -23h59m59.999999999s)
-         (bin_io "\252\001\000\177nk\177\255\255")
-         (int63  -86399999999999))
-        ((sexp   1d)
-         (bin_io "\252\000\000O\145\148N\000\000")
-         (int63  86400000000000))
-        ((sexp   -11d13h46m40.222000333s)
-         (bin_io "\2523\011\254M\129r\252\255")
-         (int63  -1000000222000333))
-        ((sexp   925d22h13m26.4s)
-         (bin_io "\252\000@\128\251\1487\028\001")
-         (int63  80000006400000000))
-        ((sexp   -15985d14h30m10.101ms)
-         (bin_io "\252\248\206\017\247\192%\213\236")
-         (int63  -1381156200010101000))
-        ((sexp   47572d23h59m59.999999s)
-         (bin_io "\252\024\252\186\253\158\190\n9")
-         (int63  4110307199999999000))
-        ((sexp   53375d23h53m38.427387903s)
-         (bin_io "\252\255\255\255\255\255\255\255?")
-         (int63  4611686018427387903))
-        ((sexp   -53375d23h53m38.427387904s)
-         (bin_io "\252\000\000\000\000\000\000\000\192")
-         (int63  -4611686018427387904)) |}]
-    ;;
-  end)
-;;
-
 let%test_module "Time_ns.Span.Option.Stable.V2" =
   (module struct
     module V = Time_ns.Span.Option.Stable.V2
@@ -1205,8 +1047,7 @@ let%test_module "Time_ns.Span.Option.Stable.V2" =
         ; make (-1_381_156_200_010_101_000L)
         ; make 4_110_307_199_999_999_000L
         ; make (Int63.to_int64 Int63.max_value)
-        ; make (Int63.to_int64 Int63.min_value)
-          (* none *)
+        ; make (Int63.to_int64 Int63.min_value) (* none *)
         ];
       [%expect
         {|
@@ -1508,11 +1349,7 @@ let%test_module "Time_ns.Stable.Ofday.V1" =
         |> Core.Quickcheck.Generator.map ~f:V.of_int63_exn
       in
       quickcheck [%here] generator ~sexp_of:V.sexp_of_t ~f:(fun ofday ->
-        require_compare_equal
-          [%here]
-          (module V)
-          ofday
-          (V.of_int63_exn (V.to_int63 ofday));
+        require_compare_equal [%here] (module V) ofday (V.of_int63_exn (V.to_int63 ofday));
         require_compare_equal [%here] (module V) ofday (V.t_of_sexp (V.sexp_of_t ofday)));
       [%expect {| |}]
     ;;
@@ -1541,8 +1378,7 @@ let%test_module "Time_ns.Ofday.Option.Stable.V1" =
         ; make 86_399_999_999_000L
         ; make 86_399_999_999_999L
         ; make 86_400_000_000_000L
-        ; make (-4_611_686_018_427_387_904L)
-          (* None *)
+        ; make (-4_611_686_018_427_387_904L) (* None *)
         ];
       [%expect
         {|
@@ -1780,9 +1616,7 @@ let%test_module "Time_ns.Span" =
         Core.Option.try_with (fun () ->
           Time_ns.Span.( + )
             span_ns
-            (Time_ns.Span.scale
-               Time_ns.Span.microsecond
-               (float number_of_microseconds))))
+            (Time_ns.Span.scale Time_ns.Span.microsecond (float number_of_microseconds))))
     ;;
 
     let nearest_microsecond_to_span_ns span_ns =
@@ -1841,7 +1675,7 @@ let%test_module "Time_ns.Span.Option" =
         some (Time_ns.Span.of_int63_ns (Time_ns.Span.Option.Stable.V1.to_int63 none)));
       [%expect
         {|
-          (lib/time_ns_unix/src/time_ns_unix.ml:LINE:COL
+          (lib/core/src/span_ns.ml:LINE:COL
            "Span.Option.some value not representable"
            (span -53375d23h53m38.427387904s)) |}]
     ;;
@@ -2338,8 +2172,7 @@ let%test_module "Time_ns.Option" =
 
     let%expect_test "value_exn none" =
       require_does_raise [%here] ~hide_positions:true (fun () -> value_exn none);
-      [%expect
-        {| (lib/time_ns_unix/src/time_ns_unix.ml:LINE:COL "Span.Option.value_exn none") |}]
+      [%expect {| (lib/core/src/span_ns.ml:LINE:COL "Span.Option.value_exn none") |}]
     ;;
   end)
 ;;
@@ -2372,8 +2205,7 @@ let%test_module "Time_ns.Ofday.Option" =
 
     let%expect_test "value_exn none" =
       require_does_raise [%here] ~hide_positions:true (fun () -> value_exn none);
-      [%expect
-        {| (lib/time_ns_unix/src/time_ns_unix.ml:LINE:COL "Span.Option.value_exn none") |}]
+      [%expect {| (lib/core/src/span_ns.ml:LINE:COL "Span.Option.value_exn none") |}]
     ;;
 
     let%expect_test "of_span_since_start_of_day" =
@@ -2737,18 +2569,12 @@ let%test_unit "ofday_zoned conversion consistency" =
       assert (Time.Zone.( = ) (Time_ns.Ofday.Zoned.zone ofday_zoned_utc) utc);
       assert (Time.Zone.( = ) (Time_ns.Ofday.Zoned.zone ofday_zoned_nyc) nyc);
       assert (Time.Zone.( = ) (Time_ns.Ofday.Zoned.zone ofday_zoned_hkg) hkg);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_utc) ofday_utc);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_nyc) ofday_nyc);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_hkg) ofday_hkg);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_utc2) ofday_utc);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_nyc2) ofday_nyc);
-      assert (
-        Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_hkg2) ofday_hkg);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_utc) ofday_utc);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_nyc) ofday_nyc);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_hkg) ofday_hkg);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_utc2) ofday_utc);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_nyc2) ofday_nyc);
+      assert (Time_ns.Ofday.( = ) (Time_ns.Ofday.Zoned.ofday ofday_zoned_hkg2) ofday_hkg);
       assert (Date.( = ) date_utc2 date_utc);
       assert (Date.( = ) date_nyc2 date_nyc);
       assert (Date.( = ) date_hkg2 date_hkg);
@@ -2765,4 +2591,186 @@ let%expect_test "[Time_ns_unix.t_sexp_grammar]" =
      (String
       (List (Cons String (Cons String Empty)))
       (List (Cons String (Cons String (Cons String Empty)))))) |}]
+;;
+
+let%test_module "format" =
+  (module struct
+    let hkg = Time_ns.Zone.find_exn "Asia/Hong_Kong"
+    let ldn = Time_ns.Zone.find_exn "Europe/London"
+    let nyc = Time_ns.Zone.find_exn "America/New_York"
+    let zones = [ hkg; ldn; nyc ]
+
+    let test_time time =
+      print_endline (Time_ns.to_string_abs time ~zone:Time_ns.Zone.utc);
+      List.iter zones ~f:(fun zone ->
+        print_endline (Time_ns.format time ~zone "%F %T" ^ " -- " ^ Time_ns.Zone.name zone))
+    ;;
+
+    let time1 = Time_ns.of_string_abs "2015-01-01 10:00:00 Europe/London"
+    let time2 = Time_ns.of_string_abs "2015-06-06 10:00:00 Europe/London"
+
+    let%expect_test _ =
+      test_time time1;
+      [%expect
+        {|
+        2015-01-01 10:00:00.000000000Z
+        2015-01-01 18:00:00 -- Asia/Hong_Kong
+        2015-01-01 10:00:00 -- Europe/London
+        2015-01-01 05:00:00 -- America/New_York |}]
+    ;;
+
+    let%expect_test _ =
+      test_time time2;
+      [%expect
+        {|
+        2015-06-06 09:00:00.000000000Z
+        2015-06-06 17:00:00 -- Asia/Hong_Kong
+        2015-06-06 10:00:00 -- Europe/London
+        2015-06-06 05:00:00 -- America/New_York |}]
+    ;;
+
+    let list_of_transition = function
+      | None -> []
+      | Some (time, _) -> [ time ]
+    ;;
+
+    let transitions_of_time time zone =
+      List.concat_map
+        ~f:list_of_transition
+        [ Time_ns.Zone.prev_clock_shift
+            zone
+            ~at_or_before:(Time_ns.to_time_float_round_nearest time)
+        ; Time_ns.Zone.next_clock_shift
+            zone
+            ~strictly_after:(Time_ns.to_time_float_round_nearest time)
+        ]
+      |> List.map ~f:Time_ns.of_time_float_round_nearest
+    ;;
+
+    let times_around time =
+      List.map [ -2.; -1.; 0.; 1.; 2. ] ~f:(fun min ->
+        Time_ns.add time (Time_ns.Span.of_min min))
+    ;;
+
+    let test_transition time = List.iter (times_around time) ~f:test_time
+
+    let test_transitions time zone =
+      List.iter (transitions_of_time time zone) ~f:(fun time ->
+        print_endline "";
+        test_transition time)
+    ;;
+
+    let%expect_test _ =
+      test_transitions time1 ldn;
+      [%expect
+        {|
+        2014-10-26 00:58:00.000000000Z
+        2014-10-26 08:58:00 -- Asia/Hong_Kong
+        2014-10-26 01:58:00 -- Europe/London
+        2014-10-25 20:58:00 -- America/New_York
+        2014-10-26 00:59:00.000000000Z
+        2014-10-26 08:59:00 -- Asia/Hong_Kong
+        2014-10-26 01:59:00 -- Europe/London
+        2014-10-25 20:59:00 -- America/New_York
+        2014-10-26 01:00:00.000000000Z
+        2014-10-26 09:00:00 -- Asia/Hong_Kong
+        2014-10-26 01:00:00 -- Europe/London
+        2014-10-25 21:00:00 -- America/New_York
+        2014-10-26 01:01:00.000000000Z
+        2014-10-26 09:01:00 -- Asia/Hong_Kong
+        2014-10-26 01:01:00 -- Europe/London
+        2014-10-25 21:01:00 -- America/New_York
+        2014-10-26 01:02:00.000000000Z
+        2014-10-26 09:02:00 -- Asia/Hong_Kong
+        2014-10-26 01:02:00 -- Europe/London
+        2014-10-25 21:02:00 -- America/New_York
+
+        2015-03-29 00:58:00.000000000Z
+        2015-03-29 08:58:00 -- Asia/Hong_Kong
+        2015-03-29 00:58:00 -- Europe/London
+        2015-03-28 20:58:00 -- America/New_York
+        2015-03-29 00:59:00.000000000Z
+        2015-03-29 08:59:00 -- Asia/Hong_Kong
+        2015-03-29 00:59:00 -- Europe/London
+        2015-03-28 20:59:00 -- America/New_York
+        2015-03-29 01:00:00.000000000Z
+        2015-03-29 09:00:00 -- Asia/Hong_Kong
+        2015-03-29 02:00:00 -- Europe/London
+        2015-03-28 21:00:00 -- America/New_York
+        2015-03-29 01:01:00.000000000Z
+        2015-03-29 09:01:00 -- Asia/Hong_Kong
+        2015-03-29 02:01:00 -- Europe/London
+        2015-03-28 21:01:00 -- America/New_York
+        2015-03-29 01:02:00.000000000Z
+        2015-03-29 09:02:00 -- Asia/Hong_Kong
+        2015-03-29 02:02:00 -- Europe/London
+        2015-03-28 21:02:00 -- America/New_York |}]
+    ;;
+
+    let%expect_test _ =
+      test_transitions time1 nyc;
+      [%expect
+        {|
+        2014-11-02 05:58:00.000000000Z
+        2014-11-02 13:58:00 -- Asia/Hong_Kong
+        2014-11-02 05:58:00 -- Europe/London
+        2014-11-02 01:58:00 -- America/New_York
+        2014-11-02 05:59:00.000000000Z
+        2014-11-02 13:59:00 -- Asia/Hong_Kong
+        2014-11-02 05:59:00 -- Europe/London
+        2014-11-02 01:59:00 -- America/New_York
+        2014-11-02 06:00:00.000000000Z
+        2014-11-02 14:00:00 -- Asia/Hong_Kong
+        2014-11-02 06:00:00 -- Europe/London
+        2014-11-02 01:00:00 -- America/New_York
+        2014-11-02 06:01:00.000000000Z
+        2014-11-02 14:01:00 -- Asia/Hong_Kong
+        2014-11-02 06:01:00 -- Europe/London
+        2014-11-02 01:01:00 -- America/New_York
+        2014-11-02 06:02:00.000000000Z
+        2014-11-02 14:02:00 -- Asia/Hong_Kong
+        2014-11-02 06:02:00 -- Europe/London
+        2014-11-02 01:02:00 -- America/New_York
+
+        2015-03-08 06:58:00.000000000Z
+        2015-03-08 14:58:00 -- Asia/Hong_Kong
+        2015-03-08 06:58:00 -- Europe/London
+        2015-03-08 01:58:00 -- America/New_York
+        2015-03-08 06:59:00.000000000Z
+        2015-03-08 14:59:00 -- Asia/Hong_Kong
+        2015-03-08 06:59:00 -- Europe/London
+        2015-03-08 01:59:00 -- America/New_York
+        2015-03-08 07:00:00.000000000Z
+        2015-03-08 15:00:00 -- Asia/Hong_Kong
+        2015-03-08 07:00:00 -- Europe/London
+        2015-03-08 03:00:00 -- America/New_York
+        2015-03-08 07:01:00.000000000Z
+        2015-03-08 15:01:00 -- Asia/Hong_Kong
+        2015-03-08 07:01:00 -- Europe/London
+        2015-03-08 03:01:00 -- America/New_York
+        2015-03-08 07:02:00.000000000Z
+        2015-03-08 15:02:00 -- Asia/Hong_Kong
+        2015-03-08 07:02:00 -- Europe/London
+        2015-03-08 03:02:00 -- America/New_York |}]
+    ;;
+  end)
+;;
+
+let%test_module "parse" =
+  (module struct
+    let test zone string =
+      Time_ns.parse ~zone ~fmt:"%Y-%m-%d %H:%M:%S" string
+      |> Time_ns.to_string_abs ~zone:Time_ns.Zone.utc
+      |> print_endline
+    ;;
+
+    let%expect_test _ =
+      test Time_ns.Zone.utc "1970-01-01 00:00:00";
+      [%expect {| 1970-01-01 00:00:00.000000000Z |}];
+      test (Time_ns.Zone.find_exn "Asia/Hong_Kong") "1970-01-01 08:00:00";
+      [%expect {| 1970-01-01 00:00:00.000000000Z |}];
+      test (Time_ns.Zone.find_exn "America/New_York") "2013-10-07 09:30:00";
+      [%expect {| 2013-10-07 13:30:00.000000000Z |}]
+    ;;
+  end)
 ;;

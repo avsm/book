@@ -1,5 +1,7 @@
-(** Implements universally unique identifiers based on version 3 of the UUID
-    specification.  Identifier generation is thread safe, and fast.
+(** Thread-safe generation of random identifiers in the UUID format.
+
+    This library is not RFC 4122 compliant: the version is set in the output, but the
+    variant is not.
 *)
 
 open! Core
@@ -23,19 +25,21 @@ module Unstable : sig
   (** Unlike the toplevel [sexp_of_t], [Unstable.sexp_of_t] shows the uuid even when
       [am_running_test]. Unlike [Stable] deserializers, [Unstable.t_of_sexp] validates the
       input. *)
-  type nonrec t = t [@@deriving bin_io, compare, equal, hash, sexp]
+  type nonrec t = t [@@deriving bin_io, compare, equal, hash, sexp, sexp_grammar]
 
   include Comparator.S with type t := t with type comparator_witness = comparator_witness
 end
 
 module Stable : sig
   module V1 : sig
-    type nonrec t = t [@@deriving hash]
+    type nonrec t = t [@@deriving equal, hash]
 
     include
-      Stable_comparable.V1
+      Stable_comparable.With_stable_witness.V1
       with type t := t
       with type comparator_witness = comparator_witness
+
+    include Stringable.S with type t := t
 
     val for_testing : t
   end

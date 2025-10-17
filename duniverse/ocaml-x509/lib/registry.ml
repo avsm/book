@@ -20,10 +20,9 @@ let hash_algs = nist_alg <| 2
 
 (* PKCS1 *)
 
-let md2  = rsadsi <| 2 <| 2
-and md4  = rsadsi <| 2 <| 4
 and md5  = rsadsi <| 2 <| 5
 and sha1 = base 1 3 <| 14 <| 3 <| 2 <| 26
+and sha1_rsa_encryption = base 1 3 <| 14 <| 3 <| 2 <| 29
 
 (* rfc5758 *)
 
@@ -31,8 +30,6 @@ let sha256     = hash_algs <| 1
 and sha384     = hash_algs <| 2
 and sha512     = hash_algs <| 3
 and sha224     = hash_algs <| 4
-and sha512_224 = hash_algs <| 5
-and sha512_256 = hash_algs <| 6
 
 module ANSI_X9_62 = struct
 
@@ -68,11 +65,8 @@ module PKCS1 = struct
   let pkcs1 = pkcs <| 1
 
   let rsa_encryption           = pkcs1 <| 1
-  and md2_rsa_encryption       = pkcs1 <| 2
-  and md4_rsa_encryption       = pkcs1 <| 3
   and md5_rsa_encryption       = pkcs1 <| 4
   and sha1_rsa_encryption      = pkcs1 <| 5
-  and ripemd160_rsa_encryption = pkcs1 <| 6
   and rsaes_oaep               = pkcs1 <| 7
   and rsassa_pss               = pkcs1 <| 10
   and sha256_rsa_encryption    = pkcs1 <| 11
@@ -147,6 +141,7 @@ module PKCS9 = struct
   and smime_capabilities   = pkcs9 <| 15
   and smime_oid_registry   = pkcs9 <| 16
   and friendly_name        = pkcs9 <| 20
+  and local_key_id         = pkcs9 <| 21
   and cert_types           = pkcs9 <| 22
   and crl_types            = pkcs9 <| 23
 end

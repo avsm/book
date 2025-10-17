@@ -64,8 +64,7 @@ let t_of_sexp : 'a. (Sexplib0.Sexp.t -> 'a) -> Sexplib0.Sexp.t -> 'a t =
       Sexplib0.Sexp_conv_error.nested_list_invalid_sum error_source__006_ sexp__005_
     | Sexplib0.Sexp.List [] as sexp__005_ ->
       Sexplib0.Sexp_conv_error.empty_list_invalid_sum error_source__006_ sexp__005_
-    | sexp__005_ ->
-      Sexplib0.Sexp_conv_error.unexpected_stag error_source__006_ sexp__005_
+    | sexp__005_ -> Sexplib0.Sexp_conv_error.unexpected_stag error_source__006_ sexp__005_
 ;;
 
 let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
@@ -80,7 +79,7 @@ let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
     | Unbounded -> Sexplib0.Sexp.Atom "Unbounded"
 ;;
 
-let (t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t) =
+let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
   fun _'a_sexp_grammar ->
   { untyped =
       Variant
@@ -154,8 +153,7 @@ let (interval_comparison_sexp_grammar : interval_comparison Sexplib0.Sexp_gramma
 ;;
 
 let compare_interval_comparison =
-  (Ppx_compare_lib.polymorphic_compare
-   : interval_comparison -> interval_comparison -> int)
+  (Stdlib.compare : interval_comparison -> interval_comparison -> int)
 ;;
 
 let (hash_fold_interval_comparison :

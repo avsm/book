@@ -1,13 +1,24 @@
-#include <unistd.h>
+#ifndef _MSC_VER
+# include <unistd.h>
+#endif
+
+#include "mirage_crypto.h"
 
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
 #include <caml/unixsupport.h>
 #include <caml/bigarray.h>
 
-#if defined(__linux)
+#if defined(__ANDROID_API__) && __ANDROID_API__ < 28
+// on Android 27 and earlier, we use Google's <sys/random.h> recommended arc4random_buf
+# include <stdlib.h>
+
+void raw_getrandom (uint8_t *data, size_t len) {
+  arc4random_buf(data, len);
+}
+#elif defined(__linux) || defined(__GNU__)
 # include <errno.h>
-// on Linux, we use getrandom and loop
+// on Linux and GNU/Hurd, we use getrandom and loop
 
 # if __GLIBC__ && __GLIBC__ <= 2 && __GLIBC_MINOR__ < 25
 # include <sys/syscall.h>
@@ -17,16 +28,19 @@
 # define getrandom(buf, len, flags) getrandom((buf), (len), (flags))
 # endif
 
-void raw_getrandom (uint8_t *data, uint32_t len) {
-  int r, off = 0;
+void raw_getrandom (uint8_t *data, size_t len) {
+  size_t off = 0;
+  ssize_t r = 0;
   while (off < len) {
     r = getrandom(data + off, len - off, 0);
-    if (r < 0 && errno == EINTR) continue;
-    else if (r < 0) uerror("getrandom", Nothing);
-    off += r;
+    if (r == -1) {
+      if (errno == EINTR) continue;
+      else uerror("getrandom", Nothing);
+    }
+    off += (size_t)r;
   }
 }
-#elif (defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__OpenBSD__) || defined(__APPLE__))
+#elif (defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)  || defined(__OpenBSD__) || defined(__APPLE__)) || defined(__NetBSD__)
 // on BSD and macOS, loop (in pieces of 256) getentropy
 #if defined(__APPLE__)
 // on macOS, getentropy is defined in sys/random.h (on BSD in unistd.h)
@@ -34,11 +48,11 @@ void raw_getrandom (uint8_t *data, uint32_t len) {
 #endif
 #include <sys/param.h>
 
-void raw_getrandom (uint8_t *data, uint32_t len) {
-  int rlen = 0;
-  for (int i = 0; i <= len; i += 256) {
+void raw_getrandom (uint8_t *data, size_t len) {
+  size_t rlen = 0;
+  for (size_t i = 0; i <= len; i += 256) {
     rlen = MIN(256, len - i);
-    if (getentropy(data + i, rlen) < 0) uerror("getentropy", Nothing);
+    if (getentropy(data + i, rlen) == -1) uerror("getentropy", Nothing);
   }
 }
 #elif (defined(_WIN32))
@@ -52,11 +66,11 @@ void raw_getrandom (uint8_t *data, uint32_t len) {
  * have decided to go with the more modern Windows API with bcrypt,
  * and make Windows 10 our minimum supported version of mirage-crypto.
  */
-#include <Windows.h>
+#include <windows.h>
 #include <ntstatus.h>
 #include <bcrypt.h>
 
-void raw_getrandom(uint8_t *data, uint32_t len) {
+void raw_getrandom(uint8_t *data, size_t len) {
    NTSTATUS Status;
    Status = BCryptGenRandom(NULL, data, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
    if (Status != STATUS_SUCCESS)
@@ -67,7 +81,7 @@ void raw_getrandom(uint8_t *data, uint32_t len) {
 #error "Retrieving random data not supported on this platform"
 #endif
 
-CAMLprim value mc_getrandom (value ba, value len) {
-  raw_getrandom((uint8_t*) Caml_ba_data_val(ba), Int_val(len));
+CAMLprim value mc_getrandom (value buf, value off, value len) {
+  raw_getrandom(_bp_uint8_off(buf, off), Long_val(len));
   return Val_unit;
 }

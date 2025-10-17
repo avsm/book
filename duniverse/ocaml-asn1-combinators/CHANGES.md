@@ -1,3 +1,21 @@
+## v0.3.2 (2024-09-04)
+* Drop OCaml < 4.13 support (#45 @hannesm)
+
+## v0.3.1 (2024-05-08)
+* Introduce Asn.S.unsigned_integer - useful for e.g. ECDSA signatures where the
+  user code expects an unsigned integer and shouldn't worry about the ASN.1
+  encoding (#44 @reynir @hannesm)
+* Provide custom random generators for int and unsigned_integer
+  (#44 @hannesm @reynir)
+
+## v0.3.0 (2024-03-14)
+* BUGFIX: utctime 50 should be 1950 (not 2050) (#39 @reynir)
+* drop zarith dependency, Asn.S.integer is now a Cstruct.t (#42 @hannesm)
+* drop cstruct dependency, use string instead (#43 @hannesm)
+  this changes the allocation discipline, and while benchmarking the decoding
+  of certificates takes less time now, there may be performance differences
+  (since now String.sub is used which allocates and copies data)
+
 ## v0.2.6 (2021-08-04)
 * Use Cstruct.length instead of Cstruct.len, drop OCaml <4.08 support,
   remove bigarray-compat and stdlib-shims dependencies (#37 by @hannesm)

@@ -19,9 +19,12 @@
 (* A compressed table is represented as a pair of arrays. The
    displacement array is an array of offsets into the data array. *)
 
+type displacement =
+  int
+
 type 'a table =
-    int array * (* displacement *)
-     'a array   (* data *)
+  displacement array * (* displacement *)
+            'a array   (* data *)
 
 (* In a natural version of this algorithm, displacements would be greater
    than (or equal to) [-n]. However, in the particular setting of Menhir,
@@ -37,13 +40,13 @@ type 'a table =
    to ensure that all displacements are nonnegative. This would work, but
    would require [n] to be published, for use by the decoder. *)
 
-let encode (displacement : int) : int =
+let encode (displacement : int) : displacement =
   if displacement >= 0 then
     displacement lsl 1
   else
     (-displacement) lsl 1 + 1
 
-let decode (displacement : int) : int =
+let[@inline] decode (displacement : displacement) : int =
   if displacement land 1 = 0 then
     displacement lsr 1
   else
@@ -61,10 +64,10 @@ type 'a row =
 
 (* [compress equal insignificant dummy m n t] turns the two-dimensional table
    [t] into a compressed table. The parameter [equal] is equality of data
-   values. The parameter [wildcard] tells which data values are insignificant,
-   and can thus be overwritten with other values. The parameter [dummy] is
-   used to fill holes in the data array. [m] and [n] are the integer
-   dimensions of the table [t]. *)
+   values. The parameter [insignificant] determines which data values are
+   insignificant, and can thus be overwritten with other values. The parameter
+   [dummy] is used to fill holes in the data array. [m] and [n] are the
+   integer dimensions of the table [t]. *)
 
 let compress
     (equal : 'a -> 'a -> bool)
@@ -250,6 +253,6 @@ let get (displacement, data) i j =
 (* [getget] is a variant of [get] which only requires read access,
    via accessors, to the two components of the table. *)
 
-let getget get_displacement get_data (displacement, data) i j =
+let[@inline] getget get_displacement get_data (displacement, data) i j =
   let k = decode (get_displacement displacement i) in
   get_data data (k + j)

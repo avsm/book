@@ -1,6 +1,5 @@
 Ptime — POSIX time for OCaml
 ============================
-v1.0.0+dune2
 
 Ptime has platform independent POSIX time support in pure OCaml. It
 provides a type to represent a well-defined range of POSIX timestamps
@@ -19,7 +18,7 @@ under the ISC license.
 
 [rfc3339]: http://tools.ietf.org/html/rfc3339
 
-Home page: http://erratique.ch/software/ptime  
+Home page: <http://erratique.ch/software/ptime>  
 
 # Installation
 
@@ -32,12 +31,17 @@ instructions.
 
 # Documentation
 
-The documentation and API reference is generated from the source
-interfaces. It can be consulted [online][doc] or via `odig doc ptime`.
+The documentation can be consulted [online] or via `odig doc mtime`.
 
-[doc]: http://erratique.ch/software/ptime/doc/
+Questions are welcome but better asked on the [OCaml forum] than on
+the issue tracker.
+
+[online]: http://erratique.ch/software/ptime/doc/
+[OCaml forum]: https://discuss.ocaml.org/
 
 # Sample programs
 
-If you installed Ptime with `opam` sample programs are located in
-the directory `opam config var ptime:doc`.
+See [test/min_clock.ml](test/min_clock.ml).
+
+If you installed ptime with `opam` sample programs are located in
+the directory `opam var ptime:doc`.

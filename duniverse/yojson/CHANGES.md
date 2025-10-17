@@ -1,3 +1,66 @@
+## 2.2.2
+
+*2024-06-27*
+
+### Added
+
+- Add locations in the JSON5 parser error messages (@gcluzel, #182)
+
+## 2.2.1
+
+*2024-06-04*
+
+### Fixed
+
+- Don't expose `Yojson_five` internals anymore (@Leonidas_from_XIV, #180)
+
+## 2.2.0
+
+*2024-05-31*
+
+### Added
+
+- Added support for JSON5 (@dhilst, @gorm-issuu, @gertsonderby, #152)
+
+### Removed
+
+- Remove CPPO dependency to make the Yojson installation lighter
+  (@Leonidas-from-XIV, #175)
+
+## 2.1.2
+
+*2023-11-23*
+
+### Fixed
+
+- Fix the error location reported in the exception. Regression in 2.1.1
+  (reported by @johnridesabike, regression test by @ElectreAAS, fix by
+  @Leonidas-from-XIV, #171, #172)
+
+## 2.1.1
+
+*2023-10-10*
+
+### Changed
+
+- Make `Basic`, `Safe` & `Raw` seperate compilation units that get exposed by
+  the main module as suggested by @hhugo to enable JSOO to discard unused
+  modules. No API changes should be observable. (#84, #167 @Leonidas-from-XIV)
+- Removed forward refs in the parser to make dead-code elimination in JSOO
+  better (#168, @hhugo)
+
+## 2.1.0
+
+*2023-04-26*
+
+### Added
+
+- Add `Yojson.Raw.Util` module to provide combinators for extracting fields
+  from `Yojson.Raw.t` values. (@tmcgilchrist, #163)
+
+- Add `Util.path` function to recurse into an object through a list of keys.
+  (@cuihtlauac, @Leonidas-from-XIV, #157)
+
 ## 2.0.2
 
 *2022-08-09*

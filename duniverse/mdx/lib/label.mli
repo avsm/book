@@ -21,8 +21,8 @@ module Relation : sig
   val compare : t -> int -> int -> bool
 
   val raw_parse : string -> string * (t * string) option
-  (** [raw_parse s] splits [s] into a label, and optionally the relation and
-      the associated value. *)
+  (** [raw_parse s] splits [s] into a label, and optionally the relation and the
+      associated value. *)
 end
 
 type non_det = Nd_output | Nd_command
@@ -30,6 +30,8 @@ type non_det = Nd_output | Nd_command
 val default_non_det : non_det
 
 type block_kind = OCaml | Cram | Toplevel | Include
+
+val pp_block_kind : block_kind Fmt.t
 
 type t =
   | Dir of string
@@ -40,16 +42,16 @@ type t =
   | Skip
   | Non_det of non_det option
   | Version of Relation.t * Ocaml_version.t
+  | Os_type of Relation.t * string
   | Set of string * string
   | Unset of string
   | Block_kind of block_kind
+  | Language_tag of string
 
-val pp : Format.formatter -> t -> unit
+val pp : t Fmt.t
 
 val interpret :
-  string ->
-  (Relation.t * string) option ->
-  (t, [> `Msg of string ]) Result.result
+  string -> (Relation.t * string) option -> (t, [> `Msg of string ]) result
 
-val of_string : string -> (t list, [ `Msg of string ] list) Result.result
+val of_string : string -> (t list, [ `Msg of string ] list) result
 (** [of_string s] cuts [s] into a list of labels. *)

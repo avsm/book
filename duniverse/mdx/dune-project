@@ -1,7 +1,9 @@
-(lang dune 2.7)
+(lang dune 3.5)
 
 (name mdx)
-(version 2.1.0)
+(version 2.5.0)
+
+(cram disable)
 
 (source
  (github realworldocaml/mdx))
@@ -30,12 +32,14 @@
   astring
   (logs (>= 0.7.0))
   (cmdliner
-   (>= 1.0.0))
+   (>= 1.1.0))
   (re
    (>= 1.7.2))
-  result
   (ocaml-version
    (>= 2.3.0))
-  (odoc-parser (>= 1.0.0))
   (lwt :with-test)
-  (alcotest :with-test)))
+  camlp-streams
+  result
+  (alcotest :with-test))
+ (conflicts
+   (result (< 1.5))))

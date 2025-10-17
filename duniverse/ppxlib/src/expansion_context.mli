@@ -1,3 +1,5 @@
+(** The context given to rewriting rules when expanding. *)
+
 module Base : sig
   type t
   (** Type for the location independent parts of the expansion context *)
@@ -128,5 +130,6 @@ module Deriver : sig
 
   val make :
     derived_item_loc:Location.t -> inline:bool -> base:Base.t -> unit -> t
-  (** Build a new expansion context with the given item location and code path *)
+  (** Build a new expansion context with the given item location and code path
+  *)
 end

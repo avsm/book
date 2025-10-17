@@ -30,6 +30,13 @@ and interface_item =
   | IIModule of string * module_type
     (* Comment. *)
   | IIComment of string
+    (* Class. *)
+  | IIClass of
+      (* virtual? *)              virtuality *
+      (* type parameters: *)      typeparams *
+      (* class name: *)           class_name *
+      (* self type annotation: *) typ option *
+      (* content: *)              class_field_specs
 
 and module_type =
   | MTNamedModuleType of string
@@ -58,10 +65,8 @@ and typedef = {
     (* Name of the algebraic data type. *)
     typename: string;
 
-    (* Type parameters. This is a list of type variable names,
-       without the leading quote, which will be added by the
-       pretty-printer. Can also be "_". *)
-    typeparams: string list;
+    (* Type parameters. *)
+    typeparams: typeparams;
 
     (* Data constructors. *)
     typerhs: typedefrhs;
@@ -71,10 +76,20 @@ and typedef = {
 
   }
 
+and typeparams =
+  typeparam list
+
+(* A type parameter is a type variable name, without the leading quote, which
+   will be added by the pretty-printer. It can also be "_". *)
+
+and typeparam =
+  string
+
 and typedefrhs =
   | TDefRecord of fielddef list
   | TDefSum of datadef list
   | TAbbrev of typ
+  | TAbstract
 
 and fielddef = {
 
@@ -175,6 +190,9 @@ and expr =
 
   (* Function call. *)
   | EApp of expr * expr list
+
+  (* Method call. *)
+  | EMethodCall of expr * method_name
 
   (* Local definitions. This is a nested sequence of [let]
      definitions. *)
@@ -296,6 +314,49 @@ and structure_item =
   | SIComment of string
     (* Toplevel attribute. *)
   | SIAttribute of (* attribute: *) string * (* payload: *) string
+    (* Class. *)
+  | SIClass of
+      (* virtual? *)              virtuality *
+      (* type parameters: *)      typeparams *
+      (* class name: *)           class_name *
+      (* self type annotation: *) typ option *
+      (* content: *)              class_fields
+
+(* Objects. *)
+
+and virtuality =
+  | NonVirtual
+  | Virtual
+
+and privacy =
+  | Public
+  | Private
+
+and class_fields =
+  class_field list
+
+and class_field =
+    (* Method definition. *)
+  | CFMethod of privacy * method_name * expr
+    (* Virtual method declaration. *)
+  | CFMethodVirtual of method_name * typescheme
+    (* Comment. *)
+  | CFComment of string
+
+and class_field_specs =
+  class_field_spec list
+
+and class_field_spec =
+    (* Method declaration. *)
+  | CFSMethod of virtuality * method_name * typescheme
+    (* Comment. *)
+  | CFSComment of string
+
+and class_name =
+  string
+
+and method_name =
+  string
 
 (* A type of parameters, with injections both into patterns (formal parameters)
    and into expressions (actual parameters). *)

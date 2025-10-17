@@ -8,9 +8,7 @@
    ("deprecated"), and create a local, non-deprecated alias for
    [Lwt_sequence] that can be referred to by the rest of the code in this
    module without triggering any more warnings. *)
-[@@@ocaml.warning "-3"]
 module Lwt_sequence = Lwt_sequence
-[@@@ocaml.warning "+3"]
 
 open Lwt.Infix
 
@@ -108,7 +106,7 @@ let validate_and_return p c =
             resolver is waiting. *)
          dispose p c >>= fun () ->
          replace_disposed p;
-         Lwt.fail e)
+         Lwt.reraise e)
 
 (* Acquire a pool member. *)
 let acquire p =

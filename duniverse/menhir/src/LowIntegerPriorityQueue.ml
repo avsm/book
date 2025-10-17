@@ -31,6 +31,9 @@ type 'a t = {
      search for a nonempty bucket. *)
   mutable cardinal: int;
 
+  (* A default element, supplied by the user at creation time. *)
+  default: 'a;
+
 }
 
 let create default =
@@ -40,7 +43,7 @@ let create default =
      main array. *)
   let dummy = MyStack.make_ 0 default in
   let a = MyArray.make 16 dummy (fun _ -> MyStack.make_ 1024 default) in
-  { a; best = 0; cardinal = 0 }
+  { a; best = 0; cardinal = 0; default }
 
 let add q x priority =
   assert (0 <= priority);
@@ -75,14 +78,14 @@ let rec remove_nonempty q =
        When we find that a priority level has become empty, we physically
        empty it, so as to free the (possibly large) space that it takes up.
        This strategy is good when the client is Dijkstra's algorithm or A*. *)
-    let dummy = MyArray.default q.a in
-    MyArray.set q.a q.best dummy;
+    let empty = MyStack.make_ 1 q.default in
+    MyArray.set q.a q.best empty;
     q.best <- q.best + 1;
     remove_nonempty q
   end
   else begin
     q.cardinal <- q.cardinal - 1;
-    Some (MyStack.pop xs)
+    MyStack.pop xs
     (* Note: [MyStack.pop] does not shrink the physical array underlying the
        stack. This is good, because we are likely to push new elements into
        this stack. *)
@@ -92,12 +95,10 @@ let remove q =
   if q.cardinal = 0 then
     None
   else
-    remove_nonempty q
+    Some (remove_nonempty q)
 
-let rec repeat q f =
-  match remove q with
-  | None ->
-      ()
-  | Some x ->
-      f x;
-      repeat q f
+let repeat q f =
+  while q.cardinal > 0 do
+    let x = remove_nonempty q in
+    f x
+  done

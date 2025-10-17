@@ -1,4 +1,4 @@
-name: Main workflow
+name: Builds, tests & co
 
 on:
   pull_request:
@@ -8,134 +8,93 @@ on:
     - cron: 0 1 * * MON
 
 jobs:
-  build:
+  build-and-test:
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-latest
         ocaml-compiler:
-          - 4.08.x
-          - 4.09.x
-          - 4.10.x
-          - 4.11.x
-          - 4.12.x
-          - 4.13.x
-          - 4.14.x
+          - "4.08"
+          - "4.09"
+          - "4.10"
+          - "4.11"
+          - "4.12"
+          - "4.13"
+          - "4.14"
+          - "5.0"
+          - "5.1"
+          - "5.2"
+          - "5.3"
         libev:
           - true
           - false
-        ppx:
-          - true
-        domain:
-          - false
-        local-packages:
-          - |
-            *.opam
-            !lwt_domain.opam
         include:
-          - os: ubuntu-latest
-            ocaml-compiler: ocaml-variants.4.14.0+options,ocaml-option-flambda,ocaml-option-musl,ocaml-option-static
+          - os: ubuntu-24.04-arm
+            ocaml-compiler: "5.3"
             libev: false
-            ppx: true
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-          - os: ubuntu-latest
-            ocaml-compiler: ocaml-variants.4.12.0+domains
-            libev: false
-            ppx: true
-            domain: true
-            local-packages: "*.opam"
           - os: macos-latest
-            ocaml-compiler: 4.14.x
-            libev: true
-            ppx: true
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-          - os: windows-latest
-            ocaml-compiler: 4.14.x
+            ocaml-compiler: "5.3"
             libev: false
-            ppx: true
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-          - os: ubuntu-latest
-            ocaml-compiler: 4.08.x
-            libev: true
-            ppx: false
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-              !lwt_ppx.opam
-          - os: macos-latest
-            ocaml-compiler: 4.08.x
-            libev: true
-            ppx: false
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-              !lwt_ppx.opam
           - os: windows-latest
-            ocaml-compiler: 4.08.x
+            ocaml-compiler: "5.3"
             libev: false
-            ppx: false
-            domain: false
-            local-packages: |
-              *.opam
-              !lwt_domain.opam
-              !lwt_ppx.opam
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Hack Git CRLF for ocaml/setup-ocaml issue #529
-        if: ${{ startsWith(matrix.os, 'windows-') }}
+      - name: set ppx-related variables
+        id: configppx
+        shell: bash
         run: |
-          & "C:\Program Files\Git\bin\git.exe" config --system core.autocrlf input
+          case ${{ matrix.ocaml-compiler }} in
+            "4.08"|"4.09"|"4.10"|"4.11"|"4.12"|"4.13"|"4.14"|"5.0")
+              echo "letppx=false"
+              echo "letppx=false" >> "$GITHUB_OUTPUT"
+              ;;
+            "5.1"|"5.2"|"5.3")
+              echo "letppx=true"
+              echo "letppx=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              printf "unrecognised version %s\n" "${{ matrix.ocaml-compiler }}";
+              exit 1
+              ;;
+          esac
 
-      - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+      - name: Checkout tree
+        uses: actions/checkout@v5
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          opam-depext-flags: --with-test
-          opam-local-packages: ${{ matrix.local-packages }}
 
-      - run: opam depext conf-libev --install
+      - run: opam install conf-libev
         if: ${{ matrix.libev == true }}
 
-      - run: opam install lwt_luv lwt_react lwt --deps-only --with-test
+      - run: opam install ./lwt.opam ./lwt_react.opam ./lwt_retry.opam ./lwt_ppx.opam --deps-only --with-test
 
-      - run: opam install lwt_ppx --deps-only --with-test
-        if: ${{ matrix.ppx == true }}
+      - run: opam install ./lwt_ppx__ppx_let_tests.opam --deps-only --with-test
+        if: ${{ fromJSON(steps.configppx.outputs.letppx) }}
 
-      - run: opam install lwt_domain --deps-only --with-test
-        if: ${{ matrix.domain == true }}
+      - run: opam exec -- dune build --only-packages lwt,lwt_react,lwt_retry
 
-      - run: opam exec -- dune build --only-packages lwt_luv,lwt_react,lwt
+      - run: opam exec -- dune build --only-packages lwt,lwt_ppx__ppx_let_tests
+        if: ${{ fromJSON(steps.configppx.outputs.letppx) }}
 
-      - run: opam exec -- dune build --only-packages lwt_ppx
-        if: ${{ matrix.ppx == true }}
+      - run: opam exec -- dune runtest --only-packages lwt,lwt_react,lwt_retry,lwt_ppx
 
-      - run: opam exec -- dune build --only-packages lwt_domain
-        if: ${{ matrix.domain == true }}
+      - run: opam exec -- dune runtest --only-packages lwt,lwt_ppx__ppx_let_tests
+        if: ${{ fromJSON(steps.configppx.outputs.letppx) }}
 
-      - run: opam exec -- dune runtest --only-packages lwt_luv,lwt_react,lwt
-
-      - run: opam exec -- dune runtest --only-packages lwt_ppx
-        if: ${{ matrix.ppx == true }}
-
-      - run: opam exec -- dune runtest --only-packages lwt_domain
-        if: ${{ matrix.domain == true }}
-
-      - run: opam exec -- make ppx_let-test-deps ppx_let-test
-        if: ${{ matrix.ppx == true }}
+  lint-opam:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v5
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+      - uses: ocaml/setup-ocaml/lint-opam@v3

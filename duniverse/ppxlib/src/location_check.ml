@@ -152,7 +152,8 @@ let should_ignore loc attrs =
   (* If the filename changed, then there were line directives, and the locations
      are all messed up. *)
   (not (stayed_in_the_same_file loc.loc_start.pos_fname))
-  || (* Ignore things explicitly marked. *)
+  ||
+  (* Ignore things explicitly marked. *)
   List.exists
     ~f:(fun attr ->
       String.equal attr.attr_name.txt
@@ -161,7 +162,7 @@ let should_ignore loc attrs =
 
 let rec extract_constraint e =
   match e.pexp_desc with
-  | Pexp_constraint (e, ct) | Pexp_coerce (e, None, ct) -> Some (e, ct)
+  | Pexp_constraint (e, ct) | Pexp_coerce (e, _, ct) -> Some (e, ct)
   | Pexp_newtype (name, exp) ->
       Option.map (extract_constraint exp) ~f:(fun (exp, ct) ->
           ( {

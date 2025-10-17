@@ -101,7 +101,9 @@
        ;; + for env
        "binaries"
        ;; + for "install"
-       "section" "files")
+       "section" "files"
+       ;; Coq fields
+       "theories" "modules_flags" "plugins")
      'symbols))
   "Field names allowed in dune files.")
 
@@ -395,7 +397,7 @@ For customization purposes, use `dune-mode-hook'."
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist
-             '("\\(?:\\`\\|/\\)dune\\(?:\\.inc\\|\\-project\\)?\\'" . dune-mode))
+             '("\\(?:\\`\\|/\\)dune\\(?:\\.inc\\|\\-project\\|\\-workspace\\)?\\'" . dune-mode))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -423,6 +425,38 @@ For customization purposes, use `dune-mode-hook'."
   (interactive)
   (compile (format "%s build @@runtest" dune-command))
   (dune-promote))
+
+(defun dune-project-p (directory)
+  "Return t if DIRECTORY is a dune project."
+  (file-exists-p (expand-file-name "dune-project" directory)))
+
+(defun dune-workspace-p (directory)
+  "Return t if DIRECTORY is a dune workspace."
+  (file-exists-p (expand-file-name "dune-workspace" directory)))
+
+(defun dune-root (&optional directory)
+  "Return the root directory of the dune project of DIRECTORY.
+
+DIRECTORY defaults to `default-directory' if not provided."
+  (let*
+      (root
+       workspace
+       (dir (or directory default-directory))
+       (project-p (lambda (dir)
+		    (cond
+		     ((dune-workspace-p dir)
+		      (setq workspace t)
+		      t)
+		     ((and
+		       (not workspace)
+		       (dune-project-p dir))
+		      t)))))
+    (while dir
+      (setq dir (locate-dominating-file dir project-p))
+      (when dir
+	(setq root dir
+	      dir (file-name-parent-directory dir))))
+    root))
 
 (provide 'dune)
 

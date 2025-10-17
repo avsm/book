@@ -74,7 +74,7 @@ struct triple {
 extern struct triple add_triples(struct triple, struct triple);
 struct animal;
 struct chorse;
-extern int check_name(struct animal *, char *);
+extern int check_name(struct animal *, const char *);
 extern char *chorse_colour(struct chorse *);
 extern char *chorse_say(struct animal *);
 extern char *chorse_identify(struct animal *);
@@ -165,7 +165,7 @@ struct one_int { int i; };
 struct one_int return_struct_by_value(void);
 void matrix_mul(int, int, int, double *, double *, double *);
 double *matrix_transpose(int, int, double *);
-extern int (*plus_callback)(int);
+extern int (*plus_callback)(int, int);
 int sum_range_with_plus_callback(int, int);
 typedef int callback_t(void);
 void register_callback(callback_t *);
@@ -264,7 +264,7 @@ float callback_returns_float(float (*f)(void));
 double callback_returns_double(double (*f)(void));
 bool callback_returns_bool(bool (*f)(void));
 
-extern char *string_array[2];
+extern const char *string_array[2];
 extern int32_t int_array[5];
 
 void check_ones(const int *, size_t);

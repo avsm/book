@@ -27,11 +27,19 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *)
 
+let src = Logs.Src.create "mirage-crypto-rng-entropy" ~doc:"Mirage crypto RNG Entropy"
+module Log = (val Logs.src_log src : Logs.LOG)
+
+let rdrand_calls = Atomic.make 0
+let rdrand_failures = Atomic.make 0
+let rdseed_calls = Atomic.make 0
+let rdseed_failures = Atomic.make 0
+
 module Cpu_native = struct
 
   external cycles : unit -> int  = "mc_cycle_counter" [@@noalloc]
-  external rdseed : unit -> int  = "mc_cpu_rdseed" [@@noalloc]
-  external rdrand : unit -> int  = "mc_cpu_rdrand" [@@noalloc]
+  external rdseed : bytes -> int -> bool  = "mc_cpu_rdseed" [@@noalloc]
+  external rdrand : bytes -> int -> bool  = "mc_cpu_rdrand" [@@noalloc]
   external rng_type : unit -> int  = "mc_cpu_rng_type" [@@noalloc]
 
   let cpu_rng =
@@ -43,25 +51,46 @@ module Cpu_native = struct
     | _ -> assert false
 end
 
-let _sources = ref []
+module S = Set.Make(struct
+    type t = int * string
+    (* only the name is relevant for comparison - the idx not *)
+    let compare ((_a, an) : int * string) ((_b, bn) : int * string) =
+      String.compare an bn
+  end)
+
+let _sources = Atomic.make S.empty
 
 type source = Rng.source
 
 let register_source name =
-  let n = List.length !_sources in
-  let source = (n, name) in
-  _sources := source :: !_sources;
-  source
+  let rec set () =
+    let sources = Atomic.get _sources in
+    let n = S.cardinal sources in
+    let source = (n, name) in
+    if Atomic.compare_and_set _sources sources (S.add source sources) then
+      source
+    else
+      set ()
+  in
+  set ()
 
 let id (idx, _) = idx
 
-let sources () = !_sources
+let sources () = S.elements (Atomic.get _sources)
 
 let pp_source ppf (idx, name) = Format.fprintf ppf "[%d] %s" idx name
 
-let cpu_rng = function
-  | `Rdseed -> Cpu_native.rdseed
-  | `Rdrand -> Cpu_native.rdrand
+let cpu_rng isn buf off = match isn with
+  | `Rdseed ->
+    Atomic.incr rdseed_calls;
+    let success = Cpu_native.rdseed buf off in
+    if not success then Atomic.incr rdseed_failures;
+    success
+  | `Rdrand ->
+    Atomic.incr rdrand_calls;
+    let success = Cpu_native.rdrand buf off in
+    if not success then Atomic.incr rdrand_failures;
+    success
 
 let random preferred =
   match Cpu_native.cpu_rng with
@@ -70,14 +99,14 @@ let random preferred =
   | y::_ -> Some y
 
 let write_header source data =
-  Cstruct.set_uint8 data 0 source;
-  Cstruct.set_uint8 data 1 (Cstruct.length data - 2)
+  Bytes.set_uint8 data 0 source;
+  Bytes.set_uint8 data 1 (Bytes.length data - 2)
 
 let header source data =
-  let hdr = Cstruct.create 2 in
-  let buf = Cstruct.append hdr data in
-  write_header source buf;
-  buf
+  let hdr = Bytes.create (2 + String.length data) in
+  Bytes.unsafe_blit_string data 0 hdr 2 (String.length data);
+  write_header source hdr;
+  Bytes.unsafe_to_string hdr
 
 (* Note:
  * `bootstrap` is not a simple feedback loop. It attempts to exploit CPU-level
@@ -90,56 +119,84 @@ let whirlwind_bootstrap id =
   and inner_max = 1024
   and a         = ref 0
   in
-  let cs        = Cstruct.create (outer * 2 + 2) in
+  let buf       = Bytes.create (outer * 2 + 2) in
   for i = 0 to outer - 1 do
     let tsc = Cpu_native.cycles () in
-    Cstruct.LE.set_uint16 cs ((i + 1) * 2) tsc;
+    Bytes.set_uint16_le buf ((i + 1) * 2) tsc;
     for j = 1 to tsc mod inner_max do
       a := tsc / j - !a * i + 1
     done
   done;
-  write_header id cs;
-  cs
+  write_header id buf;
+  Bytes.unsafe_to_string buf
 
 let cpu_rng_bootstrap =
+  let rdrand_bootstrap id =
+    let rec go acc = function
+      | 0 -> acc
+      | n ->
+        let buf = Bytes.create 10 in
+        let r = cpu_rng `Rdrand buf 2 in
+        write_header id buf;
+        if not r then
+          go acc (pred n)
+        else
+          go (Bytes.unsafe_to_string buf :: acc) (pred n)
+    in
+    let result = go [] 512 |> String.concat "" in
+    if String.length result = 0 then
+      failwith "Too many RDRAND failures"
+    else
+      result
+  in
   match random `Rdseed with
   | None -> Error `Not_supported
-  | Some insn ->
+  | Some `Rdseed ->
     let cpu_rng_bootstrap id =
-      let r = cpu_rng insn () in
-      if r = 0 then failwith "bad CPU RNG value";
-      let cs = Cstruct.create 10 in
-      Cstruct.LE.set_uint64 cs 2 (Int64.of_int r);
-      write_header id cs;
-      cs
+      let buf = Bytes.create 10 in
+      let r = cpu_rng `Rdseed buf 2 in
+      write_header id buf;
+      if not r then
+        if List.mem `Rdrand Cpu_native.cpu_rng then
+          rdrand_bootstrap id
+        else
+          failwith "RDSEED failed, and RDRAND not available"
+      else
+        Bytes.unsafe_to_string buf
     in
     Ok cpu_rng_bootstrap
+  | Some `Rdrand -> Ok rdrand_bootstrap
 
 let bootstrap id =
   match cpu_rng_bootstrap with
   | Error `Not_supported -> whirlwind_bootstrap id
   | Ok cpu_rng_bootstrap ->
-    try cpu_rng_bootstrap id with Failure _ -> whirlwind_bootstrap id
+    try cpu_rng_bootstrap id with
+    | Failure f ->
+      Log.err (fun m -> m "CPU RNG bootstrap failed: %s, using whirlwind" f);
+      whirlwind_bootstrap id
 
 let interrupt_hook () =
-  let buf = Cstruct.create 4 in
-  fun () ->
-    let a = Cpu_native.cycles () in
-    Cstruct.LE.set_uint32 buf 0 (Int32.of_int a) ;
-    buf
+  let buf = Bytes.create 4 in
+  let a = Cpu_native.cycles () in
+  Bytes.set_int32_le buf 0 (Int32.of_int a) ;
+  Bytes.unsafe_to_string buf
 
 let timer_accumulator g =
   let g = match g with None -> Some (Rng.default_generator ()) | Some g -> Some g in
   let source = register_source "timer" in
   let `Acc handle = Rng.accumulate g source in
-  let hook = interrupt_hook () in
-  (fun () -> handle (hook ()))
+  (fun () -> handle (interrupt_hook ()))
 
 let feed_pools g source f =
   let g = match g with None -> Some (Rng.default_generator ()) | Some g -> Some g in
   let `Acc handle = Rng.accumulate g source in
   for _i = 0 to pred (Rng.pools g) do
-    handle (f ())
+    match f () with
+    | Ok data -> handle data
+    | Error `No_random_available ->
+      (* should we log a message? *)
+      ()
   done
 
 let cpu_rng =
@@ -152,11 +209,18 @@ let cpu_rng =
         let s = match insn with `Rdrand -> "rdrand" | `Rdseed -> "rdseed" in
         register_source s
       in
-      let cs = Cstruct.create 8 in
       let f () =
-        Cstruct.LE.set_uint64 cs 0 (Int64.of_int (randomf ()));
-        cs
+        let buf = Bytes.create 8 in
+        if randomf buf 0 then
+          Ok (Bytes.unsafe_to_string buf)
+        else
+          Error `No_random_available
       in
       fun () -> feed_pools g source f
     in
     Ok cpu_rng
+
+let rdrand_calls () = Atomic.get rdrand_calls
+let rdrand_failures () = Atomic.get rdrand_failures
+let rdseed_calls () = Atomic.get rdseed_calls
+let rdseed_failures () = Atomic.get rdseed_failures

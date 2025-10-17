@@ -2,6 +2,7 @@
     local and cloud caches. *)
 
 open Stdune
+open Import
 module Layout = Layout
 module Mode = Mode
 module Util = Util
@@ -13,9 +14,9 @@ module Store_result : sig
     | Stored
     | Already_present
     | Error of exn
-        (** [Error _] can happen due to genuine problems (cannot parse internal
-            cache files) or harmless ones (race with a concurrent change to the
-            cache). *)
+    (** [Error _] can happen due to genuine problems (cannot parse internal
+        cache files) or harmless ones (race with a concurrent change to the
+        cache). *)
     | Will_not_store_due_to_non_determinism of Sexp.t
 
   (** We consider [Will_not_store_due_to_non_determinism] as an error of higher
@@ -67,8 +68,9 @@ end
 module Artifacts : sig
   module Metadata_entry : sig
     type t =
-      { file_name : string
-      ; file_digest : Digest.t
+      { path : string (** Can have more than one component for directory targets *)
+      ; digest : Digest.t option
+        (** This digest is always present in case [file_path] points to a file, and absent when it's a directory. *)
       }
   end
 
@@ -105,8 +107,10 @@ module Metadata : sig
 
   module Versioned : sig
     (** Same as the unversioned function but supports old metadata versions. *)
-    val restore :
-      Version.Metadata.t -> rule_or_action_digest:Digest.t -> t Restore_result.t
+    val restore
+      :  Version.Metadata.t
+      -> rule_or_action_digest:Digest.t
+      -> t Restore_result.t
   end
 end
 
@@ -115,23 +119,25 @@ end
     completes or raises. The base name of the temporary file is formed by
     concatenating the [prefix] (which is set to "dune" by default), then a
     suitably chosen integer number, then [suffix]. *)
-val with_temp_file :
-     ?prefix:string
+val with_temp_file
+  :  ?prefix:string
   -> suffix:string
   -> (Path.t Or_exn.t -> 'a Fiber.t)
   -> 'a Fiber.t
 
 (** Like [with_temp_file] but creates a directory in [Layout.temp_dir]. *)
-val with_temp_dir :
-     ?prefix:string
+val with_temp_dir
+  :  ?prefix:string
   -> suffix:string
   -> (Path.t Or_exn.t -> 'a Fiber.t)
   -> 'a Fiber.t
 
 module Raw_value : sig
-  val store_unchecked :
-       mode:Mode.t
+  val store_unchecked
+    :  mode:Mode.t
     -> content:string
     -> content_digest:Digest.t
     -> Util.Write_result.t
 end
+
+val clear : unit -> unit

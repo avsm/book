@@ -149,8 +149,7 @@ let test_generator (type a) ?config ?(mode = `exhaustive) ?cr generator m =
         ?cr
         (not (Set.is_empty failed_to_generate))
         ~if_false_then_print_s:
-          (lazy
-            [%message "generated all known values even though we did not expect to"]))
+          (lazy [%message "generated all known values even though we did not expect to"]))
 ;;
 
 let test_observer (type a) ?config ?(mode = `transparent) ?cr observer m =
@@ -299,7 +298,7 @@ let m_biject (type a b) (module A : With_examples with type t = a) ~f ~f_inverse
   (module struct
     type t = b
 
-    let compare = Comparable.lift A.compare ~f:f_inverse
+    let compare a b = Comparable.lift A.compare ~f:f_inverse a b
     let sexp_of_t t = A.sexp_of_t (f_inverse t)
     let examples = List.map A.examples ~f |> List.dedup_and_sort ~compare
   end : With_examples
@@ -319,8 +318,8 @@ let m_list (type elt) (module Elt : With_examples with type t = elt) =
   (module struct
     type t = Elt.t list [@@deriving sexp_of]
 
-    let compare =
-      Comparable.lift [%compare: int * Elt.t list] ~f:(fun t -> List.length t, t)
+    let compare a b =
+      Comparable.lift [%compare: int * Elt.t list] ~f:(fun t -> List.length t, t) a b
     ;;
 
     let examples =
@@ -345,7 +344,7 @@ let m_arrow
     type t = A.t -> B.t
 
     let to_alist f = List.map A.examples ~f:(fun a -> a, f a)
-    let compare = Comparable.lift [%compare: (A.t * B.t) list] ~f:to_alist
+    let compare a b = Comparable.lift [%compare: (A.t * B.t) list] ~f:to_alist a b
     let sexp_of_t t = [%sexp (to_alist t : (A.t * B.t) list)]
 
     let examples =
@@ -452,9 +451,12 @@ let m_string =
   (module struct
     type t = string [@@deriving sexp_of]
 
-    let compare =
-      Comparable.lift [%compare: int * string] ~f:(fun string ->
-        String.length string, string)
+    let compare a b =
+      Comparable.lift
+        [%compare: int * string]
+        ~f:(fun string -> String.length string, string)
+        a
+        b
     ;;
 
     let examples =
@@ -558,9 +560,7 @@ let m_map
     let examples =
       [ Map.empty (module Cmp) ]
       @ List.map Data.examples ~f:(fun data ->
-        Map.of_alist_exn
-          (module Cmp)
-          (List.map Key.examples ~f:(fun key -> key, data)))
+        Map.of_alist_exn (module Cmp) (List.map Key.examples ~f:(fun key -> key, data)))
     ;;
   end : With_examples
     with type t = (key, data, cmp) Map.t)

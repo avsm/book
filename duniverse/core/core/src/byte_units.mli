@@ -26,7 +26,6 @@ include Comparable.S_plain with type t := t
 include Hashable.S_plain with type t := t
 include Stringable.S with type t := t
 
-
 (** This is a deprecated alias for [of_bytes_float_exn]. *)
 val of_bytes : float -> t
 [@@deprecated
@@ -139,6 +138,9 @@ val words_float : t -> float
 val zero : t
 val min_value : t
 val max_value : t
+val sign : t -> Sign.t
+val abs : t -> t
+val neg : t -> t
 
 (** [scale t mul] scale the measure [t] by [mul] *)
 val scale : t -> float -> t
@@ -164,13 +166,13 @@ module Stable : sig
   module V1 : sig
     type nonrec t = t [@@deriving hash]
 
-    include Stable_module_types.S0_without_comparator with type t := t
+    include Stable_module_types.With_stable_witness.S0_without_comparator with type t := t
   end
 
   (*_ new [Int63] based [bin_io] repr. *)
   module V2 : sig
     type nonrec t = t [@@deriving hash]
 
-    include Stable_module_types.S0_without_comparator with type t := t
+    include Stable_module_types.With_stable_witness.S0_without_comparator with type t := t
   end
 end

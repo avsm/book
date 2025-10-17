@@ -7,6 +7,15 @@ let%expect_test ("hash coherence" [@tags "64-bits-only"]) =
   [%expect {| |}]
 ;;
 
+let%expect_test "of_string_opt" =
+  print_s [%sexp (of_string_opt "1." : float option)];
+  [%expect "(1)"];
+  print_s [%sexp (of_string_opt "1.a" : float option)];
+  [%expect "()"];
+  print_s [%sexp (of_string_opt "1e10000" : float option)];
+  [%expect "(INF)"]
+;;
+
 let exponent_bits = 11
 let mantissa_bits = 52
 let exponent_mask64 = Int64.(shift_left one exponent_bits - one)
@@ -39,7 +48,7 @@ let%test_unit _ =
   | W64 ->
     List.iter
       ~f:(fun float ->
-        let hash1 = Caml.Hashtbl.hash float in
+        let hash1 = Stdlib.Hashtbl.hash float in
         let hash2 = [%hash: float] float in
         let hash3 = specialized_hash float in
         if not Int.(hash1 = hash2 && hash1 = hash3)
@@ -69,27 +78,20 @@ let%test _ = one_ulp `Up neg_infinity = ~-.max_finite_value
    numbers at runtime accurately. *)
 let x () = min_positive_subnormal_value
 let y () = min_positive_normal_value
-
 let%test _ = test_both_ways (x ()) 1L
 let%test _ = test_both_ways (y ()) Int64.(shift_left 1L 52)
 let%test _ = x () > 0.
 let%test_unit _ = [%test_result: float] (x () /. 2.) ~expect:0.
 let%test _ = one_ulp `Up 0. = x ()
 let%test _ = one_ulp `Down 0. = ~-.(x ())
-
 let are_one_ulp_apart a b = one_ulp `Up a = b
-
 let%test _ = are_one_ulp_apart (x ()) (2. *. x ())
 let%test _ = are_one_ulp_apart (2. *. x ()) (3. *. x ())
-
 let one_ulp_below_y () = y () -. x ()
-
 let%test _ = one_ulp_below_y () < y ()
 let%test _ = y () -. one_ulp_below_y () = x ()
 let%test _ = are_one_ulp_apart (one_ulp_below_y ()) (y ())
-
 let one_ulp_above_y () = y () +. x ()
-
 let%test _ = y () < one_ulp_above_y ()
 let%test _ = one_ulp_above_y () -. y () = x ()
 let%test _ = are_one_ulp_apart (y ()) (one_ulp_above_y ())
@@ -98,13 +100,10 @@ let%test _ = not (are_one_ulp_apart (one_ulp_below_y ()) (one_ulp_above_y ()))
 (* [2 * min_positive_normal_value] is where the ulp increases for the first time. *)
 let z () = 2. *. y ()
 let one_ulp_below_z () = z () -. x ()
-
 let%test _ = one_ulp_below_z () < z ()
 let%test _ = z () -. one_ulp_below_z () = x ()
 let%test _ = are_one_ulp_apart (one_ulp_below_z ()) (z ())
-
 let one_ulp_above_z () = z () +. (2. *. x ())
-
 let%test _ = z () < one_ulp_above_z ()
 let%test _ = one_ulp_above_z () -. z () = 2. *. x ()
 let%test _ = are_one_ulp_apart (z ()) (one_ulp_above_z ())
@@ -280,6 +279,7 @@ let%test_module _ =
     let%test_unit _ = both 0.50 "0.5"
     let%test_unit _ = boundary 0.55 ~closer_to_zero:"0.5" ~at:"0.6"
     let%test_unit _ = boundary 0.65 ~closer_to_zero:"0.6" ~at:"0.7"
+
     (* this time tie-to-even means round away from 0 *)
     let%test_unit _ = boundary (* tie *) 0.75 ~closer_to_zero:"0.7" ~at:"0.8"
     let%test_unit _ = boundary 0.85 ~closer_to_zero:"0.8" ~at:"0.9"
@@ -307,6 +307,7 @@ let%test_module _ =
     let%test_unit _ = boundary 999.75 ~closer_to_zero:"999.7" ~at:"999.8"
     let%test_unit _ = boundary 999.95 ~closer_to_zero:"999.9" ~at:"1k "
     let%test_unit _ = both 1000. "1k "
+
     (* some ties which we resolve manually in [iround_ratio_exn] *)
     let%test_unit _ = boundary 1050. ~closer_to_zero:"1k " ~at:"1k "
     let%test_unit _ = boundary (incr 1050.) ~closer_to_zero:"1k " ~at:"1k1"
@@ -443,7 +444,7 @@ let%test_module _ =
       let result4 = Option.try_with (fun () -> specialized_iround_exn x) in
       let result5 = Option.try_with (fun () -> Int.of_float (float_rounding x)) in
       let result6 = Option.try_with (fun () -> Int.of_float (round ~dir x)) in
-      let ( = ) = Caml.( = ) in
+      let ( = ) = Stdlib.( = ) in
       if result1 = result2
       && result2 = result3
       && result3 = result4
@@ -787,7 +788,6 @@ let%test_module _ =
     ;;
 
     let randoms = List.init ~f:(fun _ -> frand ()) 10_000
-
     let%test _ = List.for_all randoms ~f:iround_up_vs_down_test
     let%test _ = List.for_all randoms ~f:iround_nearest_test
     let%test _ = List.for_all randoms ~f:iround_down_test
@@ -814,7 +814,6 @@ struct
 
   let float_lower_bound = lower_bound_for_int num_bits
   let float_upper_bound = upper_bound_for_int num_bits
-
   let%test_unit "lower bound is valid" = ignore (of_float float_lower_bound : t)
   let%test_unit "upper bound is valid" = ignore (of_float float_upper_bound : t)
 
@@ -833,7 +832,7 @@ struct
   let%test "smaller than lower bound overflows" =
     let lower_bound = Int64.of_float float_lower_bound in
     let lower_bound_minus_epsilon =
-      Caml.Int64.of_float (one_ulp `Down float_lower_bound)
+      Stdlib.Int64.of_float (one_ulp `Down float_lower_bound)
     in
     let min_value = to_int64 min_value in
     if Int.( = ) num_bits 64
@@ -847,7 +846,9 @@ struct
 
   let%test "bigger than upper bound overflows" =
     let upper_bound = Int64.of_float float_upper_bound in
-    let upper_bound_plus_epsilon = Caml.Int64.of_float (one_ulp `Up float_upper_bound) in
+    let upper_bound_plus_epsilon =
+      Stdlib.Int64.of_float (one_ulp `Up float_upper_bound)
+    in
     let max_value = to_int64 max_value in
     if Int.( = ) num_bits 64
     (* upper_bound_plus_epsilon is not representable as a Int64.t, it has overflowed *)
@@ -1038,9 +1039,8 @@ let%test_module _ =
 
 let%test_module "Hexadecimal syntax" =
   (module struct
-    let should_fail str = Exn.does_raise (fun () -> Caml.float_of_string str)
-    let test_equal str g = Caml.float_of_string str = g
-
+    let should_fail str = Exn.does_raise (fun () -> Stdlib.float_of_string str)
+    let test_equal str g = Stdlib.float_of_string str = g
     let%test _ = should_fail "0x"
     let%test _ = should_fail "0x.p0"
     let%test _ = test_equal "0x0" 0.
@@ -1163,4 +1163,26 @@ let%expect_test "is_nan, is_inf, and is_finite" =
                           1. false false  true
      1.7976931348623157e+308 false false  true
                          inf false  true false |}]
+;;
+
+let%expect_test "nan" =
+  require [%here] (Float.is_nan (Float.min 1. Float.nan));
+  require [%here] (Float.is_nan (Float.min Float.nan 0.));
+  require [%here] (Float.is_nan (Float.min Float.nan Float.nan));
+  require [%here] (Float.is_nan (Float.max 1. Float.nan));
+  require [%here] (Float.is_nan (Float.max Float.nan 0.));
+  require [%here] (Float.is_nan (Float.max Float.nan Float.nan));
+  require_equal [%here] (module Float) 1. (Float.min_inan 1. Float.nan);
+  require_equal [%here] (module Float) 0. (Float.min_inan Float.nan 0.);
+  require [%here] (Float.is_nan (Float.min_inan Float.nan Float.nan));
+  require_equal [%here] (module Float) 1. (Float.max_inan 1. Float.nan);
+  require_equal [%here] (module Float) 0. (Float.max_inan Float.nan 0.);
+  require [%here] (Float.is_nan (Float.max_inan Float.nan Float.nan))
+;;
+
+let%expect_test "iround_exn" =
+  require_equal [%here] (module Int) 0 (Float.iround_exn ~dir:`Nearest 0.2);
+  require_equal [%here] (module Int) 0 (Float.iround_exn ~dir:`Nearest (-0.2));
+  require_equal [%here] (module Int) 3 (Float.iround_exn ~dir:`Nearest 3.4);
+  require_equal [%here] (module Int) (-3) (Float.iround_exn ~dir:`Nearest (-3.4))
 ;;

@@ -5,7 +5,8 @@
     layer security} in OCaml.  TLS is a widely used security protocol
     which establishes an end-to-end secure channel (with optional
     (mutual) authentication) between two endpoints.  It uses TCP/IP as
-    transport.  This library supports all three versions of TLS:
+    transport.  This library supports all four versions of TLS:
+    {{:https://tools.ietf.org/html/rfc8446}1.3, RFC8446},
     {{:https://tools.ietf.org/html/rfc5246}1.2, RFC5246},
     {{:https://tools.ietf.org/html/rfc4346}1.1, RFC4346}, and
     {{:https://tools.ietf.org/html/rfc2246}1.0, RFC2246}.  SSL, the
@@ -31,7 +32,7 @@
     functional matter ({!Engine}, this module), and effectful parts:
     {!Tls_lwt} and {!Tls_mirage}.
 
-    {e v0.15.3 - {{:https://github.com/mirleft/ocaml-tls }homepage}} *)
+    {e v2.0.3} *)
 
 
 (** {1 Abstract state type} *)
@@ -43,7 +44,7 @@ type state
 
 (** [client client] is [tls * out] where [tls] is the initial state,
     and [out] the initial client hello *)
-val client : Config.client -> (state * Cstruct.t)
+val client : Config.client -> (state * string)
 
 (** [server server] is [tls] where [tls] is the initial server
     state *)
@@ -58,83 +59,52 @@ type error = [
   | `NoConfiguredVersions of Core.tls_version list
   | `NoConfiguredSignatureAlgorithm of Core.signature_algorithm list
   | `NoMatchingCertificateFound of string
-  | `NoCertificateConfigured
   | `CouldntSelectCertificate
-]
-
-type client_hello_errors = [
-  | `EmptyCiphersuites
-  | `NotSetCiphersuites of Packet.any_ciphersuite list
-  | `NoSupportedCiphersuite of Packet.any_ciphersuite list
-  | `NotSetExtension of Core.client_extension list
-  | `HasSignatureAlgorithmsExtension
-  | `NoSignatureAlgorithmsExtension
-  | `NoGoodSignatureAlgorithms of Core.signature_algorithm list
-  | `NoKeyShareExtension
-  | `NoSupportedGroupExtension
-  | `NotSetSupportedGroup of Packet.named_group list
-  | `NotSetKeyShare of (Packet.named_group * Cstruct.t) list
-  | `NotSubsetKeyShareSupportedGroup of (Packet.named_group list * (Packet.named_group * Cstruct.t) list)
-  | `Has0rttAfterHRR
-  | `NoCookie
 ]
 
 (** failures from received garbage or lack of features *)
 type fatal = [
-  | `NoSecureRenegotiation
-  | `NoSupportedGroup
-  | `NoVersions of Core.tls_any_version list
-  | `ReaderError of Reader.error
-  | `NoCertificateReceived
-  | `NoCertificateVerifyReceived
-  | `NotRSACertificate
-  | `KeyTooSmall
-  | `SignatureVerificationFailed of string
-  | `SigningFailed of string
-  | `BadCertificateChain
-  | `MACMismatch
-  | `MACUnderflow
-  | `RecordOverflow of int
-  | `UnknownRecordVersion of int * int
-  | `UnknownContentType of int
-  | `CannotHandleApplicationDataYet
-  | `NoHeartbeat
-  | `BadRecordVersion of Core.tls_any_version
-  | `BadFinished
-  | `HandshakeFragmentsNotEmpty
-  | `InsufficientDH
-  | `InvalidDH
-  | `BadECDH of Mirage_crypto_ec.error
-  | `InvalidRenegotiation
-  | `InvalidClientHello of client_hello_errors
-  | `InvalidServerHello
-  | `InvalidRenegotiationVersion of Core.tls_version
-  | `InappropriateFallback
-  | `UnexpectedCCS
-  | `UnexpectedHandshake of Core.tls_handshake
-  | `InvalidCertificateUsage
-  | `InvalidCertificateExtendedUsage
-  | `InvalidSession
-  | `NoApplicationProtocol
-  | `HelloRetryRequest
-  | `InvalidMessage
-  | `Toomany0rttbytes
-  | `MissingContentType
-  | `Downgrade12
-  | `Downgrade11
+  | `Protocol_version of [
+      | `None_supported of Core.tls_any_version list
+      | `Unknown_record of int * int
+      | `Bad_record of Core.tls_any_version
+    ]
+  | `Unexpected of [
+      | `Content_type of int
+      | `Message of string
+      | `Handshake of Core.tls_handshake
+    ]
+  | `Decode of string
+  | `Handshake of [
+      | `Message of string
+      | `Fragments
+      | `BadDH of string
+      | `BadECDH of Mirage_crypto_ec.error
+    ]
+  | `Bad_certificate of string
+  | `Missing_extension of string
+  | `Bad_mac
+  | `Record_overflow of int
+  | `Unsupported_extension
+  | `Inappropriate_fallback
+  | `No_application_protocol
 ]
 
 (** type of failures *)
 type failure = [
   | `Error of error
   | `Fatal of fatal
-] [@@deriving sexp_of]
+  | `Alert of Packet.alert_type
+]
 
 (** [alert_of_failure failure] is [alert], the TLS alert type for this failure. *)
-val alert_of_failure : failure -> Packet.alert_type
+val alert_of_failure : failure -> Packet.alert_level * Packet.alert_type
 
 (** [string_of_failure failure] is [string], the string representation of the [failure]. *)
 val string_of_failure : failure -> string
+
+(** [pp_failure failure] pretty-prints failure. *)
+val pp_failure : failure Fmt.t
 
 (** {1 Protocol handling} *)
 
@@ -145,31 +115,28 @@ val string_of_failure : failure -> string
     Possibly some [`Response] to the other endpoint is needed, and
     potentially some [`Data] for the application was received. *)
 type ret =
-  ([ `Ok of state | `Eof | `Alert of Packet.alert_type ]
-   * [ `Response of Cstruct.t option ]
-   * [ `Data of Cstruct.t option ],
-   failure * [ `Response of Cstruct.t ]) result
+  (state * [ `Eof ] option
+   * [ `Response of string option ]
+   * [ `Data of string option ],
+   failure * [ `Response of string ]) result
 
 (** [handle_tls state buffer] is [ret], depending on incoming [state]
     and [buffer], the result is the appropriate {!ret} *)
-val handle_tls           : state -> Cstruct.t -> ret
-
-(** [can_handle_appdata state] is a predicate which indicates when the
-    connection has already completed a handshake. *)
-val can_handle_appdata    : state -> bool
+val handle_tls           : state -> string -> ret
 
 (** [handshake_in_progrss state] is a predicate which indicates whether there
     is a handshake in progress or scheduled. *)
 val handshake_in_progress : state -> bool
 
-(** [send_application_data tls outs] is [(tls' * out) option] where
+(** [send_application_data tls outs] is [Some (tls', out)] where
     [tls'] is the new tls state, and [out] the cstruct to send over the
-    wire (encrypted [outs]). *)
-val send_application_data : state -> Cstruct.t list -> (state * Cstruct.t) option
+    wire (encrypted [outs]) when the TLS session is ready. When the TLS
+    session is not ready it is [None]. *)
+val send_application_data : state -> string list -> (state * string) option
 
 (** [send_close_notify tls] is [tls' * out] where [tls'] is the new
     tls state, and out the (possible encrypted) close notify alert. *)
-val send_close_notify     : state -> state * Cstruct.t
+val send_close_notify     : state -> state * string
 
 (** [reneg ~authenticator ~acceptable_cas ~cert tls] initiates a renegotation on
     [tls], using the provided [authenticator]. It is [tls' * out] where [tls']
@@ -177,24 +144,29 @@ val send_close_notify     : state -> state * Cstruct.t
     (depending on which communication endpoint [tls] is). *)
 val reneg : ?authenticator:X509.Authenticator.t ->
   ?acceptable_cas:X509.Distinguished_name.t list -> ?cert:Config.own_cert ->
-  state -> (state * Cstruct.t) option
+  state -> (state * string) option
 
 (** [key_update ~request state] initiates a KeyUpdate (TLS 1.3 only). If
     [request] is provided and [true] (the default), the KeyUpdate message
     contains a request that the peer should update their traffic key as well. *)
-val key_update : ?request:bool -> state -> (state * Cstruct.t, failure) result
+val key_update : ?request:bool -> state -> (state * string, failure) result
 
 (** {1 Session information} *)
 
-(** polymorphic variant of session information.  The first variant
-    [`InitialEpoch] will only be used for TLS states without completed
-    handshake.  The second variant, [`Epoch], contains actual session
-    data. *)
-type epoch = [
-  | `InitialEpoch
-  | `Epoch of Core.epoch_data
-] [@@deriving sexp_of]
-
 (** [epoch state] is [epoch], which contains the session
-    information. *)
-val epoch : state -> epoch
+    information. If there's no established session yet, an error is returned. *)
+val epoch : state -> (Core.epoch_data, unit) result
+
+(** [export_key_material epoch_data ?context label length] is the RFC 5705
+    exported key material of [length] bytes using [label] and, if provided,
+    [context]. *)
+val export_key_material : Core.epoch_data -> ?context:string -> string -> int ->
+  string
+
+(** [channel_binding epoch_data mode] is the RFC 5929 and RFC 9266 specified
+    channel binding. Please note that [`Tls_unique] will error for TLS 1.3
+    sessions, and [`Tls_exporter] is not recommended for TLS < 1.3 sessions
+    (unless the uniqueness is ensured via another path). *)
+val channel_binding : Core.epoch_data ->
+  [ `Tls_exporter | `Tls_unique | `Tls_server_endpoint ] ->
+  (string, [ `Msg of string ]) result

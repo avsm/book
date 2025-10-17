@@ -87,6 +87,23 @@ let advance = advance_directly
 let advance_by = advance_directly_by
 let fire_past_alarms t = Synchronous_time_source0.fire_past_alarms t ~send_exn
 let yield t = Bvar.wait (Scheduler.yield t.scheduler)
+let can_run_a_job t = Scheduler.num_pending_jobs t > 0 || Bvar.has_any_waiters t.yield
+
+module Eager_deferred = struct
+  let bind_unit t ~f =
+    if Deferred.is_determined t
+    then f ()
+    else (
+      let%bind () = t in
+      f ())
+  ;;
+
+  let map t ~f =
+    if Deferred.is_determined t
+    then return (f (Deferred.value_exn t))
+    else Deferred.map t ~f
+  ;;
+end
 
 let advance_by_alarms ?wait_for t ~to_ =
   let run_queued_alarms () =
@@ -99,29 +116,26 @@ let advance_by_alarms ?wait_for t ~to_ =
     | None -> yield t
     | Some f -> f ()
   in
-  let finish () =
-    advance_directly t ~to_;
-    fire_past_alarms t;
-    (* so that alarms scheduled at or before [to_] fire *)
-    run_queued_alarms ()
+  let one_step () =
+    if Synchronous_time_source0.any_fired_events_to_run t
+    then now t, `continue
+    else (
+      match Timing_wheel.min_alarm_time_in_min_interval t.events with
+      | None -> to_, `finish
+      | Some min_alarm_time_in_min_interval ->
+        if Time_ns.( >= ) min_alarm_time_in_min_interval to_
+        then to_, `finish
+        else min_alarm_time_in_min_interval, `continue)
   in
   let rec walk_alarms () =
-    match Timing_wheel.min_alarm_time_in_min_interval t.events with
-    | None -> finish ()
-    | Some min_alarm_time_in_min_interval ->
-      if Time_ns.( >= ) min_alarm_time_in_min_interval to_
-      then finish ()
-      else (
-        advance_directly t ~to_:min_alarm_time_in_min_interval;
-        fire_past_alarms t;
-        let queued_alarms_ran = run_queued_alarms () in
-        if Deferred.is_determined queued_alarms_ran
-        then walk_alarms ()
-        else (
-          let%bind () = queued_alarms_ran in
-          walk_alarms ()))
+    let advance_to, next = one_step () in
+    advance_directly t ~to_:advance_to;
+    fire_past_alarms t;
+    Eager_deferred.bind_unit (run_queued_alarms ()) ~f:(fun () ->
+      match next with
+      | `finish -> return ()
+      | `continue -> walk_alarms ())
   in
-  fire_past_alarms t;
   (* This first [run_queued_alarms] call allows [Clock_ns.every] the opportunity to run
      its continuation deferreds so that they can reschedule alarms.  This is particularly
      useful in our "advance hits intermediate alarms" unit test below, but likely useful
@@ -157,11 +171,7 @@ let advance_by_max_alarms_in_each_timing_wheel_interval ?wait_for t ~to_ =
         advance_directly t ~to_:(Timing_wheel.max_alarm_time_in_min_interval_exn t.events);
         fire_past_alarms t;
         let queued_alarms_ran = run_queued_alarms () in
-        if Deferred.is_determined queued_alarms_ran
-        then walk_alarms ()
-        else (
-          let%bind () = queued_alarms_ran in
-          walk_alarms ()))
+        Eager_deferred.bind_unit queued_alarms_ran ~f:walk_alarms)
   in
   fire_past_alarms t;
   (* This first [run_queued_alarms] call allows [Clock_ns.every] the opportunity to run
@@ -290,10 +300,7 @@ module Event = struct
         ~scheduled_at:
           (check (fun scheduled_at ->
              if Timing_wheel.mem events t.alarm
-             then
-               [%test_result: Time_ns.t]
-                 scheduled_at
-                 ~expect:(Alarm.at events t.alarm)))
+             then [%test_result: Time_ns.t] scheduled_at ~expect:(Alarm.at events t.alarm)))
         ~time_source:ignore)
   ;;
 
@@ -574,17 +581,46 @@ let with_timeout t span d =
     ; choice (Event.fired timeout) (function
         | Happened () -> `Timeout
         | Aborted () ->
-          raise_s
-            [%message "Time_source.with_timeout bug: both completed and timed out"])
+          raise_s [%message "Time_source.with_timeout bug: both completed and timed out"])
     ]
 ;;
 
 let duration_of t f =
   let start = now t in
-  let%map result = f () in
-  let duration = Time_ns.diff (now t) start in
-  result, duration
+  (* Eager map to provide more accurate timings when [f] is synchronous. *)
+  Eager_deferred.map (f ()) ~f:(fun result ->
+    let duration = Time_ns.diff (now t) start in
+    result, duration)
 ;;
 
 let of_synchronous t = t
 let to_synchronous t = t
+
+let timing_wheel_has_event_at_or_before wheel time =
+  if Timing_wheel.is_empty wheel
+  then false
+  else (
+    let next_alarm = Timing_wheel.next_alarm_fires_at_exn wheel in
+    Time_ns_in_this_directory.(next_alarm <= time))
+;;
+
+let advance_directly_if_quiescent t ~to_ =
+  let is_quescent =
+    (* Since this function is intended to be just a fast case of [advance_by_alarms],
+       we want to make sure that the call to [Scheduler.yield ()] can be elided,
+       hence the [can_run_a_job] check.
+
+       We're not checking epoll, and we're not checking the [external_jobs].  That is an
+       observable difference, but since [advance_by_alarms ?wait_for:None] is already
+       pretty broken when waiting for external events, it's not going to be meaningful.
+    *)
+    can_run_a_job t.scheduler
+    || Synchronous_time_source0.has_events_to_run t
+    || timing_wheel_has_event_at_or_before t.events to_
+  in
+  if is_quescent
+  then false
+  else (
+    advance_directly t ~to_;
+    true)
+;;

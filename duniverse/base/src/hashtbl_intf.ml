@@ -38,10 +38,14 @@ module type Accessors = sig
 
   (** Attempting to modify ([set], [remove], etc.) the hashtable during iteration ([fold],
       [iter], [iter_keys], [iteri]) will raise an exception. *)
-  val fold : ('a, 'b) t -> init:'c -> f:(key:'a key -> data:'b -> 'c -> 'c) -> 'c
+  val fold
+    :  ('a, 'b) t
+    -> init:'acc
+    -> f:((key:'a key -> data:'b -> 'acc -> 'acc)[@local])
+    -> 'acc
 
-  val iter_keys : ('a, _) t -> f:('a key -> unit) -> unit
-  val iter : (_, 'b) t -> f:('b -> unit) -> unit
+  val iter_keys : ('a, _) t -> f:(('a key -> unit)[@local]) -> unit
+  val iter : (_, 'b) t -> f:(('b -> unit)[@local]) -> unit
 
   (** Iterates over both keys and values.
 
@@ -55,20 +59,52 @@ module type Accessors = sig
       5-6
       - : unit = ()
       v} *)
-  val iteri : ('a, 'b) t -> f:(key:'a key -> data:'b -> unit) -> unit
+  val iteri : ('a, 'b) t -> f:((key:'a key -> data:'b -> unit)[@local]) -> unit
 
-  val existsi : ('a, 'b) t -> f:(key:'a key -> data:'b -> bool) -> bool
-  val exists : (_, 'b) t -> f:('b -> bool) -> bool
-  val for_alli : ('a, 'b) t -> f:(key:'a key -> data:'b -> bool) -> bool
-  val for_all : (_, 'b) t -> f:('b -> bool) -> bool
-  val counti : ('a, 'b) t -> f:(key:'a key -> data:'b -> bool) -> int
-  val count : (_, 'b) t -> f:('b -> bool) -> int
+  val existsi : ('a, 'b) t -> f:((key:'a key -> data:'b -> bool)[@local]) -> bool
+  val exists : (_, 'b) t -> f:(('b -> bool)[@local]) -> bool
+  val for_alli : ('a, 'b) t -> f:((key:'a key -> data:'b -> bool)[@local]) -> bool
+  val for_all : (_, 'b) t -> f:(('b -> bool)[@local]) -> bool
+  val counti : ('a, 'b) t -> f:((key:'a key -> data:'b -> bool)[@local]) -> int
+  val count : (_, 'b) t -> f:(('b -> bool)[@local]) -> int
   val length : (_, _) t -> int
   val is_empty : (_, _) t -> bool
   val mem : ('a, _) t -> 'a key -> bool
   val remove : ('a, _) t -> 'a key -> unit
+
+  (** Choose an arbitrary key/value pair of a hash table. Returns [None] if [t] is empty.
+
+      The choice is deterministic. Calling [choose] multiple times on the same table
+      returns the same key/value pair, so long as the table is not mutated in between.
+      Beyond determinism, no guarantees are made about how the choice is made. Expect
+      bias toward certain hash values.
+
+      This hash bias can lead to degenerate performance in some cases, such as clearing
+      a hash table using repeated [choose] and [remove]. At each iteration, finding the
+      next element may have to scan farther from its initial hash value. *)
   val choose : ('a, 'b) t -> ('a key * 'b) option
+
+  (** Like [choose]. Raises if [t] is empty. *)
   val choose_exn : ('a, 'b) t -> 'a key * 'b
+
+  (** Chooses a random key/value pair of a hash table. Returns [None] if [t] is empty.
+
+      The choice is distributed uniformly across hash values, rather than across keys
+      themselves. As a consequence, the closer the keys are to evenly spaced out in the
+      table, the closer this function will be to a uniform choice of keys.
+
+      This function may be preferable to [choose] when nondeterministic choice is
+      acceptable, and bias toward certain hash values is undesirable. *)
+  val choose_randomly
+    :  ?random_state:Random.State.t (** default: [Random.State.default] *)
+    -> ('a, 'b) t
+    -> ('a key * 'b) option
+
+  (** Like [choose_randomly]. Raises if [t] is empty. *)
+  val choose_randomly_exn
+    :  ?random_state:Random.State.t (** default: [Random.State.default] *)
+    -> ('a, 'b) t
+    -> 'a key * 'b
 
   (** Sets the given [key] to [data]. *)
   val set : ('a, 'b) t -> key:'a key -> data:'b -> unit
@@ -79,13 +115,13 @@ module type Accessors = sig
   val add_exn : ('a, 'b) t -> key:'a key -> data:'b -> unit
 
   (** [change t key ~f] changes [t]'s value for [key] to be [f (find t key)]. *)
-  val change : ('a, 'b) t -> 'a key -> f:('b option -> 'b option) -> unit
+  val change : ('a, 'b) t -> 'a key -> f:(('b option -> 'b option)[@local]) -> unit
 
   (** [update t key ~f] is [change t key ~f:(fun o -> Some (f o))]. *)
-  val update : ('a, 'b) t -> 'a key -> f:('b option -> 'b) -> unit
+  val update : ('a, 'b) t -> 'a key -> f:(('b option -> 'b)[@local]) -> unit
 
   (** [update_and_return t key ~f] is [update], but returns the result of [f o]. *)
-  val update_and_return : ('a, 'b) t -> 'a key -> f:('b option -> 'b) -> 'b
+  val update_and_return : ('a, 'b) t -> 'a key -> f:(('b option -> 'b)[@local]) -> 'b
 
   (** [map t f] returns a new table with values replaced by the result of applying [f]
       to the current values.
@@ -94,14 +130,14 @@ module type Accessors = sig
 
       {v
       let h = Hashtbl.of_alist_exn (module Int) [(1, 4); (5, 6)] in
-      let h' = Hashtbl.map h ~f:(fun x -> x * 2) in
+      let h' = Hashtbl.map h ~f:((fun x -> x * 2)[@local]) in
       Hashtbl.to_alist h';;
       - : (int * int) list = [(5, 12); (1, 8)]
       v} *)
-  val map : ('a, 'b) t -> f:('b -> 'c) -> ('a, 'c) t
+  val map : ('a, 'b) t -> f:(('b -> 'c)[@local]) -> ('a, 'c) t
 
   (** Like [map], but the function [f] takes both key and data as arguments. *)
-  val mapi : ('a, 'b) t -> f:(key:'a key -> data:'b -> 'c) -> ('a, 'c) t
+  val mapi : ('a, 'b) t -> f:((key:'a key -> data:'b -> 'c)[@local]) -> ('a, 'c) t
 
   (** Returns a new table by filtering the given table's values by [f]: the keys for which
       [f] applied to the current value returns [Some] are kept, and those for which it
@@ -111,51 +147,57 @@ module type Accessors = sig
 
       {v
       let h = Hashtbl.of_alist_exn (module Int) [(1, 4); (5, 6)] in
-      Hashtbl.filter_map h ~f:(fun x -> if x > 5 then Some x else None)
+      Hashtbl.filter_map h ~f:((fun x -> if x > 5 then Some x else None)[@local])
       |> Hashtbl.to_alist;;
       - : (int * int) list = [(5, 6)]
       v} *)
-  val filter_map : ('a, 'b) t -> f:('b -> 'c option) -> ('a, 'c) t
+  val filter_map : ('a, 'b) t -> f:(('b -> 'c option)[@local]) -> ('a, 'c) t
 
   (** Like [filter_map], but the function [f] takes both key and data as arguments. *)
-  val filter_mapi : ('a, 'b) t -> f:(key:'a key -> data:'b -> 'c option) -> ('a, 'c) t
+  val filter_mapi
+    :  ('a, 'b) t
+    -> f:((key:'a key -> data:'b -> 'c option)[@local])
+    -> ('a, 'c) t
 
-  val filter_keys : ('a, 'b) t -> f:('a key -> bool) -> ('a, 'b) t
-  val filter : ('a, 'b) t -> f:('b -> bool) -> ('a, 'b) t
-  val filteri : ('a, 'b) t -> f:(key:'a key -> data:'b -> bool) -> ('a, 'b) t
+  val filter_keys : ('a, 'b) t -> f:(('a key -> bool)[@local]) -> ('a, 'b) t
+  val filter : ('a, 'b) t -> f:(('b -> bool)[@local]) -> ('a, 'b) t
+  val filteri : ('a, 'b) t -> f:((key:'a key -> data:'b -> bool)[@local]) -> ('a, 'b) t
 
   (** Returns new tables with bound values partitioned by [f] applied to the bound
       values. *)
-  val partition_map : ('a, 'b) t -> f:('b -> ('c, 'd) Either.t) -> ('a, 'c) t * ('a, 'd) t
+  val partition_map
+    :  ('a, 'b) t
+    -> f:(('b -> ('c, 'd) Either.t)[@local])
+    -> ('a, 'c) t * ('a, 'd) t
 
   (** Like [partition_map], but the function [f] takes both key and data as arguments. *)
   val partition_mapi
     :  ('a, 'b) t
-    -> f:(key:'a key -> data:'b -> ('c, 'd) Either.t)
+    -> f:((key:'a key -> data:'b -> ('c, 'd) Either.t)[@local])
     -> ('a, 'c) t * ('a, 'd) t
 
   (** Returns a pair of tables [(t1, t2)], where [t1] contains all the elements of the
       initial table which satisfy the predicate [f], and [t2] contains the rest. *)
-  val partition_tf : ('a, 'b) t -> f:('b -> bool) -> ('a, 'b) t * ('a, 'b) t
+  val partition_tf : ('a, 'b) t -> f:(('b -> bool)[@local]) -> ('a, 'b) t * ('a, 'b) t
 
   (** Like [partition_tf], but the function [f] takes both key and data as arguments. *)
   val partitioni_tf
     :  ('a, 'b) t
-    -> f:(key:'a key -> data:'b -> bool)
+    -> f:((key:'a key -> data:'b -> bool)[@local])
     -> ('a, 'b) t * ('a, 'b) t
 
   (** [find_or_add t k ~default] returns the data associated with key [k] if it is in the
       table [t], and otherwise assigns [k] the value returned by [default ()]. *)
-  val find_or_add : ('a, 'b) t -> 'a key -> default:(unit -> 'b) -> 'b
+  val find_or_add : ('a, 'b) t -> 'a key -> default:((unit -> 'b)[@local]) -> 'b
 
   (** Like [find_or_add] but [default] takes the key as an argument. *)
-  val findi_or_add : ('a, 'b) t -> 'a key -> default:('a key -> 'b) -> 'b
+  val findi_or_add : ('a, 'b) t -> 'a key -> default:(('a key -> 'b)[@local]) -> 'b
 
   (** [find t k] returns [Some] (the current binding) of [k] in [t], or [None] if no such
       binding exists. *)
   val find : ('a, 'b) t -> 'a key -> 'b option
 
-  (** [find_exn t k] returns the current binding of [k] in [t], or raises [Caml.Not_found]
+  (** [find_exn t k] returns the current binding of [k] in [t], or raises [Stdlib.Not_found]
       or [Not_found_s] if no such binding exists. *)
   val find_exn : ('a, 'b) t -> 'a key -> 'b
 
@@ -169,8 +211,8 @@ module type Accessors = sig
   val find_and_call
     :  ('a, 'b) t
     -> 'a key
-    -> if_found:('b -> 'c)
-    -> if_not_found:('a key -> 'c)
+    -> if_found:(('b -> 'c)[@local])
+    -> if_not_found:(('a key -> 'c)[@local])
     -> 'c
 
   (** Just like [find_and_call], but takes an extra argument which is passed to [if_found]
@@ -181,8 +223,8 @@ module type Accessors = sig
     :  ('a, 'b) t
     -> 'a key
     -> a:'d
-    -> if_found:('b -> 'd -> 'c)
-    -> if_not_found:('a key -> 'd -> 'c)
+    -> if_found:(('b -> 'd -> 'c)[@local])
+    -> if_not_found:(('a key -> 'd -> 'c)[@local])
     -> 'c
 
   val find_and_call2
@@ -190,23 +232,23 @@ module type Accessors = sig
     -> 'a key
     -> a:'d
     -> b:'e
-    -> if_found:('b -> 'd -> 'e -> 'c)
-    -> if_not_found:('a key -> 'd -> 'e -> 'c)
+    -> if_found:(('b -> 'd -> 'e -> 'c)[@local])
+    -> if_not_found:(('a key -> 'd -> 'e -> 'c)[@local])
     -> 'c
 
   val findi_and_call
     :  ('a, 'b) t
     -> 'a key
-    -> if_found:(key:'a key -> data:'b -> 'c)
-    -> if_not_found:('a key -> 'c)
+    -> if_found:((key:'a key -> data:'b -> 'c)[@local])
+    -> if_not_found:(('a key -> 'c)[@local])
     -> 'c
 
   val findi_and_call1
     :  ('a, 'b) t
     -> 'a key
     -> a:'d
-    -> if_found:(key:'a key -> data:'b -> 'd -> 'c)
-    -> if_not_found:('a key -> 'd -> 'c)
+    -> if_found:((key:'a key -> data:'b -> 'd -> 'c)[@local])
+    -> if_not_found:(('a key -> 'd -> 'c)[@local])
     -> 'c
 
   val findi_and_call2
@@ -214,8 +256,8 @@ module type Accessors = sig
     -> 'a key
     -> a:'d
     -> b:'e
-    -> if_found:(key:'a key -> data:'b -> 'd -> 'e -> 'c)
-    -> if_not_found:('a key -> 'd -> 'e -> 'c)
+    -> if_found:((key:'a key -> data:'b -> 'd -> 'e -> 'c)[@local])
+    -> if_not_found:(('a key -> 'd -> 'e -> 'c)[@local])
     -> 'c
 
   (** [find_and_remove t k] returns Some (the current binding) of k in t and removes it,
@@ -255,7 +297,9 @@ module type Accessors = sig
   val merge
     :  ('k, 'a) t
     -> ('k, 'b) t
-    -> f:(key:'k key -> [ `Left of 'a | `Right of 'b | `Both of 'a * 'b ] -> 'c option)
+    -> f:
+         ((key:'k key -> [ `Left of 'a | `Right of 'b | `Both of 'a * 'b ] -> 'c option)
+          [@local])
     -> ('k, 'c) t
 
 
@@ -264,7 +308,7 @@ module type Accessors = sig
   val merge_into
     :  src:('k, 'a) t
     -> dst:('k, 'b) t
-    -> f:(key:'k key -> 'a -> 'b option -> 'b Merge_into_action.t)
+    -> f:((key:'k key -> 'a -> 'b option -> 'b Merge_into_action.t)[@local])
     -> unit
 
   (** Returns the list of all keys for given hashtable. *)
@@ -274,21 +318,24 @@ module type Accessors = sig
   val data : (_, 'b) t -> 'b list
 
   (** [filter_inplace t ~f] removes all the elements from [t] that don't satisfy [f]. *)
-  val filter_keys_inplace : ('a, _) t -> f:('a key -> bool) -> unit
+  val filter_keys_inplace : ('a, _) t -> f:(('a key -> bool)[@local]) -> unit
 
-  val filter_inplace : (_, 'b) t -> f:('b -> bool) -> unit
-  val filteri_inplace : ('a, 'b) t -> f:(key:'a key -> data:'b -> bool) -> unit
+  val filter_inplace : (_, 'b) t -> f:(('b -> bool)[@local]) -> unit
+  val filteri_inplace : ('a, 'b) t -> f:((key:'a key -> data:'b -> bool)[@local]) -> unit
 
   (** [map_inplace t ~f] applies [f] to all elements in [t], transforming them in
       place. *)
-  val map_inplace : (_, 'b) t -> f:('b -> 'b) -> unit
+  val map_inplace : (_, 'b) t -> f:(('b -> 'b)[@local]) -> unit
 
-  val mapi_inplace : ('a, 'b) t -> f:(key:'a key -> data:'b -> 'b) -> unit
+  val mapi_inplace : ('a, 'b) t -> f:((key:'a key -> data:'b -> 'b)[@local]) -> unit
 
   (** [filter_map_inplace] combines the effects of [map_inplace] and [filter_inplace]. *)
-  val filter_map_inplace : (_, 'b) t -> f:('b -> 'b option) -> unit
+  val filter_map_inplace : (_, 'b) t -> f:(('b -> 'b option)[@local]) -> unit
 
-  val filter_mapi_inplace : ('a, 'b) t -> f:(key:'a key -> data:'b -> 'b option) -> unit
+  val filter_mapi_inplace
+    :  ('a, 'b) t
+    -> f:((key:'a key -> data:'b -> 'b option)[@local])
+    -> unit
 
   (** [equal f t1 t2] and [similar f t1 t2] both return true iff [t1] and [t2] have the
       same keys and for all keys [k], [f (find_exn t1 k) (find_exn t2 k)].  [equal] and
@@ -370,8 +417,8 @@ module type Creators_generic = sig
   val create_mapped
     : ( 'a key
       , 'b
-      , get_key:('r -> 'a key)
-        -> get_data:('r -> 'b)
+      , get_key:(('r -> 'a key)[@local])
+        -> get_data:(('r -> 'b)[@local])
         -> 'r list
         -> [ `Ok of ('a, 'b) t | `Duplicate_keys of 'a key list ] )
         create_options
@@ -382,7 +429,7 @@ module type Creators_generic = sig
   val create_with_key
     : ( 'a key
       , 'r
-      , get_key:('r -> 'a key)
+      , get_key:(('r -> 'a key)[@local])
         -> 'r list
         -> [ `Ok of ('a, 'r) t | `Duplicate_keys of 'a key list ] )
         create_options
@@ -390,19 +437,22 @@ module type Creators_generic = sig
   val create_with_key_or_error
     : ( 'a key
       , 'r
-      , get_key:('r -> 'a key) -> 'r list -> ('a, 'r) t Or_error.t )
+      , get_key:(('r -> 'a key)[@local]) -> 'r list -> ('a, 'r) t Or_error.t )
         create_options
 
   val create_with_key_exn
-    : ('a key, 'r, get_key:('r -> 'a key) -> 'r list -> ('a, 'r) t) create_options
+    : ( 'a key
+      , 'r
+      , get_key:(('r -> 'a key)[@local]) -> 'r list -> ('a, 'r) t )
+        create_options
 
 
   val group
     : ( 'a key
       , 'b
-      , get_key:('r -> 'a key)
-        -> get_data:('r -> 'b)
-        -> combine:('b -> 'b -> 'b)
+      , get_key:(('r -> 'a key)[@local])
+        -> get_data:(('r -> 'b)[@local])
+        -> combine:(('b -> 'b -> 'b)[@local])
         -> 'r list
         -> ('a, 'b) t )
         create_options
@@ -505,8 +555,8 @@ module type Creators = sig
       {v
         let h =
           Hashtbl.create_mapped (module Int)
-            ~get_key:(fun x -> x)
-            ~get_data:(fun x -> x + 1)
+            ~get_key:((fun x -> x)[@local])
+            ~get_data:((fun x -> x + 1)[@local])
            [1; 2; 3];;
         val h : [ `Duplicate_keys of int list | `Ok of (int, int) Hashtbl.t ] = `Ok <abstr>
 
@@ -522,8 +572,8 @@ module type Creators = sig
     :  ?growth_allowed:bool (** defaults to [true] *)
     -> ?size:int (** initial size -- default 0 *)
     -> 'a Key.t
-    -> get_key:('r -> 'a)
-    -> get_data:('r -> 'b)
+    -> get_key:(('r -> 'a)[@local])
+    -> get_data:(('r -> 'b)[@local])
     -> 'r list
     -> [ `Ok of ('a, 'b) t | `Duplicate_keys of 'a list ]
 
@@ -533,7 +583,7 @@ module type Creators = sig
     :  ?growth_allowed:bool (** defaults to [true] *)
     -> ?size:int (** initial size -- default 0 *)
     -> 'a Key.t
-    -> get_key:('r -> 'a)
+    -> get_key:(('r -> 'a)[@local])
     -> 'r list
     -> [ `Ok of ('a, 'r) t | `Duplicate_keys of 'a list ]
 
@@ -541,7 +591,7 @@ module type Creators = sig
     :  ?growth_allowed:bool (** defaults to [true] *)
     -> ?size:int (** initial size -- default 0 *)
     -> 'a Key.t
-    -> get_key:('r -> 'a)
+    -> get_key:(('r -> 'a)[@local])
     -> 'r list
     -> ('a, 'r) t Or_error.t
 
@@ -549,7 +599,7 @@ module type Creators = sig
     :  ?growth_allowed:bool (** defaults to [true] *)
     -> ?size:int (** initial size -- default 0 *)
     -> 'a Key.t
-    -> get_key:('r -> 'a)
+    -> get_key:(('r -> 'a)[@local])
     -> 'r list
     -> ('a, 'r) t
 
@@ -563,9 +613,9 @@ module type Creators = sig
 
       {v
          Hashtbl.group (module Int)
-           ~get_key:(fun x -> x / 2)
-           ~get_data:(fun x -> x)
-           ~combine:(fun x y -> x * y)
+           ~get_key:((fun x -> x / 2)[@local])
+           ~get_data:((fun x -> x)[@local])
+           ~combine:((fun x y -> x * y)[@local])
             [ 1; 2; 3; 4]
          |> Hashtbl.to_alist;;
          - : (int * int) list = [(2, 4); (1, 6); (0, 1)]
@@ -574,9 +624,9 @@ module type Creators = sig
     :  ?growth_allowed:bool (** defaults to [true] *)
     -> ?size:int (** initial size -- default 0 *)
     -> 'a Key.t
-    -> get_key:('r -> 'a)
-    -> get_data:('r -> 'b)
-    -> combine:('b -> 'b -> 'b)
+    -> get_key:(('r -> 'a)[@local])
+    -> get_data:(('r -> 'b)[@local])
+    -> combine:(('b -> 'b -> 'b)[@local])
     -> 'r list
     -> ('a, 'b) t
 end
@@ -585,7 +635,7 @@ module type S_without_submodules = sig
   val hash : 'a -> int
   val hash_param : int -> int -> 'a -> int
 
-  type ('a, 'b) t
+  type (!'a, !'b) t
 
   (** We provide a [sexp_of_t] but not a [t_of_sexp] for this type because one needs to be
       explicit about the hash and comparison functions used when creating a hashtable.

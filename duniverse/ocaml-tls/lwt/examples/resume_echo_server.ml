@@ -27,10 +27,11 @@ let serve_ssl port callback =
     ~cert:server_cert
     ~priv_key:server_key >>= fun cert ->
 
-  let hex = Cstruct.of_hex in
+  let hex = Ohex.decode in
   let epoch =
     {
-      Tls.Core.state = `Established ;
+      Tls.Core.side = `Client ;
+      state = `Established ;
       protocol_version = `TLS_1_3 ;
       ciphersuite = `DHE_RSA_WITH_AES_128_GCM_SHA256 ;
       peer_random = hex "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ;
@@ -44,9 +45,11 @@ let serve_ssl port callback =
       own_private_key = Some (snd cert) ;
       own_name = Some Domain_name.(host_exn (of_string_exn "tls13test.nqsb.io")) ;
       master_secret = hex "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ;
-      session_id = Cstruct.create 0 ;
+      exporter_master_secret = "" ;
+      session_id = "" ;
       extended_ms = true ;
       alpn_protocol = None ;
+      tls_unique = None ;
     }
   and psk = {
     Tls.Core.identifier = hex "0000" ;
@@ -83,7 +86,7 @@ let serve_ssl port callback =
   yap ~tag ("-> start @ " ^ string_of_int port) >>= fun () ->
   let rec loop s =
     let authenticator ?ip:_ ~host:_ _ = Ok None in
-    let config = Tls.Config.server ~certificates:(`Single cert) ~ticket_cache ~authenticator () in
+    let config = get_ok (Tls.Config.server ~certificates:(`Single cert) ~ticket_cache ~authenticator ()) in
     (Lwt.catch
        (fun () ->
           Lwt_unix.accept s >>= fun (s, addr) ->

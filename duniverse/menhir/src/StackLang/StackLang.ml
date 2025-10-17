@@ -434,3 +434,97 @@ let all_tokens (branches : tokbranch list) : terminals =
 
 let exhaustive (branches : tokbranch list) : bool =
   subset universe (all_tokens branches)
+
+let default_tokens (branches : tokbranch list) : terminals =
+  diff universe (all_tokens branches)
+
+(* -------------------------------------------------------------------------- *)
+
+(* Computing which branch is taken in an [ICaseToken] instruction. *)
+
+(* [match_tokpat toks tokpat] determines whether a token in the set [toks]
+   is definitely matched or definitely not matched by the pattern [tokpat].
+   The situation where the outcome is not definitely known is forbidden; a
+   runtime assertion detects it. *)
+
+let match_tokpat toks tokpat : bool =
+  let expected = tokens tokpat in
+  let is_subset = subset toks expected in
+  assert (is_subset || disjoint toks expected);
+  is_subset
+
+(* [match_tokbranch toks branch] determines whether a token in the set
+   [toks] is definitely matched or definitely not matched by the branch
+   [branch]. *)
+
+let match_tokbranch toks (tokpat, _) : bool =
+  match_tokpat toks tokpat
+
+(* [find_tokbranch branches toks] returns [Some branch] if the branch is
+   definitely taken when matching a token in the set [toks]. It returns
+   [None] if the default branch is definitely taken. The situation where the
+   outcome is not definitely known is forbidden. *)
+
+let find_tokbranch branches toks : tokbranch option =
+  match List.find (match_tokbranch toks) branches with
+  | branch -> Some branch
+  | exception Not_found -> None
+  (* [List.find_opt] requires OCaml 4.05, so cannot be used *)
+
+(* -------------------------------------------------------------------------- *)
+
+(* [written i] is the set of registers written by the instruction [i]
+   alone (disregarding the instructions that follow [i] in the block). *)
+
+let written (i : block) : registers =
+  match i with
+  | IPop (ps, _, _)
+  | IPeek (ps, _, _) ->
+      Pattern.registers ps
+  | IDef (bs, _) ->
+      Bindings.domain bs
+  | IPrim (p, _, _) ->
+      Pattern.registers [p]
+  | IPush _
+  | ITrace _
+  | IComment _
+  | IDead _
+  | IStop _
+  | IReturn _
+  | IJump _
+  | ICaseToken _
+  | ICaseTag _
+      -> Reg.Set.empty
+
+(* -------------------------------------------------------------------------- *)
+
+(* [has_case_token block] determines whether the block [block] contains at
+   least one instruction of the form [ICaseToken (_, branches, odefault)].
+   If so, it returns [Some (branches, odefault)]. Otherwise, it returns
+   [None]. *)
+
+(* We assume that the block [block] contains at most [CASE] instruction,
+   that is, either one [CASEtok] instruction or one [CASEtag] instruction
+   or neither of them.  *)
+
+let rec has_case_token block =
+  match block with
+  | ICaseToken (_, branches, odefault) ->
+      (* We have a [CASEtok] instruction. *)
+      Some (branches, odefault)
+  | IPush (_, _, block)
+  | IPop (_, _, block)
+  | IPeek (_, _, block)
+  | IDef (_, block)
+  | IPrim (_, _, block)
+  | ITrace (_, block)
+  | IComment (_, block)
+      (* Look further. *)
+      -> has_case_token block
+  | ICaseTag _
+  | IDead _
+  | IStop _
+  | IReturn _
+  | IJump _
+      (* We do not have a [CASEtok] instructions. *)
+      -> None

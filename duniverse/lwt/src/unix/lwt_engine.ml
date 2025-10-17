@@ -8,9 +8,7 @@
    ("deprecated"), and create a local, non-deprecated alias for
    [Lwt_sequence] that can be referred to by the rest of the code in this
    module without triggering any more warnings. *)
-[@@@ocaml.warning "-3"]
 module Lwt_sequence = Lwt_sequence
-[@@@ocaml.warning "+3"]
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |
@@ -108,6 +106,8 @@ class virtual abstract = object(self)
   method timer_count = Lwt_sequence.length timers
 
   method fork = ()
+
+  method forwards_signal (_signum:int) = false
 end
 
 class type t = object
@@ -147,6 +147,8 @@ struct
   let devpoll = EV_DEVPOLL
   let port = EV_PORT
 
+  let equal = ( = )
+
   let name = function
     | EV_DEFAULT -> "EV_DEFAULT"
     | EV_SELECT -> "EV_SELECT"
@@ -160,6 +162,7 @@ struct
 end
 
 external ev_init : Ev_backend.t -> ev_loop = "lwt_libev_init"
+external ev_backend : ev_loop -> Ev_backend.t = "lwt_libev_backend"
 external ev_stop : ev_loop -> unit = "lwt_libev_stop"
 external ev_loop : ev_loop -> bool -> unit = "lwt_libev_loop"
 external ev_unloop : ev_loop -> unit = "lwt_libev_unloop"
@@ -174,6 +177,8 @@ class libev ?(backend=Ev_backend.default) () = object
 
   val loop = ev_init backend
   method loop = loop
+
+  method backend = ev_backend loop
 
   method private cleanup = ev_stop loop
 
@@ -220,7 +225,7 @@ module Sleep_queue =
     type t = sleeper
     let compare {time = t1; _} {time = t2; _} = compare t1 t2
   end)
-  [@@ocaml.warning "-3"]
+  [@ocaml.warning "-3"]
 
 module Fd_map = Map.Make(struct type t = Unix.file_descr let compare = compare end)
 
@@ -433,6 +438,7 @@ let readable_count () = !current#readable_count
 let writable_count () = !current#writable_count
 let timer_count () = !current#timer_count
 let fork () = !current#fork
+let forwards_signal n = !current#forwards_signal n
 
 module Versioned =
 struct

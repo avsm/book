@@ -1,7 +1,7 @@
 open! Import
 include Comparable_intf
 module Infix = Base.Comparable.Infix
-module Polymorphic_compare = Base.Comparable.Polymorphic_compare
+module Comparisons = Base.Comparable.Comparisons
 
 module Validate (T : sig
     type t [@@deriving compare, sexp_of]
@@ -78,7 +78,7 @@ struct
 
   include C
   include Validate (C)
-  module Replace_polymorphic_compare : Polymorphic_compare with type t := t = C
+  module Replace_polymorphic_compare : Comparisons with type t := t = C
   module Map = Map.Make_using_comparator (C)
   module Set = Set.Make_using_comparator (C)
 end
@@ -98,7 +98,7 @@ struct
       include M
     end)
 
-  module Replace_polymorphic_compare : Polymorphic_compare with type t := t = M
+  module Replace_polymorphic_compare : Comparisons with type t := t = M
   module Map = Map.Make_plain_using_comparator (T)
   module Set = Set.Make_plain_using_comparator (T)
 end
@@ -125,7 +125,7 @@ module Make_using_comparator (T : sig
       include M
     end)
 
-  module Replace_polymorphic_compare : Polymorphic_compare with type t := t = M
+  module Replace_polymorphic_compare : Comparisons with type t := t = M
   module Map = Map.Make_using_comparator (T)
   module Set = Set.Make_using_comparator (T)
 end
@@ -153,7 +153,7 @@ struct
     end)
 
   include M
-  module Replace_polymorphic_compare : Polymorphic_compare with type t := t = M
+  module Replace_polymorphic_compare : Comparisons with type t := t = M
   module Map = Map.Make_binable_using_comparator (T)
   module Set = Set.Make_binable_using_comparator (T)
 end
@@ -186,7 +186,7 @@ struct
 
   include T
   include Validate (T)
-  module Replace_polymorphic_compare : Comparisons.S with type t := t = M
+  module Replace_polymorphic_compare : Comparisons with type t := t = M
   module Map = Map.Make_using_comparator (T)
   module Set = Set.Make_using_comparator (T)
 end
@@ -209,7 +209,7 @@ struct
 
   include T
   include Validate (T)
-  module Replace_polymorphic_compare : Comparisons.S with type t := t = M
+  module Replace_polymorphic_compare : Comparisons with type t := t = M
   module Map = Map.Make_binable_using_comparator (T)
   module Set = Set.Make_binable_using_comparator (T)
 end
@@ -249,6 +249,28 @@ module Stable = struct
     module Make (X : Stable_module_types.S0) = struct
       module Map = Map.Stable.V1.Make (X)
       module Set = Set.Stable.V1.Make (X)
+    end
+
+    module With_stable_witness = struct
+      module type S = sig
+        type comparable
+        type comparator_witness
+
+        module Map :
+          Map.Stable.V1.With_stable_witness.S
+          with type key := comparable
+          with type comparator_witness := comparator_witness
+
+        module Set :
+          Set.Stable.V1.With_stable_witness.S
+          with type elt := comparable
+          with type elt_comparator_witness := comparator_witness
+      end
+
+      module Make (X : Stable_module_types.With_stable_witness.S0) = struct
+        module Map = Map.Stable.V1.With_stable_witness.Make (X)
+        module Set = Set.Stable.V1.With_stable_witness.Make (X)
+      end
     end
   end
 end

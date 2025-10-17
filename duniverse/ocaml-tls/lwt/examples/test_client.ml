@@ -5,11 +5,7 @@ let mypsk = ref None
 
 let ticket_cache = {
   Tls.Config.lookup = (fun _ -> None) ;
-  ticket_granted = (fun psk epoch ->
-      Logs.info (fun m -> m "ticket granted %a %a"
-                    Sexplib.Sexp.pp_hum (Tls.Core.sexp_of_psk13 psk)
-                    Sexplib.Sexp.pp_hum (Tls.Core.sexp_of_epoch_data epoch)) ;
-      mypsk := Some (psk, epoch)) ;
+  ticket_granted = (fun psk epoch -> mypsk := Some (psk, epoch)) ;
   lifetime = 0l ;
   timestamp = Ptime_clock.now
 }
@@ -21,9 +17,10 @@ let test_client _ =
   let port = 4433 in
   let host = "127.0.0.1" in
   let authenticator = null_auth in
-  Tls_lwt.connect_ext
-    Tls.Config.(client ~version:(`TLS_1_0, `TLS_1_3) (* ~certificates:(`Single cert) *) ?cached_ticket:!mypsk ~ticket_cache ~authenticator ~ciphers:Ciphers.supported ())
-    (host, port) >>= fun (ic, oc) ->
+  Tls_lwt.Unix.connect
+    (get_ok Tls.Config.(client ~version:(`TLS_1_0, `TLS_1_3) (* ~certificates:(`Single cert) *) ?cached_ticket:!mypsk ~ticket_cache ~authenticator ~ciphers:Ciphers.supported ()))
+    (host, port) >>= fun t ->
+  let (ic, oc) = Tls_lwt.of_t t in
   let req = String.concat "\r\n" [
     "GET / HTTP/1.1" ; "Host: " ^ host ; "Connection: close" ; "" ; ""
   ] in
@@ -45,7 +42,7 @@ open Cmdliner
 
 let cmd =
   let term = Term.(ret (const jump $ setup_log))
-  and info = Cmd.info "test_client" ~version:"0.15.3"
+  and info = Cmd.info "test_client" ~version:"2.0.3"
   in
   Cmd.v info term
 

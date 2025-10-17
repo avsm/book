@@ -1,10 +1,13 @@
 (** A ['a Set_once.t] is like an ['a option ref] that can only be set once.  A
     [Set_once.t] starts out as [None], the first [set] transitions it to [Some], and
-    subsequent [set]s fail. *)
+    subsequent [set]s fail.
+
+    Equality is determined only by the internal value and not the source code position
+    of where the value was set. *)
 
 open! Import
 
-type 'a t [@@deriving sexp_of]
+type 'a t [@@deriving compare, equal, sexp_of]
 
 (** Passes when unset. *)
 include Invariant.S1 with type 'a t := 'a t
@@ -21,7 +24,7 @@ val get : 'a t -> 'a option
 val get_exn : 'a t -> Source_code_position.t -> 'a
 val is_none : _ t -> bool
 val is_some : _ t -> bool
-val iter : 'a t -> f:('a -> unit) -> unit
+val iter : 'a t -> f:(('a -> unit)[@local]) -> unit
 
 module Optional_syntax :
   Optional_syntax.S1 with type 'a t := 'a t with type 'a value := 'a identity

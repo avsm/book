@@ -1,3 +1,10 @@
+(*
+   ATD type definitions for testing their translation to TypeScript.
+*)
+
+(* Testing raw JSON. Should map to type 'any'. *)
+type anything = abstract
+
 type different_kinds_of_things = [
   | Root (* class name conflict *)
   | Thing of int
@@ -8,11 +15,23 @@ type different_kinds_of_things = [
 (* TS keyword *)
 type this = int
 
+type ('a, 'b) parametrized_record = {
+  field_a: 'a;
+  ~field_b: 'b list;
+}
+
+type 'a parametrized_tuple = ('a * 'a * int)
+
+type simple_record = {
+  str: string;
+}
+
 type root = {
   id <json name="ID">: string;
   this: this;
   items: int list list;
   ?maybe: int option;
+  ?maybe2: simple_record option;
   ~extras: int list;
   ~answer <ts default="42">: int;
   aliased: alias;
@@ -26,6 +45,10 @@ type root = {
   ~nullables: int nullable list;
   untyped_things: abstract list;
   foo: foo nullable;
+  parametrized_record: (int, float) parametrized_record;
+  parametrized_tuple: different_kinds_of_things parametrized_tuple;
+  anything: anything;
+  wrapped: string wrap list;
 }
 
 type alias = int list
@@ -35,3 +58,5 @@ type pair = (string * int)
 type foo = {
   foo: string;
 }
+
+type special_string = string wrap

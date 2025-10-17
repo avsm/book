@@ -1,21 +1,11 @@
-open Utils
 open Core
 open State
-
-open Mirage_crypto
 
 let src = Logs.Src.create "handshake" ~doc:"TLS handshake"
 module Log = (val Logs.src_log src : Logs.LOG)
 
 let trace_cipher cipher =
-  let kex = Ciphersuite.ciphersuite_kex cipher
-  and papr = Ciphersuite.ciphersuite_privprot cipher
-  in
-  let sexp = lazy (Sexplib.Sexp.(List Ciphersuite.(
-      [ sexp_of_key_exchange_algorithm kex ;
-        sexp_of_payload_protection papr ])))
-  in
-  Tracing.sexp ~tag:"cipher" sexp
+  Tracing.debug (fun m -> m "%a" Ciphersuite.pp_ciphersuite cipher)
 
 let empty = function [] -> true | _ -> false
 
@@ -23,10 +13,10 @@ let change_cipher_spec =
   (Packet.CHANGE_CIPHER_SPEC, Writer.assemble_change_cipher_spec)
 
 let hostname (h : client_hello) : [ `host ] Domain_name.t option =
-  map_find ~f:(function `Hostname s -> Some s | _ -> None) h.extensions
+  Utils.map_find ~f:(function `Hostname s -> Some s | _ -> None) h.extensions
 
 let groups (h : client_hello) =
-  match map_find ~f:(function `SupportedGroups g -> Some g | _ -> None) h.extensions with
+  match Utils.map_find ~f:(function `SupportedGroups g -> Some g | _ -> None) h.extensions with
   | Some xs ->
     List.fold_left (fun acc g ->
         match named_group_to_group g with Some g -> g :: acc | _ -> acc)
@@ -65,7 +55,7 @@ let agreed_cert certs ?f ?signature_algorithms hostname =
     | Some s -> List.exists (pk_matches_sa (snd c)) s
   in
   match certs, hostname with
-  | `None, _ -> Error (`Error `NoCertificateConfigured)
+  | `None, _ -> Error (`Error `CouldntSelectCertificate)
   | `Single c, _ ->
     if filter c && filter_sigalg c then Ok c else Error (`Error `CouldntSelectCertificate)
   | `Multiple_default (c, _), None ->
@@ -89,31 +79,31 @@ let agreed_cert certs ?f ?signature_algorithms hostname =
     | [] -> Error (`Error `CouldntSelectCertificate)
 
 let get_secure_renegotiation exts =
-  map_find
+  Utils.map_find
     exts
     ~f:(function `SecureRenegotiation data -> Some data | _ -> None)
 
 let get_alpn_protocols (ch : client_hello) =
-  map_find ~f:(function `ALPN protocols -> Some protocols | _ -> None) ch.extensions
+  Utils.map_find ~f:(function `ALPN protocols -> Some protocols | _ -> None) ch.extensions
 
 let alpn_protocol config ch =
   match config.Config.alpn_protocols, get_alpn_protocols ch with
   | _, None | [], _ -> Ok None
-  | configured, Some client -> match first_match client configured with
+  | configured, Some client -> match Utils.first_match client configured with
     | Some proto -> Ok (Some proto)
     | None ->
       (* RFC7301 Section 3.2:
          In the event that the server supports no protocols that the client
          advertises, then the server SHALL respond with a fatal
          "no_application_protocol" alert. *)
-      Error (`Fatal `NoApplicationProtocol)
+      Error (`Fatal `No_application_protocol)
 
 let get_alpn_protocol (sh : server_hello) =
-  map_find ~f:(function `ALPN protocol -> Some protocol | _ -> None) sh.extensions
+  Utils.map_find ~f:(function `ALPN protocol -> Some protocol | _ -> None) sh.extensions
 
 let empty_common_session_data = {
-  server_random          = Cstruct.create 0 ;
-  client_random          = Cstruct.create 0 ;
+  server_random          = "" ;
+  client_random          = "" ;
   peer_certificate_chain = [] ;
   peer_certificate       = None ;
   trust_anchor           = None ;
@@ -122,7 +112,7 @@ let empty_common_session_data = {
   own_private_key        = None ;
   own_name               = None ;
   client_auth            = false ;
-  master_secret          = Cstruct.empty ;
+  master_secret          = "" ;
   alpn_protocol          = None ;
 }
 
@@ -131,20 +121,22 @@ let empty_session = {
   client_version      = `TLS_1_2 ;
   ciphersuite         = `DHE_RSA_WITH_AES_256_CBC_SHA ;
   group               = Some `FFDHE2048 ;
-  renegotiation       = Cstruct.(empty, empty) ;
-  session_id          = Cstruct.empty ;
+  renegotiation       = "", "" ;
+  session_id          = "" ;
   extended_ms         = false ;
+  tls_unique          = "" ;
 }
 
 let empty_session13 cipher = {
-  common_session_data13 = empty_common_session_data ;
-  ciphersuite13         = cipher ;
-  master_secret         = Handshake_crypto13.empty cipher ;
-  resumption_secret     = Cstruct.empty ;
-  state                 = `Established ;
-  resumed               = false ;
-  client_app_secret     = Cstruct.empty ;
-  server_app_secret     = Cstruct.empty ;
+  common_session_data13  = empty_common_session_data ;
+  ciphersuite13          = cipher ;
+  master_secret          = Handshake_crypto13.empty cipher ;
+  exporter_master_secret = "" ;
+  resumption_secret      = "" ;
+  state                  = `Established ;
+  resumed                = false ;
+  client_app_secret      = "" ;
+  server_app_secret      = "" ;
 }
 
 let common_session_data_of_epoch (epoch : epoch_data) common_session_data =
@@ -178,6 +170,7 @@ let session13_of_epoch cipher (epoch : epoch_data) : session_data13 =
     common_session_data13 ;
     ciphersuite13 = cipher ;
     state = epoch.state ;
+    exporter_master_secret = epoch.exporter_master_secret ;
   }
 
 let supported_protocol_version (min, max) v =
@@ -237,7 +230,7 @@ let extension_types t exts = List.(
 let server_exts_subset_of_client sexts cexts =
   let (sexts', cexts') =
     (extension_types to_server_ext_type sexts, extension_types to_client_ext_type cexts) in
-  List_set.subset sexts' (`Cookie :: cexts')
+  Utils.List_set.subset sexts' (`Cookie :: cexts')
 
 module Group = struct
   type t = Packet.named_group
@@ -267,15 +260,15 @@ let client_hello_valid version (ch : client_hello) =
        else
          fail HANDSHAKE_FAILURE *)
   let sig_alg =
-    map_find
+    Utils.map_find
       ~f:(function `SignatureAlgorithms sa -> Some sa | _ -> None)
       ch.extensions
   and key_share =
-    map_find
+    Utils.map_find
       ~f:(function `KeyShare ks -> Some ks | _ -> None)
       ch.extensions
   and groups =
-    map_find
+    Utils.map_find
       ~f:(function `SupportedGroups gs -> Some gs | _ -> None)
       ch.extensions
   in
@@ -287,50 +280,47 @@ let client_hello_valid version (ch : client_hello) =
           List.exists (fun sa -> List.mem sa Config.supported_signature_algorithms)
         in
         match sig_alg with
-        | None -> Error `NoSignatureAlgorithmsExtension
+        | None -> Error (`Fatal (`Missing_extension "signature algorithms"))
         | Some sig_alg when good_sig_alg sig_alg ->
           ( match key_share, groups with
-            | None, _ -> Error `NoKeyShareExtension
-            | _, None -> Error `NoSupportedGroupExtension
+            | None, _ -> Error (`Fatal (`Missing_extension "key share"))
+            | _, None -> Error (`Fatal (`Missing_extension "supported group"))
             | Some ks, Some gs ->
               match
-                List_set.is_proper_set gs,
-                List_set.is_proper_set (List.map fst ks),
+                Utils.List_set.is_proper_set gs,
+                Utils.List_set.is_proper_set (List.map fst ks),
                 GroupSet.subset (of_list (List.map fst ks)) (of_list gs)
               with
               | true, true, true -> Ok ()
-              | false, _, _ -> Error (`NotSetSupportedGroup gs)
-              | _, false, _ -> Error (`NotSetKeyShare ks)
-              | _, _, false -> Error (`NotSubsetKeyShareSupportedGroup (gs, ks)) )
-        | Some x -> Error (`NoGoodSignatureAlgorithms x)
+              | false, _, _ -> Error (`Fatal (`Handshake (`Message "supported group is not a set")))
+              | _, false, _ -> Error (`Fatal (`Handshake (`Message "key share is not a set")))
+              | _, _, false -> Error (`Fatal (`Handshake (`Message "key share is not a subset of supported group")) ))
+        | Some _ -> Error (`Fatal (`Handshake (`Message "no good signature algorithms")))
       )
-    | `SSL_3 | `TLS_1_0 | `TLS_1_1 ->
-      Utils.option (Ok ()) (fun _ -> Error `HasSignatureAlgorithmsExtension) sig_alg
+    | `SSL_3 | `TLS_1_0 | `TLS_1_1 -> Ok ()
   in
 
   let share_ciphers =
     match
-      first_match (filter_map ~f:Ciphersuite.any_ciphersuite_to_ciphersuite ch.ciphersuites) Config.Ciphers.supported
+      Utils.first_match (List.filter_map Ciphersuite.any_ciphersuite_to_ciphersuite ch.ciphersuites) Config.Ciphers.supported
     with
     | None -> false
     | Some _ -> true
   in
   match
     not (empty ch.ciphersuites),
-    List_set.is_proper_set ch.ciphersuites,
     share_ciphers,
-    List_set.is_proper_set (extension_types to_client_ext_type ch.extensions)
+    Utils.List_set.is_proper_set (extension_types to_client_ext_type ch.extensions)
   with
-  | true, _, true, true -> version_good
-  | false, _ , _, _ -> Error `EmptyCiphersuites
-  (*  | _, false, _, _ -> Error (`NotSetCiphersuites ch.ciphersuites) *)
-  | _, _, false, _ -> Error (`NoSupportedCiphersuite ch.ciphersuites)
-  | _, _, _, false -> Error (`NotSetExtension ch.extensions)
+  | true, true, true -> version_good
+  | false, _, _ -> Error (`Fatal (`Handshake (`Message "ciphersuites is empty")))
+  | _, false, _ -> Error (`Fatal (`Handshake (`Message "no supported ciphersuite")))
+  | _, _, false -> Error (`Fatal (`Handshake (`Message "extensions is not a set")))
 
 
 let server_hello_valid (sh : server_hello) =
   (* let open Ciphersuite in *)
-  List_set.is_proper_set (extension_types to_server_ext_type sh.extensions)
+  Utils.List_set.is_proper_set (extension_types to_server_ext_type sh.extensions)
   (* TODO:
       - EC stuff must be present if EC ciphersuite chosen
    *)
@@ -338,15 +328,16 @@ let server_hello_valid (sh : server_hello) =
 let to_sign_1_3 context_string =
   (* input is prepended by 64 * 0x20 (to avoid cross-version attacks) *)
   (* input for signature now contains also a context string *)
-  let prefix = Cstruct.create 64 in
-  Cstruct.memset prefix 0x20 ;
-  let ctx =
-    let stop = Cstruct.create 1 (* trailing 0 byte *) in
-    match context_string with
-    | None -> stop
-    | Some x -> Cstruct.of_string x <+> stop
-  in
-  prefix <+> ctx
+  let len = match context_string with
+    | None -> 64 + 1
+    | Some v -> 64 + String.length v + 1 in
+  let buf = Bytes.create len in
+  Bytes.fill buf 0 64 '\x20';
+  begin match context_string with
+  | None -> ()
+  | Some v -> Bytes.blit_string v 0 buf 64 (String.length v) end;
+  Bytes.set buf (Bytes.length buf - 1) '\x00';
+  Bytes.unsafe_to_string buf
 
 let signature version ?context_string data client_sig_algs signature_algorithms (private_key : X509.Private_key.t) =
   match version with
@@ -355,15 +346,18 @@ let signature version ?context_string data client_sig_algs signature_algorithms 
       match private_key with
       | `RSA key ->
         begin try
-            let data = Hash.MD5.digest data <+> Hash.SHA1.digest data in
+            let data =
+              Digestif.(MD5.(to_raw_string (digest_string data)) ^
+                        SHA1.(to_raw_string (digest_string data)))
+            in
             Ok (Mirage_crypto_pk.Rsa.PKCS1.sig_encode ~key data)
           with Mirage_crypto_pk.Rsa.Insufficient_key ->
-            Error (`Fatal `KeyTooSmall)
+            Error (`Fatal (`Bad_certificate "RSA key too small"))
         end
       | k ->
         (* not passing ~scheme: only non-RSA keys sig scheme is trivial *)
         Result.map_error
-          (function `Msg m -> `Fatal (`SigningFailed m))
+          (function `Msg m -> `Fatal (`Handshake (`Message ("signing failed: " ^ m))))
           (X509.Private_key.sign `SHA1 k (`Message data))
     in
     Ok (Writer.assemble_digitally_signed signed)
@@ -378,20 +372,20 @@ let signature version ?context_string data client_sig_algs signature_algorithms 
       | Some client_algos ->
         Option.to_result
           ~none:(`Error (`NoConfiguredSignatureAlgorithm client_algos))
-          (first_match client_algos (List.filter (pk_matches_sa private_key) signature_algorithms))
+          (Utils.first_match client_algos (List.filter (pk_matches_sa private_key) signature_algorithms))
     in
     let scheme = signature_scheme_of_signature_algorithm sig_alg
     and hash = hash_of_signature_algorithm sig_alg
     in
     let* signature =
-      Result.map_error (function `Msg m -> `Fatal (`SigningFailed m))
+      Result.map_error (function `Msg m -> `Fatal (`Handshake (`Message ("signing failed: " ^ m))))
         (X509.Private_key.sign hash ~scheme private_key (`Message data))
     in
     Ok (Writer.assemble_digitally_signed_1_2 sig_alg signature)
   | `TLS_1_3 ->
     let to_sign =
       let prefix = to_sign_1_3 context_string in
-      prefix <+> data
+      prefix ^ data
     in
     let* sig_alg =
       let* client_algos =
@@ -404,19 +398,19 @@ let signature version ?context_string data client_sig_algs signature_algorithms 
       let sa = List.filter (pk_matches_sa private_key) sa in
       Option.to_result
         ~none:(`Error (`NoConfiguredSignatureAlgorithm client_algos))
-        (first_match client_algos sa)
+        (Utils.first_match client_algos sa)
     in
     let scheme = signature_scheme_of_signature_algorithm sig_alg
     and hash = hash_of_signature_algorithm sig_alg
     in
     let* signature =
-      Result.map_error (function `Msg m -> `Fatal (`SigningFailed m))
+      Result.map_error (function `Msg m -> `Fatal (`Handshake (`Message ("signing failed: " ^ m))))
         (X509.Private_key.sign hash ~scheme private_key (`Message to_sign))
     in
     Ok (Writer.assemble_digitally_signed_1_2 sig_alg signature)
 
 let peer_key = function
-  | None -> Error (`Fatal `NoCertificateReceived)
+  | None -> Error (`Fatal (`Bad_certificate "none received"))
   | Some cert -> Ok (X509.Certificate.public_key cert)
 
 let verify_digitally_signed version ?context_string sig_algs data signature_data certificate =
@@ -428,17 +422,18 @@ let verify_digitally_signed version ?context_string sig_algs data signature_data
       | `RSA key ->
         let* raw =
           Option.to_result
-            ~none:(`Fatal (`SignatureVerificationFailed "couldn't decode PKCS1"))
+            ~none:(`Fatal (`Handshake (`Message "couldn't decode PKCS1")))
             (Mirage_crypto_pk.Rsa.PKCS1.sig_decode ~key signature)
         in
         let computed =
-          Hash.(MD5.digest signature_data <+> SHA1.digest signature_data)
+          Digestif.(MD5.(to_raw_string (digest_string signature_data)) ^
+                    SHA1.(to_raw_string (digest_string signature_data)))
         in
-        guard (Cstruct.equal raw computed)
-          (`Fatal (`SignatureVerificationFailed "RSA PKCS1 raw <> computed"))
+        guard (String.equal raw computed)
+          (`Fatal (`Handshake (`Message "RSA PKCS1 raw <> computed")))
       | key ->
         Result.map_error
-          (function `Msg m -> `Fatal (`SignatureVerificationFailed m))
+          (function `Msg m -> `Fatal (`Handshake (`Message ("signature verification failed: " ^ m))))
           (X509.Public_key.verify `SHA1 ~signature key (`Message signature_data))
     end
   | `TLS_1_2 ->
@@ -453,7 +448,7 @@ let verify_digitally_signed version ?context_string sig_algs data signature_data
     and scheme = signature_scheme_of_signature_algorithm sig_alg
     in
     Result.map_error
-      (function `Msg m -> `Fatal (`SignatureVerificationFailed m))
+      (function `Msg m -> `Fatal (`Handshake (`Message ("signature verification failed: " ^ m))))
       (X509.Public_key.verify hash ~scheme ~signature pubkey (`Message signature_data))
   | `TLS_1_3 ->
     let* sig_alg, signature =
@@ -467,10 +462,10 @@ let verify_digitally_signed version ?context_string sig_algs data signature_data
     and scheme = signature_scheme_of_signature_algorithm sig_alg
     and data =
       let prefix = to_sign_1_3 context_string in
-      prefix <+> signature_data
+      prefix ^ signature_data
     in
     Result.map_error
-      (function `Msg m -> `Fatal (`SignatureVerificationFailed m))
+      (function `Msg m -> `Fatal (`Handshake (`Message ("signature verification failed: " ^ m))))
       (X509.Public_key.verify hash ~scheme ~signature pubkey (`Message data))
 
 let validate_chain authenticator certificates ip hostname =
@@ -485,7 +480,7 @@ let validate_chain authenticator certificates ip hostname =
       | `RSA key -> Mirage_crypto_pk.Rsa.pub_bits key >= min
       | _ -> true
     in
-    guard (List.for_all check cs) (`Fatal `KeyTooSmall)
+    guard (List.for_all check cs) (`Fatal (`Bad_certificate "key too small"))
 
   and parse_certificates certs =
     let certificates =
@@ -494,14 +489,14 @@ let validate_chain authenticator certificates ip hostname =
         | Ok c -> Some c
         | Error `Msg msg ->
           Log.warn (fun m -> m "cannot decode certificate %s:@.%a" msg
-                       Cstruct.hexdump_pp cs);
+                       (Ohex.pp_hexdump ()) cs);
           None
       in
-      filter_map ~f certs
+      List.filter_map f certs
     in
     let* () =
       guard (List.length certs = List.length certificates)
-        (`Fatal `BadCertificateChain)
+        (`Fatal (`Bad_certificate "couldn't decode some certificates"))
     in
     Ok certificates
   in
@@ -518,9 +513,8 @@ let validate_chain authenticator certificates ip hostname =
   | Some authenticator ->
     let* anchor = authenticate authenticator hostname certs in
     let* () = key_size Config.min_rsa_key_size certs in
-    Ok (Utils.option
-          (server, certs, [], None)
-          (fun (chain, anchor) -> (server, certs, chain, Some anchor))
+    Ok (Option.fold ~none:(server, certs, [], None)
+          ~some:(fun (chain, anchor) -> (server, certs, chain, Some anchor))
           anchor)
 
 let output_key_update ~request state =
@@ -541,7 +535,7 @@ let output_key_update ~request state =
             session.master_secret session.server_app_secret
         in
         Ok ({ session with server_app_secret }, server_ctx)
-      | _ -> Error (`Fatal `InvalidSession)
+      | _ -> Error (`Fatal (`Handshake (`Message "invalid state for key update")))
     in
     let handshake = { hs with session = `TLS13 session' :: hs.session } in
     let ku =
@@ -553,4 +547,4 @@ let output_key_update ~request state =
     let out = Writer.assemble_handshake ku in
     Ok ({ state with encryptor = Some encryptor ; handshake },
         (Packet.HANDSHAKE, out))
-  | _ -> Error (`Fatal `InvalidSession)
+  | _ -> Error (`Fatal (`Handshake (`Message "no earlier session found")))

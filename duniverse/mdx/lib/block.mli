@@ -33,6 +33,8 @@ type ocaml_value = {
       (** [env] is the name given to the environment where tests are run. *)
   non_det : Label.non_det option;
   errors : Output.t list;
+      (** [header] defines whether a header was specified for the block. *)
+  header : Header.t option;
 }
 
 type toplevel_value = {
@@ -43,8 +45,8 @@ type toplevel_value = {
 
 type include_ocaml_file = {
   part_included : string option;
-      (** [part_included] is the part of the file to synchronize with.
-          If lines is not specified synchronize the whole file. *)
+      (** [part_included] is the part of the file to synchronize with. If lines
+          is not specified synchronize the whole file. *)
 }
 
 type include_other_file = { header : Header.t option }
@@ -72,6 +74,23 @@ type value =
 type section = int * string
 (** The type for sections. *)
 
+module Raw : sig
+  type t
+
+  val make :
+    loc:Location.t ->
+    section:section option ->
+    header:string ->
+    contents:string list ->
+    label_cmt:string option ->
+    legacy_labels:string ->
+    errors:Output.t list ->
+    t
+
+  val make_include :
+    loc:Location.t -> section:section option -> labels:string -> t
+end
+
 type t = {
   loc : Location.t;
   section : section option;
@@ -81,9 +100,13 @@ type t = {
   contents : string list;
   skip : bool;
   version_enabled : bool;
-      (** Whether the current OCaml version complies with the block's version. *)
+      (** Whether the current OCaml version complies with the block's version.
+      *)
+  os_type_enabled : bool;
+      (** Whether the current os type complies with the block's version. *)
   set_variables : (string * string) list;
   unset_variables : string list;
+  delim : string option;
   value : value;
 }
 (** The type for supported code blocks. *)
@@ -94,17 +117,20 @@ val mk :
   labels:Label.t list ->
   legacy_labels:bool ->
   header:Header.t option ->
+  delim:string option ->
   contents:string list ->
   errors:Output.t list ->
-  (t, [ `Msg of string ]) Result.result
+  (t, [ `Msg of string ]) result
 
 val mk_include :
   loc:Location.t ->
   section:section option ->
   labels:Label.t list ->
-  (t, [ `Msg of string ]) Result.result
-(** [mk_include] builds an include block from a comment [<!-- $MDX ... -->]
-    that is not followed by a code block [``` ... ```]. *)
+  (t, [ `Msg of string ]) result
+(** [mk_include] builds an include block from a comment [<!-- $MDX ... -->] that
+    is not followed by a code block [``` ... ```]. *)
+
+val from_raw : Raw.t -> (t, [ `Msg of string ] list) Result.result
 
 (** {2 Printers} *)
 
@@ -123,10 +149,6 @@ val pp_footer : ?syntax:Syntax.t -> t Fmt.t
 val pp : ?syntax:Syntax.t -> t Fmt.t
 (** [pp] pretty-prints blocks. *)
 
-val pp_line_directive : (string * int) Fmt.t
-(** [pp_line_directive] pretty-prints a line directive given as a
-   filename and line number. *)
-
 (** {2 Accessors} *)
 
 val non_det : t -> Label.non_det option
@@ -139,7 +161,8 @@ val file : t -> string option
 (** [file t] is the name of the file to synchronize [t] with. *)
 
 val set_variables : t -> (string * string) list
-(** [set_variable t] is the list of environment variable to set and their values *)
+(** [set_variable t] is the list of environment variable to set and their values
+*)
 
 val unset_variables : t -> string list
 (** [unset_variable t] is the list of environment variable to unset *)
@@ -153,9 +176,8 @@ val value : t -> value
 val section : t -> section option
 (** [section t] is [t]'s section. *)
 
-val executable_contents : syntax:Syntax.t -> t -> string list
-(** [executable_contents t] is either [t]'s contents if [t] is a raw
-   or a cram block, or [t]'s commands if [t] is a toplevel fragments
-   (e.g. the phrase result is discarded). *)
-
 val is_active : ?section:string -> t -> bool
+
+(** {2 Helpers} *)
+
+val ends_by_semi_semi : string list -> bool

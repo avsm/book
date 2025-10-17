@@ -11,7 +11,7 @@ module type Day_of_week = sig
     | Thu
     | Fri
     | Sat
-  [@@deriving bin_io, compare, hash, quickcheck, sexp]
+  [@@deriving bin_io, compare, hash, quickcheck, sexp, sexp_grammar, typerep]
 
   include Comparable.S_binable with type t := t
   include Hashable.S_binable with type t := t
@@ -52,14 +52,15 @@ module type Day_of_week = sig
 
   module Stable : sig
     module V1 : sig
-      type nonrec t = t [@@deriving bin_io, sexp, compare, hash]
+      type nonrec t = t
+      [@@deriving bin_io, sexp, sexp_grammar, compare, hash, stable_witness]
 
       include
-        Comparable.Stable.V1.S
+        Comparable.Stable.V1.With_stable_witness.S
         with type comparable := t
         with type comparator_witness := comparator_witness
 
-      include Hashable.Stable.V1.S with type key := t
+      include Hashable.Stable.V1.With_stable_witness.S with type key := t
     end
   end
 end

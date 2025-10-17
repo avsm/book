@@ -1,5 +1,5 @@
 opam-version: "2.0"
-version: "v0.15.0"
+version: "v0.16.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/bin_prot"
@@ -11,19 +11,21 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"             {>= "4.08.0"}
-  "base"              {>= "v0.15" & < "v0.16"}
-  "ppx_compare"       {>= "v0.15" & < "v0.16"}
-  "ppx_custom_printf" {>= "v0.15" & < "v0.16"}
-  "ppx_fields_conv"   {>= "v0.15" & < "v0.16"}
-  "ppx_optcomp"       {>= "v0.15" & < "v0.16"}
-  "ppx_sexp_conv"     {>= "v0.15" & < "v0.16"}
-  "ppx_variants_conv" {>= "v0.15" & < "v0.16"}
-  "dune"              {>= "2.0.0"}
+  "ocaml"              {>= "4.14.0"}
+  "base"               {>= "v0.16" & < "v0.17"}
+  "ppx_compare"        {>= "v0.16" & < "v0.17"}
+  "ppx_custom_printf"  {>= "v0.16" & < "v0.17"}
+  "ppx_fields_conv"    {>= "v0.16" & < "v0.17"}
+  "ppx_optcomp"        {>= "v0.16" & < "v0.17"}
+  "ppx_sexp_conv"      {>= "v0.16" & < "v0.17"}
+  "ppx_stable_witness" {>= "v0.16" & < "v0.17"}
+  "ppx_variants_conv"  {>= "v0.16" & < "v0.17"}
+  "dune"               {>= "2.0.0"}
 ]
 depopts: [
   "mirage-xen-ocaml"
 ]
+available: arch != "arm32" & arch != "x86_32"
 synopsis: "A binary protocol generator"
 description: "
 Part of Jane Street's Core library

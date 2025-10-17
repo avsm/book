@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2015 The ptime programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (* Julian day and proleptic Gregorian calendar date conversion.
@@ -27,6 +27,15 @@ let jd_to_date jd =
   let month = m + 3 - (12 * (m / 10)) in
   let year = 100 * b + d - 4800 + (m / 10) in
   (year, month, day)
+
+let jd_to_year jd = (* Same as above but only for the year *)
+  let a = jd + 32044 in
+  let b = (4 * a + 3) / 146097 in
+  let c = a - ((146097 * b) / 4) in
+  let d = (4 * c + 3) / 1461 in
+  let e = c - ((1461 * d) / 4) in
+  let m = (5 * e + 2) / 153 in
+  100 * b + d - 4800 + (m / 10)
 
 let jd_of_date (year, month, day) =
   let a = (14 - month) / 12 in
@@ -265,7 +274,7 @@ module Span = struct
     let s, ms = divide_ps ~carry:1000 ps ps_count_in_s ps_count_in_ms in
     if s = 60 then Format.fprintf ppf "%dmin" (if neg then -1 else 1) else
     let s = if neg then -s else s in
-    if ms <> 0 then Format.fprintf ppf "%d.%ds" s ms else
+    if ms <> 0 then Format.fprintf ppf "%d.%03ds" s ms else
     Format.fprintf ppf "%ds" s
 
   let pp_unit higher_str hi hi_str frac_limit lo ppf ~neg ps =
@@ -278,7 +287,7 @@ module Span = struct
       let h, l = divide_ps ~carry:1000 ps hi lo in
       if h >= 100 || l = 0 then pp_unit_integral ppf ~neg h else
       let h = if neg then -h else h in
-      Format.fprintf ppf "%d.%d%s" h l hi_str
+      Format.fprintf ppf "%d.%03d%s" h l hi_str
     end else begin
       let ms, _ = divide_ps ~carry:1 ps hi hi in
       pp_unit_integral ppf ~neg ms
@@ -441,21 +450,29 @@ let to_date_time ?(tz_offset_s = 0) t =
   let ss = Int64.(to_int (div mm_rem ps_count_in_s)) in
   date, ((hh, mm, ss), tz_offset_s)
 
-let of_date date = of_date_time (date, ((00, 00, 00), 0))
-let to_date t = fst (to_date_time ~tz_offset_s:0 t)
+let of_date ?tz_offset_s:(tz = 0) date = of_date_time (date, ((00, 00, 00), tz))
+let to_date ?tz_offset_s t = fst (to_date_time ?tz_offset_s t)
+let of_year ?tz_offset_s y = of_date ?tz_offset_s (y, 01, 01)
+let to_year ?(tz_offset_s = 0) t =
+  let d = match add_span t (Span.of_int_s tz_offset_s) with
+  | None -> fst t (* fallback to UTC *) | Some (local_d, _) -> local_d
+  in
+  jd_to_year (d + jd_posix_epoch)
+
+
+type weekday = [ `Sun | `Mon | `Tue | `Wed | `Thu | `Fri | `Sat ]
+
+let weekday_num ?(tz_offset_s = 0) t =
+  let (d, _) = Span.add t (Span.of_int_s tz_offset_s) in
+  (* N.B. in contrast to [to_date_time] we don't care if we fall outside
+    [min;max]. Even if it happens the result of the computation is still
+     correct *)
+  let i = (d + 4 (* Epoch, d = 0, was a thu, we want 4 for that day *)) mod 7 in
+  if i < 0 then 7 + i else i
 
 let weekday =
-  let wday =
-    (* Epoch was a thursday *)
-    [| `Thu; `Fri; `Sat; `Sun; `Mon; `Tue; `Wed |]
-  in
-  fun ?(tz_offset_s = 0) t ->
-    let (d, _) = Span.add t (Span.of_int_s tz_offset_s) in
-    (* N.B. in contrast to [to_date_time] we don't care if we fall outside
-       [min;max]. Even if it happens the result of the computation is still
-       correct *)
-    let i = d mod 7 in
-    wday.(if i < 0 then 7 + i else i)
+  let wday = [| `Sun; `Mon; `Tue; `Wed; `Thu; `Fri; `Sat; |] in
+  fun ?tz_offset_s t -> wday.(weekday_num ?tz_offset_s t)
 
 (* RFC 3339 timestamp conversions *)
 
@@ -476,10 +493,18 @@ let pp_rfc3339_error ppf = function
     in
     Format.fprintf ppf "@[expected@ a@ character@ in:%a@]" pp_chars cs
 
+let pp_range ppf (s, e) =
+  if s = e  then Format.pp_print_int ppf s else Format.fprintf ppf "%d-%d" s e
+
+let _rfc3339_error_to_string (r, err) =
+  Format.asprintf "@[<h>%a: %a@]" pp_range r pp_rfc3339_error err
+
+let rfc3339_string_error = function
+| Ok _ as v -> v | Error (`RFC3339 e) -> Error (_rfc3339_error_to_string e)
+
 let rfc3339_error_to_msg = function
-| Ok _ as v -> v
-| Error (`RFC3339 ((s, e), err)) ->
-    Error (`Msg (Format.asprintf "%d-%d: %a" s e pp_rfc3339_error err))
+| Ok _ as v -> v | Error (`RFC3339 e) ->
+    Error (`Msg (_rfc3339_error_to_string e))
 
 exception RFC3339 of (int * int) * rfc3339_error                  (* Internal *)
 
@@ -541,10 +566,20 @@ let parse_frac_ps pos max s =
 let parse_tz_s ~strict pos max s =
   let parse_tz_mag sign pos =
     let hh_pos = pos in
-    let mm_pos = hh_pos + 3 in
     let hh = parse_digits ~count:2 hh_pos max s in
-    parse_char ':' (mm_pos - 1) max s;
-    let mm = parse_digits ~count:2 mm_pos max s in
+    let mm, mm_pos = match strict with
+    | true ->
+        let mm_pos = hh_pos + 3 in
+        parse_char ':' (mm_pos - 1) max s;
+        parse_digits ~count:2 mm_pos max s, mm_pos
+    | false ->
+        let next = hh_pos + 2 in
+        if next > max || not (s.[next] = ':' || is_digit s.[next])
+        then (0, hh_pos (* end pos of parse - 1, one is added at the end *))
+        else
+        let mm_pos = if s.[next] = ':' then hh_pos + 3 else hh_pos + 2 in
+        parse_digits ~count:2 mm_pos max s, mm_pos
+    in
     if hh > 23 then error (hh_pos, hh_pos + 1) `Invalid_stamp else
     if mm > 59 then error (mm_pos, mm_pos + 1) `Invalid_stamp else
     let secs = hh * 3600 + mm * 60 in
@@ -670,19 +705,3 @@ let pp_human ?frac_s:(frac = 0) ?tz_offset_s () ppf (_, ps as t) =
 
 let pp = pp_human ~tz_offset_s:0 ()
 let dump = Span.dump
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2015 The ptime programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

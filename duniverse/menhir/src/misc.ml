@@ -57,6 +57,17 @@ let separated_iter_to_string printer separator iter =
 let separated_list_to_string printer separator xs =
   separated_iter_to_string printer separator (fun f -> List.iter f xs)
 
+let preceded_iter_to_string printer del iter =
+  with_buffer 32 (fun b ->
+    iter (fun x ->
+      Buffer.add_string b del;
+      Buffer.add_string b (printer x)
+    )
+  )
+
+let preceded_list_to_string printer del xs =
+  preceded_iter_to_string printer del (fun f -> List.iter f xs)
+
 let inverse (a : 'a array) : 'a -> int =
   let table = Hashtbl.create (Array.length a) in
   Array.iteri (fun i data ->
@@ -91,21 +102,22 @@ let materialize (table : ('a, 'a option) Hashtbl.t) (x : 'a) : 'a list =
 (* [iteri] implements a [for] loop over integers, from 0 to
    [n-1]. *)
 
-let iterij i j f =
+let[@inline] iterij i j f =
   for x = i to j - 1 do
     f x
   done
 
-let iteri n f =
+let[@inline] iteri n f =
   iterij 0 n f
 
-let rec foldij i j f accu =
-  if i < j then
-    foldij (i + 1) j f (f i accu)
-  else
-    accu
+let[@inline] foldij i j f accu =
+  let accu = ref accu in
+  for k = i to j-1 do
+    accu := f k !accu
+  done;
+  !accu
 
-let foldi n f accu =
+let[@inline] foldi n f accu =
   foldij 0 n f accu
 
 let rec foldij_lazy i j f accu =
@@ -125,26 +137,19 @@ let mapij start n f =
 
 (* [mapi n f] produces the list [ f 0; ... f (n-1) ]. *)
 
-let mapi n f =
+let[@inline] mapi n f =
   mapij 0 n f
 
 (* [qfold f accu q] repeatedly takes an element [x] off the queue [q]
    and applies [f] to the accumulator and to [x], until [q] becomes
-   empty. Of course, [f] can add elements to [q] as a side-effect.
-
-   We allocate an option to ensure that [qfold] is tail-recursive. *)
+   empty. Of course, [f] can add elements to [q] as a side-effect. *)
 
 let rec qfold f accu q =
-  match
-    try
-      Some (Queue.take q)
-    with Queue.Empty ->
-      None
-  with
-  | Some x ->
-      qfold f (f accu x) q
-  | None ->
+  match Queue.take q with
+  | exception Queue.Empty ->
       accu
+  | x ->
+      qfold f (f accu x) q
 
 (* [qiter f q] repeatedly takes an element [x] off the queue [q] and
    applies [f] to [x], until [q] becomes empty. Of course, [f] can add
@@ -397,3 +402,30 @@ let pad n s =
 
 let padded_index n i =
   pad (digits n) (Printf.sprintf "%d" i)
+
+(* [longest_run c s] computes the length of the longest run of consecutive
+   characters equal to [c] in the string [s]. *)
+
+(* In the auxiliary function, [i] is the index of the next character that
+   must be read, [m] is a max-accumulator, and [k] is a sum-accumulator. *)
+
+let rec longest_run c s n i m k =
+  if i = n then
+    max m k
+  else if s.[i] = c then
+    longest_run c s n (i+1) m (k+1)
+  else
+    longest_run c s n (i+1) (max m k) 0
+
+let longest_run c s =
+  longest_run c s (String.length s) 0 0 0
+
+let unquote s =
+  if String.length s = 0 || s.[0] <> '"' then
+    invalid_arg "unescape"
+  else
+    (* Skip the opening quote and decode the remainder using the lexer
+       [DecodeString.unescape], which stops at the closing quote. *)
+    let s = String.sub s 1 (String.length s - 1) in
+    let lexbuf = Lexing.from_string s in
+    with_buffer 8 (fun b -> DecodeString.unescape b lexbuf)

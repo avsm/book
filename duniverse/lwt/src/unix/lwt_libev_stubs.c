@@ -6,7 +6,6 @@
 /* Stubs for libev */
 
 #include "lwt_config.h"
-#include "lwt_unix.h"
 
 #if defined(HAVE_LIBEV)
 
@@ -20,6 +19,8 @@
 #include <caml/mlvalues.h>
 #include <caml/signals.h>
 #include <ev.h>
+
+#include "lwt_unix.h"
 
 /* +-----------------------------------------------------------------+
    | Backend types                                                   |
@@ -89,6 +90,25 @@ CAMLprim value lwt_libev_init(value backend) {
   value result = caml_alloc_custom(&loop_ops, sizeof(struct ev_loop *), 0, 1);
   Ev_loop_val(result) = loop;
   return result;
+}
+
+CAMLprim value lwt_libev_backend(value loop) {
+  switch (ev_backend(Ev_loop_val(loop))) {
+  case EVBACKEND_SELECT:
+    return Val_int(val_EVBACKEND_SELECT);
+  case EVBACKEND_POLL:
+    return Val_int(val_EVBACKEND_POLL);
+  case EVBACKEND_EPOLL:
+    return Val_int(val_EVBACKEND_EPOLL);
+  case EVBACKEND_KQUEUE:
+    return Val_int(val_EVBACKEND_KQUEUE);
+  case EVBACKEND_DEVPOLL:
+    return Val_int(val_EVBACKEND_DEVPOLL);
+  case EVBACKEND_PORT:
+    return Val_int(val_EVBACKEND_PORT);
+  default:
+    assert(0);
+  }
 }
 
 CAMLprim value lwt_libev_stop(value loop) {
@@ -221,6 +241,9 @@ CAMLprim value lwt_libev_timer_stop(value loop, value val_watcher) {
 
 #else
 
+#include "lwt_unix.h"
+
+LWT_NOT_AVAILABLE1(libev_backend)
 LWT_NOT_AVAILABLE1(libev_init)
 LWT_NOT_AVAILABLE1(libev_stop)
 LWT_NOT_AVAILABLE2(libev_loop)

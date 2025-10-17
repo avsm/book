@@ -16,6 +16,23 @@ include module type of struct
   include Async_kernel_scheduler
 end
 
+module Which_watcher : sig
+  module Custom : sig
+    module type S =
+      File_descr_watcher_intf.S
+      with type 'a additional_create_args =
+             handle_fd_read_bad:(File_descr.t -> unit)
+             -> handle_fd_write_bad:(File_descr.t -> unit)
+             -> 'a
+
+    type t = (module S)
+  end
+
+  type t =
+    | Config of Config.File_descr_watcher.t
+    | Custom of Custom.t
+end
+
 (** [t ()] returns the Async scheduler.  If the scheduler hasn't been created yet, this
     will create it and acquire the Async lock. *)
 val t : unit -> t
@@ -45,12 +62,20 @@ val go : ?raise_unhandled_exn:bool (** default is [false] *) -> unit -> never_re
     options of the scheduler. *)
 val go_main
   :  ?raise_unhandled_exn:bool (** default is [false] *)
-  -> ?file_descr_watcher:Config.File_descr_watcher.t (** default is [Config] *)
+  -> ?file_descr_watcher:Which_watcher.t
+  (** default is [Config Config.file_descr_watcher] *)
   -> ?max_num_open_file_descrs:int (** default is [Config] *)
   -> ?max_num_threads:int (** default is [Config] *)
   -> main:(unit -> unit)
   -> unit
   -> never_returns
+
+(** [raise_if_any_jobs_were_scheduled ()] will raise an exception if any async work has
+    ever been scheduled. This is intended to be called before a program starts, for
+    instance before {!Command.run}, to ensure that no libraries have started async work.
+    This can happen by mistake (by calling a deferred function at toplevel), which can
+    make the behavior of the program unexpectedly non-deterministic. *)
+val raise_if_any_jobs_were_scheduled : unit -> unit
 
 (** [report_long_cycle_times ?cutoff ()] sets up something that will print a warning to
     stderr whenever there is an Async cycle that is too long, as specified by [cutoff],
@@ -90,7 +115,11 @@ val is_initialized : unit -> bool
     to fork, and would like the child to have a clean Async, i.e., not inherit any of the
     Async work that was done in the parent, it can call [reset_in_forked_process] at the
     start of execution in the child process.  After that, the child can do Async stuff and
-    then start the Async scheduler. *)
+    then start the Async scheduler.
+
+    [reset_in_forked_process ()] is a no-op if [is_initialized () = false] and has
+    undefined behavior if [is_running () = true].
+*)
 val reset_in_forked_process : unit -> unit
 
 (** [reset_in_forked_process_without_taking_lock] is similar to [reset_in_forked_process],
@@ -150,3 +179,22 @@ val fds_may_produce_events : unit -> bool
 
 *)
 val thread_pool_has_unfinished_work : unit -> bool
+
+(** If any busy pollers exist, they will be called in a busy loop whenever the scheduler
+    is waiting on I/O before an Async cycle, with the guarantee that they will be called
+    at least once before every Async cycle.
+
+    While the busy loop is running the program will only be responsive to the events
+    detected by the pollers and to timing wheel alarms, but won't be responsive to
+    anything else (signals, fd events, thread interruptions).
+
+    We do not allow the busy loop to run longer than [max_inter_cycle_timeout].
+    After adding the new busy poller, this function sets the [max_inter_cycle_timeout] to
+    [Time_ns.Span.min max_inter_cycle_timeout max_busy_wait_duration].
+
+    The pollers will run with the async lock held, so it's OK to access Async
+    data structures, in particular to schedule jobs and alarms.
+
+    Pollers run in the main monitor.
+*)
+val add_busy_poller : t -> max_busy_wait_duration:Time_ns.Span.t -> (unit -> int) -> unit

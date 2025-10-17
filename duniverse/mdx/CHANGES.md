@@ -1,3 +1,101 @@
+### 2.5.0
+
+#### Added
+
+- Support OCaml 5.3 (#457, @anmonteiro, @samoht, @voodoos)
+- Support multiple version labels in block headers. The block is active if all
+  the version formulaes are satisfied (#458, @samoht)
+
+#### Fixed
+
+- Avoid infinite loop in lexer on unclosed code block (#444, @edwintorok)
+- Fix support for skipped blocks in mli and mld files (#462, @samoht)
+
+### 2.4.1
+
+#### Changed
+
+- Revert #446: "Allow execution of included OCaml code blocks" (#451, @gpetiot).
+  Included OCaml code blocks preserve their pre-2.4.0 behavior.
+
+### 2.4.0
+
+#### Added
+
+- Handle the error-blocks syntax (#439, @jonludlam, @gpetiot)
+- Allow execution of included OCaml code blocks. Add `skip` to `include` blocks
+  to revert to the old behavior (#446, @panglesd, @gpetiot)
+  *Warning: this is a breaking change that is reverted in the next release.*
+- Make MDX compatible with OCaml 5.2 (#448, @gpetiot)
+
+#### Fixed
+
+- Reduce false-positives while detecting warnings (#440, @Julow)
+
+### 2.3.1
+
+#### Added
+
+- Add `os_type` label to enable/disable based on `Sys.os_type` (#433,
+  @polytypic)
+
+- Make MDX compatible with OCaml 5.1 (#435, @polytypic and @kit-ty-kate)
+
+#### Changed
+
+- Vendored the odoc-parser library, removing the need to have it
+  as a dependency. (#430, @jonludlam)
+
+### 2.3.0
+
+#### Added
+
+- Added support for `mld` files (#423, @jonludlam)
+
+#### Changed
+
+- Switch to using the parser that toplevel uses (found in a mutable
+  `ref`, instead of always the official OCaml parser).  This allows
+  Camlp5's parser to be used with MDX. (#417, @chetmurthy)
+
+### 2.2.1
+
+#### Fixed
+
+- Undid the change to the pipe code to restore compatibility with Windows
+  (#403, @MisterDA)
+
+### 2.2.0
+
+#### Added
+
+- Report all parsing errors in Markdown files (#389, @NathanReb)
+
+#### Changed
+
+- Preserve indentation in multiline OCaml blocks in .mli files (#395, @panglesd)
+- Rename the `Normal` syntax to `Markdown` to better explain what the syntax is
+  and moved it to `Mdx.Syntax` (#412, @Leonidas-from-XIV)
+
+#### Fixed
+
+- Fixed compatibility with Cmdliner 1.1.0 (#371, @Leonidas-from-XIV)
+- Report errors and exit codes of toplevel directives (#382, @talex5,
+  @Leonidas-from-XIV)
+- Fix block locations in error reporting (#389, @NathanReb)
+- Include the content of the line that features the `part-end` MDX directive in
+  the output, before that line would've been dropped (#374, #387,
+  @Leonidas-from-XIV)
+- Handle EINTR signal on waitpid call by restarting the syscall. (#409, @tmcgilchrist)
+- Fix parsing of multiline toplevel phrases in .mli files (#394, #397,
+  @Leonidas-from-XIV)
+
+#### Removed
+
+- Removed warning about missing semicolons added in MDX 1.11.0 and the
+  automatic insertion of semicolons in the corrected files introduced in MDX
+  2.0.0. (#398, @Leonidas-from-XIV)
+
 ### 2.1.0
 
 #### Added

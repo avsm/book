@@ -3,7 +3,9 @@ include Int_intf
 include Int0
 
 module T = struct
-  type t = int [@@deriving_inline hash, sexp, sexp_grammar]
+  type t = int [@@deriving_inline globalize, hash, sexp, sexp_grammar]
+
+  let (globalize : (t[@ocaml.local]) -> t) = (globalize_int : (t[@ocaml.local]) -> t)
 
   let (hash_fold_t : Ppx_hash_lib.Std.Hash.state -> t -> Ppx_hash_lib.Std.Hash.state) =
     hash_fold_int
@@ -33,13 +35,13 @@ end
 let num_bits = Int_conversions.num_bits_int
 let float_lower_bound = Float0.lower_bound_for_int num_bits
 let float_upper_bound = Float0.upper_bound_for_int num_bits
-let to_float = Caml.float_of_int
-let of_float_unchecked = Caml.int_of_float
+let to_float = Stdlib.float_of_int
+let of_float_unchecked = Stdlib.int_of_float
 
 let of_float f =
   if Float_replace_polymorphic_compare.( >= ) f float_lower_bound
   && Float_replace_polymorphic_compare.( <= ) f float_upper_bound
-  then Caml.int_of_float f
+  then Stdlib.int_of_float f
   else
     Printf.invalid_argf
       "Int.of_float: argument (%f) is out of range or NaN"
@@ -84,7 +86,7 @@ include Conv.Make_hex (struct
     let neg = ( ~- )
     let ( < ) = ( < )
     let to_string i = Printf.sprintf "%x" i
-    let of_string s = Caml.Scanf.sscanf s "%x" Fn.id
+    let of_string s = Stdlib.Scanf.sscanf s "%x" Fn.id
     let module_name = "Base.Int.Hex"
   end)
 
@@ -119,10 +121,10 @@ let clamp t ~min ~max =
   else Ok (clamp_unchecked t ~min ~max)
 ;;
 
-external to_int32_trunc : t -> int32 = "%int32_of_int"
-external of_int32_trunc : int32 -> t = "%int32_to_int"
-external of_int64_trunc : int64 -> t = "%int64_to_int"
-external of_nativeint_trunc : nativeint -> t = "%nativeint_to_int"
+external to_int32_trunc : (t[@local_opt]) -> (int32[@local_opt]) = "%int32_of_int"
+external of_int32_trunc : (int32[@local_opt]) -> t = "%int32_to_int"
+external of_int64_trunc : (int64[@local_opt]) -> t = "%int64_to_int"
+external of_nativeint_trunc : (nativeint[@local_opt]) -> t = "%nativeint_to_int"
 
 let pred i = i - 1
 let succ i = i + 1
@@ -130,8 +132,8 @@ let to_int i = i
 let to_int_exn = to_int
 let of_int i = i
 let of_int_exn = of_int
-let max_value = Caml.max_int
-let min_value = Caml.min_int
+let max_value = Stdlib.max_int
+let min_value = Stdlib.min_int
 let max_value_30_bits = 0x3FFF_FFFF
 let of_int32 = Conv.int32_to_int
 let of_int32_exn = Conv.int32_to_int_exn
@@ -148,8 +150,8 @@ let abs x = abs x
 
 (* note that rem is not same as % *)
 let rem a b = a mod b
-let incr = Caml.incr
-let decr = Caml.decr
+let incr = Stdlib.incr
+let decr = Stdlib.decr
 let shift_right a b = a asr b
 let shift_right_logical a b = a lsr b
 let shift_left a b = a lsl b
@@ -239,11 +241,11 @@ let sign = Sign.of_int
 let popcount = Popcount.int_popcount
 
 module Pre_O = struct
-  external ( + ) : int -> int -> int = "%addint"
-  external ( - ) : int -> int -> int = "%subint"
-  external ( * ) : int -> int -> int = "%mulint"
-  external ( / ) : int -> int -> int = "%divint"
-  external ( ~- ) : int -> int = "%negint"
+  external ( + ) : (t[@local_opt]) -> (t[@local_opt]) -> t = "%addint"
+  external ( - ) : (t[@local_opt]) -> (t[@local_opt]) -> t = "%subint"
+  external ( * ) : (t[@local_opt]) -> (t[@local_opt]) -> t = "%mulint"
+  external ( / ) : (t[@local_opt]) -> (t[@local_opt]) -> t = "%divint"
+  external ( ~- ) : (t[@local_opt]) -> t = "%negint"
 
   let ( ** ) = ( ** )
 
@@ -251,7 +253,7 @@ module Pre_O = struct
 
   let abs = abs
 
-  external neg : t -> t = "%negint"
+  external neg : (t[@local_opt]) -> t = "%negint"
 
   let zero = zero
   let of_int_exn = of_int_exn
@@ -274,7 +276,7 @@ module O = struct
 
   include F
 
-  external bswap16 : int -> int = "%bswap16"
+  external bswap16 : (int[@local_opt]) -> int = "%bswap16"
 
   (* These inlined versions of (%), (/%), and (//) perform better than their functorized
      counterparts in [F] (see benchmarks below).
@@ -311,15 +313,15 @@ module O = struct
 
   let ( // ) x y = to_float x /. to_float y
 
-  external ( land ) : int -> int -> int = "%andint"
-  external ( lor ) : int -> int -> int = "%orint"
-  external ( lxor ) : int -> int -> int = "%xorint"
+  external ( land ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%andint"
+  external ( lor ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%orint"
+  external ( lxor ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%xorint"
 
   let lnot = lnot
 
-  external ( lsl ) : int -> int -> int = "%lslint"
-  external ( lsr ) : int -> int -> int = "%lsrint"
-  external ( asr ) : int -> int -> int = "%asrint"
+  external ( lsl ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lslint"
+  external ( lsr ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lsrint"
+  external ( asr ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%asrint"
 end
 
 include O

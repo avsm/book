@@ -116,7 +116,7 @@ let unparenthesize (o : Stretch.t option) : Stretch.t option =
 %token <Syntax.raw_action>
   ACTION           "{}"
 
-%token <Syntax.attribute>
+%token <Attribute.attribute>
   ATTRIBUTE        "[@foo]"
   GRAMMARATTRIBUTE "%[@foo]"
 
@@ -362,13 +362,18 @@ optional_bar:
     { () }
 
 /* ------------------------------------------------------------------------- */
-/* A production group consists of a list of productions, followed by a
-   semantic action and an optional precedence specification. */
+/* A production group is a set of productions that share a semantic action.
+
+   Thus a production group is a list of productions,
+   followed by a semantic action,
+   followed by an optional precedence specification,
+   followed by a possibly empty list of attributes. */
 
 production_group:
   productions = separated_nonempty_list(BAR, production)
-  action = ACTION
+  action = ACTION /* action is lexically delimited by braces */
   oprec2 = ioption(precedence)
+  attrs = ATTRIBUTE*
     {
       (* If multiple productions share a single semantic action, check
          that all of them bind the same names. *)
@@ -376,17 +381,18 @@ production_group:
       (* Then, *)
       List.map (fun (producers, oprec1, level, pos) ->
         (* Replace [$i] with [_i]. *)
-        let pr_producers = ParserAux.normalize_producers producers in
-        (* Distribute the semantic action. Also, check that every [$i]
-           is within bounds. *)
+        let pb_producers = ParserAux.normalize_producers producers in
+        (* Distribute the semantic action and attributes onto every production.
+           Also, check that every [$i] is within bounds. *)
         let names = ParserAux.producer_names producers in
-        let pr_action = action Settings.dollars names in
+        let pb_action = action Settings.dollars names in
         {
-          pr_producers;
-          pr_action;
-          pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
-          pr_branch_production_level  = level;
-          pr_branch_position          = pos
+          pb_producers;
+          pb_action;
+          pb_prec_annotation  = ParserAux.override pos oprec1 oprec2;
+          pb_production_level = level;
+          pb_position         = pos;
+          pb_attributes       = attrs;
         })
       productions
     }
@@ -508,7 +514,7 @@ postlude:
 
 /* A new rule *cannot* be terminated by a semicolon. (This is contrast with a
    traditional rule, which can be followed with any number of semicolons.) We
-   are forced to forbid the use of semicolons are as a rule terminator because
+   are forced to forbid the use of semicolons as a rule terminator because
    they are used already as a sequencing construct. Permitting both uses would
    give rise to a shift/reduce conflict that we would not be able to solve. */
 
@@ -641,11 +647,14 @@ symbol_expression:
 
 action_expression:
 | action = action
-    { EAction (action, None) }
+  attrs = ATTRIBUTE*
+    { EAction (action, None, attrs) }
 | prec = precedence action = action
-    { EAction (action, Some prec) }
+  attrs = ATTRIBUTE*
+    { EAction (action, Some prec, attrs) }
 | action = action prec = precedence
-    { EAction (action, Some prec) }
+  attrs = ATTRIBUTE*
+    { EAction (action, Some prec, attrs) }
 
 /* A semantic action is either a traditional semantic action (an OCaml
    expression between curly braces) or a point-free semantic action (an

@@ -57,7 +57,7 @@ let time_replace =
         group
           (alt
              [
-               (* Maybe ANSII escape, depending on [--color] *)
+               (* Maybe ANSI escape, depending on [--color] *)
                opt cntrl ^^ str "Test Successful" ^^ opt cntrl ^^ str " in ";
                rep1 digit ^^ str " failure! in ";
                rep1 digit ^^ str " failures! in ";
@@ -80,8 +80,11 @@ let stacktrace_replace =
     ^^ rep1 print
     ^^ str "\""
     ^^ opt (str " (inlined)")
-    ^^ str ", line "
-    ^^ rep1 digit
+    ^^ alt
+         [
+           seq [ str ", line "; rep1 digit ];
+           seq [ str ", lines "; rep1 digit; char '-'; rep1 digit ];
+         ]
     ^^ str ", characters "
     ^^ rep1 digit
     ^^ str "-"
@@ -90,13 +93,20 @@ let stacktrace_replace =
   in
   let raised_at = stack_trace_line "Raised at "
   and called_from = stack_trace_line "Called from " in
+  let called_from_unknown = str "Called from unknown location" |> compile in
   fun s ->
     match execp called_from s with
     | true ->
         (* The number of "Called from ..." lines is compiler-dependent, so we
            remove them all. *)
-        None
-    | false -> Some (replace_string ~all:true raised_at s ~by:"<stacktrace>")
+        `None
+    | false -> (
+        match execp called_from_unknown s with
+        | true ->
+            `Unknown
+              (replace_string ~all:true called_from_unknown s ~by:"<stacktrace>")
+        | false ->
+            `Some (replace_string ~all:true raised_at s ~by:"<stacktrace>"))
 
 let executable_name_normalization =
   let open Re in
@@ -109,9 +119,9 @@ let executable_name_normalization =
 let () =
   let in_channel = open_in Sys.argv.(1) in
   let ( >>| ) x f = match x with None -> None | Some x -> Some (f x) in
-  let ( >>= ) x f = match x with None -> None | Some x -> f x in
+  let ( >>= ) x f = match x with None -> `None | Some x -> f x in
   try
-    let rec loop () =
+    let rec loop unknown_last =
       let sanitized_line =
         Some (input_line in_channel)
         >>| uuid_replace
@@ -120,10 +130,17 @@ let () =
         >>| executable_name_normalization
         >>= stacktrace_replace
       in
-      (match sanitized_line with
-      | Some s -> Printf.printf "%s\n" s
-      | None -> ());
-      loop ()
+      let unknown_last =
+        match sanitized_line with
+        | `Some s ->
+            Printf.printf "%s\n" s;
+            false
+        | `None -> false
+        | `Unknown s ->
+            if not unknown_last then Printf.printf "%s\n" s;
+            true
+      in
+      loop unknown_last
     in
-    loop ()
+    loop false
   with End_of_file -> close_in in_channel

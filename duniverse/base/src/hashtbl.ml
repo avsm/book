@@ -11,9 +11,6 @@ let raise_s = Error.raise_s
 type ('k, 'v) t =
   { mutable table : ('k, 'v) Avltree.t array
   ; mutable length : int
-  (* [recently_added] is the reference passed to [Avltree.add]. We put it in the hash
-     table to avoid allocating it at every [set]. *)
-  ; recently_added : bool ref
   ; growth_allowed : bool
   ; hashable : 'k Hashable.t
   ; mutable mutation_allowed : bool (* Set during all iteration operations *)
@@ -61,7 +58,6 @@ let create ?(growth_allowed = true) ?(size = 0) ~hashable () =
   { table = Array.create ~len:size Avltree.empty
   ; length = 0
   ; growth_allowed
-  ; recently_added = ref false
   ; hashable
   ; mutation_allowed = true
   }
@@ -85,8 +81,7 @@ let slot t key =
 let add_worker t ~replace ~key ~data =
   let i = slot t key in
   let root = t.table.(i) in
-  let added = t.recently_added in
-  added := false;
+  let added =  (ref false) in
   let new_root =
     (* The avl tree might replace the value [replace=true] or do nothing [replace=false]
        to the entry, in that case the table did not get bigger, so we should not
@@ -98,7 +93,8 @@ let add_worker t ~replace ~key ~data =
   if !added then t.length <- t.length + 1;
   (* This little optimization saves a caml_modify when the tree
      hasn't been rebalanced. *)
-  if not (phys_equal new_root root) then t.table.(i) <- new_root
+  if not (phys_equal new_root root) then t.table.(i) <- new_root;
+  !added
 ;;
 
 let maybe_resize_table t =
@@ -113,7 +109,7 @@ let maybe_resize_table t =
       let old_table = t.table in
       t.table <- new_table;
       t.length <- 0;
-      let f ~key ~data = add_worker ~replace:true t ~key ~data in
+      let f ~key ~data = ignore (add_worker ~replace:true t ~key ~data : bool) in
       for i = 0 to Array.length old_table - 1 do
         Avltree.iter old_table.(i) ~f
       done))
@@ -121,14 +117,14 @@ let maybe_resize_table t =
 
 let set t ~key ~data =
   ensure_mutation_allowed t;
-  add_worker ~replace:true t ~key ~data;
+  ignore (add_worker ~replace:true t ~key ~data : bool);
   maybe_resize_table t
 ;;
 
 let add t ~key ~data =
   ensure_mutation_allowed t;
-  add_worker ~replace:false t ~key ~data;
-  if !(t.recently_added)
+  let added = add_worker ~replace:false t ~key ~data in
+  if added
   then (
     maybe_resize_table t;
     `Ok)
@@ -236,8 +232,7 @@ let remove t key =
   ensure_mutation_allowed t;
   let i = slot t key in
   let root = t.table.(i) in
-  let added_or_removed = t.recently_added in
-  added_or_removed := false;
+  let added_or_removed =  (ref false) in
   let new_root =
     Avltree.remove root ~removed:added_or_removed ~compare:(compare_key t) key
   in
@@ -293,13 +288,13 @@ let iteri t ~f =
       raise exn)
 ;;
 
-let iter t ~f = iteri t ~f:(fun ~key:_ ~data -> f data)
-let iter_keys t ~f = iteri t ~f:(fun ~key ~data:_ -> f key)
+let iter t ~f = iteri t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let iter_keys t ~f = iteri t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let rec choose_nonempty table i =
-  let avltree = table.(i) in
+  let avltree = Array.unsafe_get table i in
   if Avltree.is_empty avltree
-  then choose_nonempty table (i + 1)
+  then choose_nonempty table ((i + 1) land (Array.length table - 1))
   else Avltree.choose_exn avltree
 ;;
 
@@ -309,6 +304,21 @@ let choose_exn t =
 ;;
 
 let choose t = if is_empty t then None else Some (choose_nonempty t.table 0)
+
+let choose_randomly_nonempty ~random_state t =
+  let start_idx = Random.State.int random_state (Array.length t.table) in
+  choose_nonempty t.table start_idx
+;;
+
+let choose_randomly ?(random_state = Random.State.default) t =
+  if is_empty t then None else Some (choose_randomly_nonempty ~random_state t)
+;;
+
+let choose_randomly_exn ?(random_state = Random.State.default) t =
+  if t.length = 0
+  then raise_s (Sexp.message "[Hashtbl.choose_randomly_exn] of empty hashtbl" []);
+  choose_randomly_nonempty ~random_state t
+;;
 
 let invariant invariant_key invariant_data t =
   for i = 0 to Array.length t.table - 1 do
@@ -337,19 +347,20 @@ let find_exn =
 let existsi t ~f =
   with_return (fun r ->
     iteri t ~f:(fun ~key ~data -> if f ~key ~data then r.return true);
-    false)
+    false) [@nontail]
 ;;
 
-let exists t ~f = existsi t ~f:(fun ~key:_ ~data -> f data)
+let exists t ~f = existsi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 let for_alli t ~f = not (existsi t ~f:(fun ~key ~data -> not (f ~key ~data)))
 let for_all t ~f = not (existsi t ~f:(fun ~key:_ ~data -> not (f data)))
 
 let counti t ~f =
-  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc)
+  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc) [@nontail
+  ]
 ;;
 
 let count t ~f =
-  fold t ~init:0 ~f:(fun ~key:_ ~data acc -> if f data then acc + 1 else acc)
+  fold t ~init:0 ~f:(fun ~key:_ ~data acc -> if f data then acc + 1 else acc) [@nontail]
 ;;
 
 let mapi t ~f =
@@ -360,7 +371,7 @@ let mapi t ~f =
   new_t
 ;;
 
-let map t ~f = mapi t ~f:(fun ~key:_ ~data -> f data)
+let map t ~f = mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 let copy t = map t ~f:Fn.id
 
 let filter_mapi t ~f =
@@ -374,14 +385,14 @@ let filter_mapi t ~f =
   new_t
 ;;
 
-let filter_map t ~f = filter_mapi t ~f:(fun ~key:_ ~data -> f data)
+let filter_map t ~f = filter_mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let filteri t ~f =
-  filter_mapi t ~f:(fun ~key ~data -> if f ~key ~data then Some data else None)
+  filter_mapi t ~f:(fun ~key ~data -> if f ~key ~data then Some data else None) [@nontail]
 ;;
 
-let filter t ~f = filteri t ~f:(fun ~key:_ ~data -> f data)
-let filter_keys t ~f = filteri t ~f:(fun ~key ~data:_ -> f key)
+let filter t ~f = filteri t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let filter_keys t ~f = filteri t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let partition_mapi t ~f =
   let t0 =
@@ -397,38 +408,36 @@ let partition_mapi t ~f =
   t0, t1
 ;;
 
-let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data)
+let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let partitioni_tf t ~f =
-  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data)
+  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data) 
+  [@nontail]
 ;;
 
-let partition_tf t ~f = partitioni_tf t ~f:(fun ~key:_ ~data -> f data)
+let partition_tf t ~f = partitioni_tf t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
-let find_or_add t id ~default =
-  find_and_call2
+
+let find_or_add t id ~default:(default [@local]) =
+  find_and_call
     t
     id
-    ~a:t
-    ~b:default
-    ~if_found:(fun data _ _ -> data)
-    ~if_not_found:(fun key t default ->
+    ~if_found:(fun data -> data)
+    ~if_not_found:(fun key ->
       let default = default () in
       set t ~key ~data:default;
-      default)
+      default) [@nontail]
 ;;
 
 let findi_or_add t id ~default =
-  find_and_call2
+  find_and_call
     t
     id
-    ~a:t
-    ~b:default
-    ~if_found:(fun data _ _ -> data)
-    ~if_not_found:(fun key t default ->
+    ~if_found:(fun data -> data)
+    ~if_not_found:(fun key ->
       let default = default key in
       set t ~key ~data:default;
-      default)
+      default) [@nontail]
 ;;
 
 (* Some hashtbl implementations may be able to perform this more efficiently than two
@@ -596,7 +605,7 @@ let add_to_groups groups ~get_key ~get_data ~combine ~rows =
       | None -> data
       | Some old -> combine old data
     in
-    set groups ~key ~data)
+    set groups ~key ~data) [@nontail]
 ;;
 
 let group ?growth_allowed ?size ~hashable ~get_key ~get_data ~combine rows =
@@ -650,7 +659,7 @@ let merge =
           match find t_left key with
           | None -> maybe_set new_t ~key ~f (`Right right)
           | Some _ -> ()
-          (* already done above *))));
+          (* already done above *)) [@nontail]) [@nontail]);
     new_t
 ;;
 
@@ -663,7 +672,8 @@ let merge_into ~src ~dst ~f =
     | Set_to data ->
       (match dst_data with
        | None -> set dst ~key ~data
-       | Some dst_data -> if not (phys_equal dst_data data) then set dst ~key ~data))
+       | Some dst_data -> if not (phys_equal dst_data data) then set dst ~key ~data)) [@nontail
+  ]
 ;;
 
 let filteri_inplace t ~f =
@@ -673,8 +683,8 @@ let filteri_inplace t ~f =
   List.iter to_remove ~f:(fun key -> remove t key)
 ;;
 
-let filter_inplace t ~f = filteri_inplace t ~f:(fun ~key:_ ~data -> f data)
-let filter_keys_inplace t ~f = filteri_inplace t ~f:(fun ~key ~data:_ -> f key)
+let filter_inplace t ~f = filteri_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+let filter_keys_inplace t ~f = filteri_inplace t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
 let filter_mapi_inplace t ~f =
   let map_results = fold t ~init:[] ~f:(fun ~key ~data ac -> (key, f ~key ~data) :: ac) in
@@ -684,24 +694,27 @@ let filter_mapi_inplace t ~f =
     | Some data -> set t ~key ~data)
 ;;
 
-let filter_map_inplace t ~f = filter_mapi_inplace t ~f:(fun ~key:_ ~data -> f data)
+let filter_map_inplace t ~f =
+  filter_mapi_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
+;;
 
 let mapi_inplace t ~f =
   ensure_mutation_allowed t;
-  without_mutating t (fun () -> Array.iter t.table ~f:(Avltree.mapi_inplace ~f))
+  without_mutating t (fun () ->
+    Array.iter t.table ~f:(Avltree.mapi_inplace ~f) [@nontail]) [@nontail]
 ;;
 
-let map_inplace t ~f = mapi_inplace t ~f:(fun ~key:_ ~data -> f data)
+let map_inplace t ~f = mapi_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let equal equal t t' =
   length t = length t'
-  && with_return (fun r ->
+  && (with_return (fun r ->
     without_mutating t' (fun () ->
       iteri t ~f:(fun ~key ~data ->
         match find t' key with
         | None -> r.return false
-        | Some data' -> if not (equal data data') then r.return false));
-    true)
+        | Some data' -> if not (equal data data') then r.return false) [@nontail]);
+    true) [@nontail])
 ;;
 
 let similar = equal
@@ -710,6 +723,8 @@ module Accessors = struct
   let invariant = invariant
   let choose = choose
   let choose_exn = choose_exn
+  let choose_randomly = choose_randomly
+  let choose_randomly_exn = choose_randomly_exn
   let clear = clear
   let copy = copy
   let remove = remove

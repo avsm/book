@@ -1,5 +1,32 @@
 
 (rule
+ (with-stdout-to dune-printenv.1
+  (run dune printenv --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-printenv.1))
+
+(rule
+ (with-stdout-to dune-promote.1
+  (run dune promote --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-promote.1))
+
+(rule
+ (with-stdout-to dune-test.1
+  (run dune test --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-test.1))
+
+(rule
  (with-stdout-to dune-build.1
   (run dune build --help=groff)))
 
@@ -135,6 +162,15 @@
  (files   dune-internal.1))
 
 (rule
+ (with-stdout-to dune-monitor.1
+  (run dune monitor --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-monitor.1))
+
+(rule
  (with-stdout-to dune-ocaml.1
   (run dune ocaml --help=groff)))
 
@@ -153,22 +189,31 @@
  (files   dune-ocaml-merlin.1))
 
 (rule
- (with-stdout-to dune-printenv.1
-  (run dune printenv --help=groff)))
+ (with-stdout-to dune-package.1
+  (run dune package --help=groff)))
 
 (install
  (section man)
  (package dune)
- (files   dune-printenv.1))
+ (files   dune-package.1))
 
 (rule
- (with-stdout-to dune-promote.1
-  (run dune promote --help=groff)))
+ (with-stdout-to dune-pkg.1
+  (run dune pkg --help=groff)))
 
 (install
  (section man)
  (package dune)
- (files   dune-promote.1))
+ (files   dune-pkg.1))
+
+(rule
+ (with-stdout-to dune-promotion.1
+  (run dune promotion --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-promotion.1))
 
 (rule
  (with-stdout-to dune-rpc.1
@@ -198,6 +243,15 @@
  (files   dune-runtest.1))
 
 (rule
+ (with-stdout-to dune-show.1
+  (run dune show --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-show.1))
+
+(rule
  (with-stdout-to dune-shutdown.1
   (run dune shutdown --help=groff)))
 
@@ -214,6 +268,15 @@
  (section man)
  (package dune)
  (files   dune-subst.1))
+
+(rule
+ (with-stdout-to dune-tools.1
+  (run dune tools --help=groff)))
+
+(install
+ (section man)
+ (package dune)
+ (files   dune-tools.1))
 
 (rule
  (with-stdout-to dune-top.1
@@ -250,13 +313,4 @@
  (section man)
  (package dune)
  (files   dune-utop.1))
-
-(rule
- (with-stdout-to dune-test.1
-  (run dune test --help=groff)))
-
-(install
- (section man)
- (package dune)
- (files   dune-test.1))
 

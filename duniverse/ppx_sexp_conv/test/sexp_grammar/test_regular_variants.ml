@@ -10,7 +10,7 @@ module _ = struct
 
   let _ = fun (_ : 'a t) -> ()
 
-  let (t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t) =
+  let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
     fun _'a_sexp_grammar ->
     { untyped =
         Variant
@@ -143,9 +143,11 @@ module _ = struct
 
   let%expect_test _ =
     print_s (With_sexp.sexp_of_t (Int 1));
-    List.iter [ []; [ 1 ]; [ 1; 2 ] ] ~f:(fun l ->
-      print_s (With_sexp.sexp_of_t (List l));
-      print_s (With_sexp.sexp_of_t (Sexp_dot_list l)));
+    List.iter
+      [ []; [ 1 ]; [ 1; 2 ] ]
+      ~f:(fun l ->
+        print_s (With_sexp.sexp_of_t (List l));
+        print_s (With_sexp.sexp_of_t (Sexp_dot_list l)));
     [%expect
       {|
       (Int 1)

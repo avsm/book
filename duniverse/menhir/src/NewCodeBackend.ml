@@ -48,13 +48,30 @@ module Run () = struct
   let program =
     program |> check
 
-  (* At -O 2, perform specialization. *)
+  (* If [--specialize-token] is set, perform aggressive specialization for
+     the [token] register. This transformation makes strong assumptions
+     about the code, so it must be applied first. Inlining, for instance,
+     can break these assumptions. This transformation causes a significant
+     increase in the code size and seems to also cause a small performance
+     loss, so it is currently experimental. *)
+
+  let program =
+    if Settings.specialize_token then
+      program
+      |> StackLangTransform.specialize_token
+      |> NeededRegisters.update
+      |> check
+    else
+      program
+
+  (* At -O 2, perform limited specialization for the [state] register. *)
 
   let program =
     if Settings.optimization_level >= 2 then
       program
-      |> StackLangTransform.specialize
-      |> StackLangTransform.remove_unreachable_blocks
+      |> StackLangTransform.specialize_state
+      |> StackLangTransform.remove_unreachable_blocks (* TODO unnecessary? *)
+      |> NeededRegisters.update
       |> check
     else
       program
@@ -91,10 +108,19 @@ module Run () = struct
   (* Simplify [ICaseToken] instructions where possible. This transformation
      improves performance by eliminating some redundant [ICaseToken]
      instructions. It also clarifies the code by allowing some instructions
-     and blocks to be recognized as dead. *)
+     and blocks to be recognized as dead. It is likely to have an effect only
+     at level -O 2 and below; indeed, at level -O 3, each token is inspected
+     at most once, so every [ICaseToken] instruction examines a token about
+     which nothing is known, so nothing can be simplified. *)
 
   let program =
     StackLangTokenAnalysis.transform program
+
+  (* Propagate [STOP] instructions backward where possible. *)
+
+  let program =
+    program
+    |> StackLangTransform.stop_earlier
 
   (* Inline functions whose in-degree is 1, insofar as possible. *)
 
@@ -112,7 +138,7 @@ module Run () = struct
      [state] register. *)
 
   let program =
-    NeededRegisters.update program
+    NeededRegisters.update program (* TODO unnecessary? *)
 
   (* If requested, dump the StackLang program to %.stacklang
      and a static instruction count to %.scount. *)

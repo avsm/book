@@ -74,6 +74,9 @@ let base =
 let dump =
   ref false
 
+let dump_menhirLib =
+  ref None
+
 let dump_resolved =
   ref false
 
@@ -215,18 +218,18 @@ let insert name =
   filenames := StringSet.add name !filenames
 
 let interpret =
-  ref false
-
-let interpret_show_cst =
-  ref false
-
-let interpret_error =
-  ref false
+  ref `No
 
 let optimization_level =
-  ref 2
+  ref 1
+    (* -O2 was the default since the new code back-end appeared, but
+        was perhaps a little too aggressive. From 2023/04/15 on,
+        -O1 is the default. *)
 
 let inspection =
+  ref false
+
+let unparsing =
   ref false
 
 let coq_no_version_check =
@@ -382,6 +385,12 @@ let stacklang_graph =
 let stacklang_test =
   ref false
 
+let specialize_token =
+  ref false
+
+let pack_classic =
+  ref false
+
 (* When new command line options are added, please update both the manual
    in [doc/manual.tex] and the man page in [doc/menhir.1]. *)
 
@@ -406,6 +415,7 @@ let options = Arg.align [
   "--coq-no-complete", Arg.Set coq_no_complete, " Do not generate a proof of completeness";
   "--depend", Arg.Unit enable_depend, " Invoke ocamldep and display dependencies";
   "--dump", Arg.Set dump, " Write an .automaton file";
+  "--dump-menhirLib", Arg.String (fun path -> dump_menhirLib := Some path), "<path> Dump menhirLib.{ml,mli} at <path>";
   "--dump-resolved", Arg.Set dump_resolved, " Write an .automaton.resolved file";
   "--echo-errors", Arg.String set_echo_errors, "<filename> Echo the sentences in a .messages file";
   "--echo-errors-concrete", Arg.String set_echo_errors_concrete, "<filename> Echo the sentences in a .messages file";
@@ -419,9 +429,9 @@ let options = Arg.align [
   "--infer-write-query", Arg.String enable_write_query, "<filename> Write mock .ml file";
   "--infer-read-reply", Arg.String enable_read_reply, "<filename> Read inferred .mli file";
   "--inspection", Arg.Set inspection, " Generate the inspection API";
-  "--interpret", Arg.Set interpret, " Interpret the sentences provided on stdin";
-  "--interpret-show-cst", Arg.Set interpret_show_cst, " Show a concrete syntax tree upon acceptance";
-  "--interpret-error", Arg.Set interpret_error, " Interpret an error sentence";
+  "--interpret", Arg.Unit (fun () -> interpret := `Normal `DoNotShowCST), " Interpret the sentences provided on stdin";
+  "--interpret-show-cst", Arg.Unit (fun () -> interpret := `Normal `ShowCST), " Show a concrete syntax tree upon acceptance";
+  "--interpret-error", Arg.Unit (fun () -> interpret := `Error), " Interpret an error sentence";
   "--lalr", Arg.Unit (fun () -> construction_mode := ModeLALR), " Construct an LALR(1) automaton";
   "--list-errors", Arg.Set list_errors, " Produce a list of erroneous inputs";
   "--list-errors-algorithm", Arg.String set_list_errors_algorithm, " (undocumented)";
@@ -446,18 +456,21 @@ let options = Arg.align [
   "--only-preprocess-uu", Arg.Unit (fun () -> preprocess_mode := PMOnlyPreprocess (PrintUnitActions true)),
                           " Print grammar with unit actions & tokens";
   "--only-tokens", Arg.Unit tokentypeonly, " Generate token type definition only, no code";
+  "--pack-classic", Arg.Set pack_classic, " (undocumented)";
+  "--unparsing", Arg.Set unparsing, " Generate the unparsing API";
   "--random-seed", Arg.Int Random.init, "<seed> Set the random seed";
   "--random-self-init", Arg.Unit Random.self_init, " Pick a random seed in a system-dependent way";
   "--random-sentence-length", Arg.Set_int random_sentence_goal, "<length> Set the goal length for a random sentence";
   "--random-sentence", Arg.String random_sentence_abstract, "<sym> Generate a random valid sentence";
   "--random-sentence-concrete", Arg.String random_sentence_concrete, "<sym> Generate a random valid sentence";
   "--raw-depend", Arg.Unit enable_raw_depend, " Invoke ocamldep and echo its raw output";
-  "--reference-graph", Arg.Set reference_graph, " (undocumented)";
+  "--reference-graph", Arg.Set reference_graph, " Write a dependency graph to a .dot file";
   "--represent-states", Arg.Set represent_states, " (undocumented)";
   "--represent-positions", Arg.Set represent_positions, " (undocumented)";
   "--represent-values", Arg.Set represent_values, " (undocumented)";
   "--represent-everything", Arg.Unit represent_everything, " (undocumented)";
   "--require-aliases", Arg.Set require_aliases, " Check that every token has a token alias";
+  "--specialize-token", Arg.Set specialize_token, " (undocumented)";
   "--stacklang-dump", Arg.Set stacklang_dump, " (undocumented)";
   "--stacklang-graph", Arg.Set stacklang_graph, " (undocumented)";
   "--stacklang-test", Arg.Set stacklang_test, " (undocumented)";
@@ -518,19 +531,20 @@ let backend =
   (* If any of the [--interpret] flags is used, then we consider that
      the back-end is [`ReferenceInterpreter]. Indeed, in that case,
      we are not using any of the other back-ends. *)
-  if !interpret || !interpret_error || !interpret_show_cst then
-    `ReferenceInterpreter
-  else
-    match !backend with
-    | `Unspecified ->
-        (* The new code back-end is the default. *)
-        `NewCodeBackend
-    | `CoqBackend
-    | `NewCodeBackend
-    | `OldCodeBackend
-    | `TableBackend
-      as backend ->
-        backend
+  match !interpret with
+  | `Normal _ | `Error ->
+      `ReferenceInterpreter
+  | `No ->
+      match !backend with
+      | `Unspecified ->
+          (* The new code back-end is the default. *)
+          `NewCodeBackend
+      | `CoqBackend
+      | `NewCodeBackend
+      | `OldCodeBackend
+      | `TableBackend
+        as backend ->
+          backend
 
 let extension =
   match backend with
@@ -596,6 +610,13 @@ let strategy =
 
 let () =
   if !exn_carries_state
+  && backend = `TableBackend then
+    error
+      "Error: --exn-carries-state is supported only by the code back-end.\n\
+       It is not compatible with --table.\n"
+
+let () =
+  if !exn_carries_state
   && backend <> `NewCodeBackend then
     error
       "Error: --exn-carries-state is supported only by the code back-end.\n"
@@ -636,6 +657,17 @@ let () =
   | SuggestUseOcamlfind ->
       printf "false\n";
       exit 0
+
+let write_file filename contents =
+  let oc = open_out_bin filename in
+  output_string oc contents;
+  close_out oc
+
+let () =
+  !dump_menhirLib |> Option.iter @@ fun path ->
+    write_file (Filename.concat path "menhirLib.ml") MenhirLibSource.impl;
+    write_file (Filename.concat path "menhirLib.mli") MenhirLibSource.intf;
+    exit 0
 
 (* ------------------------------------------------------------------------- *)
 (* Export the settings. *)
@@ -720,12 +752,6 @@ let timings =
 let interpret =
   !interpret
 
-let interpret_show_cst =
-  !interpret_show_cst
-
-let interpret_error =
-  !interpret_error
-
 let optimization_level =
   !optimization_level
 
@@ -735,6 +761,15 @@ let inspection =
 let () =
   if inspection && backend <> `TableBackend then begin
     fprintf stderr "Error: --inspection requires --table.\n";
+    exit 1
+  end
+
+let unparsing =
+  !unparsing
+
+let () =
+  if unparsing && backend <> `TableBackend then begin
+    fprintf stderr "Error: --unparsing requires --table.\n";
     exit 1
   end
 
@@ -886,3 +921,9 @@ let stacklang_graph =
 
 let stacklang_test =
   !stacklang_test
+
+let specialize_token =
+  !specialize_token
+
+let pack_classic =
+  !pack_classic

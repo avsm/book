@@ -3,31 +3,49 @@
 (library
  (name dune_rules)
  (libraries
-  stdune
+  action_ext
+  build_path_prefix_map
+  chrome_trace
   csexp
+  dune_action_plugin
+  dune_cache
+  dune_cache_storage
+  dune_config
+  dune_config_file
+  dune_console
+  dune_digest
+  dune_engine
+  dune_findlib
+  dune_glob
+  dune_lang
+  dune_meta_parser
+  dune_patch
+  dune_pkg
+  dune_re
+  dune_rpc_private
+  dune_section
+  dune_site_private
+  dune_stats
+  dune_targets
+  dune_util
+  dune_vcs
   fiber
+  fs
+  install
   memo
   ocaml
-  dune_re
-  opam_file_format
-  dune_lang
-  dune_glob
   ocaml_config
-  dune_action_plugin
-  chrome_trace
-  dune_stats
-  dune_site_private
-  dune_util
-  dune_meta_parser
-  dune_section
-  dune_cache
-  build_path_prefix_map
-  dune_engine
-  dune_config
-  unix)
+  opam_format
+  predicate_lang
+  promote
+  scheme
+  source
+  stdune
+  unix
+  xdg)
  (synopsis "Internal Dune library, do not use!"))
 
-(ocamllex ocamlobjinfo cram_lexer)
+(ocamllex ocamlobjinfo)
 
 (rule
  (mode promote)
@@ -53,11 +71,12 @@
  (mode promote)
  (alias runtest)
  (targets setup.defaults.ml)
- (deps %{project_root}/configure.ml)
+ (deps
+  (:configure %{project_root}/boot/configure.ml))
  (action
   (chdir
    %{project_root}
    (setenv
     DUNE_CONFIGURE_OUTPUT
     "src/dune_rules/setup.defaults.ml"
-    (run %{ocaml} configure.ml)))))
+    (run %{ocaml} %{configure})))))

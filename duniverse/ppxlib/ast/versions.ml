@@ -46,6 +46,15 @@ module type Ast = sig
     type type_declaration
     type type_extension
     type extension_constructor
+    type class_expr
+    type class_field
+    type class_type
+    type class_signature
+    type class_type_field
+    type module_expr
+    type module_type
+    type signature_item
+    type structure_item
   end
 (*$*)
   module Config : sig
@@ -69,6 +78,15 @@ type 'a _types = 'a constraint 'a
     type_declaration      : _;
     type_extension        : _;
     extension_constructor : _;
+    class_expr            : _;
+    class_field           : _;
+    class_type            : _;
+    class_signature       : _;
+    class_type_field      : _;
+    module_expr           : _;
+    module_type           : _;
+    signature_item        : _;
+    structure_item        : _;
 (*$*)
   >
 ;;
@@ -97,6 +115,24 @@ type 'a get_type_extension =
   'x constraint 'a _types = < type_extension : 'x; .. >
 type 'a get_extension_constructor =
   'x constraint 'a _types = < extension_constructor : 'x; .. >
+type 'a get_class_expr =
+  'x constraint 'a _types = < class_expr : 'x; .. >
+type 'a get_class_field =
+  'x constraint 'a _types = < class_field : 'x; .. >
+type 'a get_class_type =
+  'x constraint 'a _types = < class_type : 'x; .. >
+type 'a get_class_signature =
+  'x constraint 'a _types = < class_signature : 'x; .. >
+type 'a get_class_type_field =
+  'x constraint 'a _types = < class_type_field : 'x; .. >
+type 'a get_module_expr =
+  'x constraint 'a _types = < module_expr : 'x; .. >
+type 'a get_module_type =
+  'x constraint 'a _types = < module_type : 'x; .. >
+type 'a get_signature_item =
+  'x constraint 'a _types = < signature_item : 'x; .. >
+type 'a get_structure_item =
+  'x constraint 'a _types = < structure_item : 'x; .. >
 (*$*)
 
 module type OCaml_version = sig
@@ -115,6 +151,15 @@ module type OCaml_version = sig
     type_declaration      : Ast.Parsetree.type_declaration;
     type_extension        : Ast.Parsetree.type_extension;
     extension_constructor : Ast.Parsetree.extension_constructor;
+    class_expr            : Ast.Parsetree.class_expr;
+    class_field           : Ast.Parsetree.class_field;
+    class_type            : Ast.Parsetree.class_type;
+    class_signature       : Ast.Parsetree.class_signature;
+    class_type_field      : Ast.Parsetree.class_type_field;
+    module_expr           : Ast.Parsetree.module_expr;
+    module_type           : Ast.Parsetree.module_type;
+    signature_item        : Ast.Parsetree.signature_item;
+    structure_item        : Ast.Parsetree.structure_item;
 (*$*)
   > _types
   type _ witnesses += Version : types witnesses
@@ -135,6 +180,15 @@ struct
     type_declaration      : Ast.Parsetree.type_declaration;
     type_extension        : Ast.Parsetree.type_extension;
     extension_constructor : Ast.Parsetree.extension_constructor;
+    class_expr            : Ast.Parsetree.class_expr;
+    class_field           : Ast.Parsetree.class_field;
+    class_type            : Ast.Parsetree.class_type;
+    class_signature       : Ast.Parsetree.class_signature;
+    class_type_field      : Ast.Parsetree.class_type_field;
+    module_expr           : Ast.Parsetree.module_expr;
+    module_type           : Ast.Parsetree.module_type;
+    signature_item        : Ast.Parsetree.signature_item;
+    structure_item        : Ast.Parsetree.structure_item;
 (*$*)
   > _types
   type _ witnesses += Version : types witnesses
@@ -157,6 +211,15 @@ type 'types ocaml_version =
      and type Ast.Parsetree.type_declaration = 'types get_type_declaration
      and type Ast.Parsetree.type_extension = 'types get_type_extension
      and type Ast.Parsetree.extension_constructor = 'types get_extension_constructor
+     and type Ast.Parsetree.class_expr = 'types get_class_expr
+     and type Ast.Parsetree.class_field = 'types get_class_field
+     and type Ast.Parsetree.class_type = 'types get_class_type
+     and type Ast.Parsetree.class_signature = 'types get_class_signature
+     and type Ast.Parsetree.class_type_field = 'types get_class_type_field
+     and type Ast.Parsetree.module_expr = 'types get_module_expr
+     and type Ast.Parsetree.module_type = 'types get_module_type
+     and type Ast.Parsetree.signature_item = 'types get_signature_item
+     and type Ast.Parsetree.structure_item = 'types get_structure_item
 (*$*)
   )
 
@@ -173,6 +236,15 @@ type ('from, 'to_) migration_functions = {
   copy_type_declaration: 'from get_type_declaration -> 'to_ get_type_declaration;
   copy_type_extension: 'from get_type_extension -> 'to_ get_type_extension;
   copy_extension_constructor: 'from get_extension_constructor -> 'to_ get_extension_constructor;
+  copy_class_expr: 'from get_class_expr -> 'to_ get_class_expr;
+  copy_class_field: 'from get_class_field -> 'to_ get_class_field;
+  copy_class_type: 'from get_class_type -> 'to_ get_class_type;
+  copy_class_signature: 'from get_class_signature -> 'to_ get_class_signature;
+  copy_class_type_field: 'from get_class_type_field -> 'to_ get_class_type_field;
+  copy_module_expr: 'from get_module_expr -> 'to_ get_module_expr;
+  copy_module_type: 'from get_module_type -> 'to_ get_module_type;
+  copy_signature_item: 'from get_signature_item -> 'to_ get_signature_item;
+  copy_structure_item: 'from get_structure_item -> 'to_ get_structure_item;
 (*$*)
 }
 
@@ -189,6 +261,15 @@ let migration_identity : ('a, 'a) migration_functions = {
   copy_type_declaration = id;
   copy_type_extension = id;
   copy_extension_constructor = id;
+  copy_class_expr = id;
+  copy_class_field = id;
+  copy_class_type = id;
+  copy_class_signature = id;
+  copy_class_type_field = id;
+  copy_module_expr = id;
+  copy_module_type = id;
+  copy_signature_item = id;
+  copy_structure_item = id;
 (*$*)
 }
 
@@ -206,6 +287,15 @@ let migration_compose (ab : ('a, 'b) migration_functions) (bc : ('b, 'c) migrati
   copy_type_declaration      = compose bc.copy_type_declaration      ab.copy_type_declaration;
   copy_type_extension        = compose bc.copy_type_extension        ab.copy_type_extension;
   copy_extension_constructor = compose bc.copy_extension_constructor ab.copy_extension_constructor;
+  copy_class_expr            = compose bc.copy_class_expr            ab.copy_class_expr;
+  copy_class_field           = compose bc.copy_class_field           ab.copy_class_field;
+  copy_class_type            = compose bc.copy_class_type            ab.copy_class_type;
+  copy_class_signature       = compose bc.copy_class_signature       ab.copy_class_signature;
+  copy_class_type_field      = compose bc.copy_class_type_field      ab.copy_class_type_field;
+  copy_module_expr           = compose bc.copy_module_expr           ab.copy_module_expr;
+  copy_module_type           = compose bc.copy_module_type           ab.copy_module_type;
+  copy_signature_item        = compose bc.copy_signature_item        ab.copy_signature_item;
+  copy_structure_item        = compose bc.copy_structure_item        ab.copy_structure_item;
 (*$*)
 }
 
@@ -226,6 +316,15 @@ module type Migrate_module = sig
   val copy_type_declaration     : From.Parsetree.type_declaration -> To.Parsetree.type_declaration
   val copy_type_extension       : From.Parsetree.type_extension -> To.Parsetree.type_extension
   val copy_extension_constructor: From.Parsetree.extension_constructor -> To.Parsetree.extension_constructor
+  val copy_class_expr           : From.Parsetree.class_expr -> To.Parsetree.class_expr
+  val copy_class_field          : From.Parsetree.class_field -> To.Parsetree.class_field
+  val copy_class_type           : From.Parsetree.class_type -> To.Parsetree.class_type
+  val copy_class_signature      : From.Parsetree.class_signature -> To.Parsetree.class_signature
+  val copy_class_type_field     : From.Parsetree.class_type_field -> To.Parsetree.class_type_field
+  val copy_module_expr          : From.Parsetree.module_expr -> To.Parsetree.module_expr
+  val copy_module_type          : From.Parsetree.module_type -> To.Parsetree.module_type
+  val copy_signature_item       : From.Parsetree.signature_item -> To.Parsetree.signature_item
+  val copy_structure_item       : From.Parsetree.structure_item -> To.Parsetree.structure_item
 (*$*)
 end
 
@@ -248,6 +347,15 @@ struct
       copy_type_declaration;
       copy_type_extension;
       copy_extension_constructor;
+      copy_class_expr;
+      copy_class_field;
+      copy_class_type;
+      copy_class_signature;
+      copy_class_type_field;
+      copy_module_expr;
+      copy_module_type;
+      copy_signature_item;
+      copy_structure_item;
 (*$*)
     }
 end
@@ -292,6 +400,15 @@ let immediate_migration
     (type type_declaration)
     (type type_extension)
     (type extension_constructor)
+    (type class_expr)
+    (type class_field)
+    (type class_type)
+    (type class_signature)
+    (type class_type_field)
+    (type module_expr)
+    (type module_type)
+    (type signature_item)
+    (type structure_item)
 (*$*)
     ((module A) : <
      (*$ foreach_type (fun _ s -> printf  "     %-21s : %s;\n" s s) *)
@@ -305,6 +422,15 @@ let immediate_migration
      type_declaration      : type_declaration;
      type_extension        : type_extension;
      extension_constructor : extension_constructor;
+     class_expr            : class_expr;
+     class_field           : class_field;
+     class_type            : class_type;
+     class_signature       : class_signature;
+     class_type_field      : class_type_field;
+     module_expr           : module_expr;
+     module_type           : module_type;
+     signature_item        : signature_item;
+     structure_item        : structure_item;
 (*$*)
      > ocaml_version)
     direction
@@ -330,6 +456,15 @@ let migrate
     (type type_declaration1) (type type_declaration2)
     (type type_extension1) (type type_extension2)
     (type extension_constructor1) (type extension_constructor2)
+    (type class_expr1) (type class_expr2)
+    (type class_field1) (type class_field2)
+    (type class_type1) (type class_type2)
+    (type class_signature1) (type class_signature2)
+    (type class_type_field1) (type class_type_field2)
+    (type module_expr1) (type module_expr2)
+    (type module_type1) (type module_type2)
+    (type signature_item1) (type signature_item2)
+    (type structure_item1) (type structure_item2)
 (*$*)
     ((module A) : <
      (*$ foreach_type (fun _ s -> printf "     %-21s : %s1;\n" s s) *)
@@ -343,6 +478,15 @@ let migrate
      type_declaration      : type_declaration1;
      type_extension        : type_extension1;
      extension_constructor : extension_constructor1;
+     class_expr            : class_expr1;
+     class_field           : class_field1;
+     class_type            : class_type1;
+     class_signature       : class_signature1;
+     class_type_field      : class_type_field1;
+     module_expr           : module_expr1;
+     module_type           : module_type1;
+     signature_item        : signature_item1;
+     structure_item        : structure_item1;
 (*$*)
      > ocaml_version)
     ((module B) : <
@@ -357,6 +501,15 @@ let migrate
      type_declaration      : type_declaration2;
      type_extension        : type_extension2;
      extension_constructor : extension_constructor2;
+     class_expr            : class_expr2;
+     class_field           : class_field2;
+     class_type            : class_type2;
+     class_signature       : class_signature2;
+     class_type_field      : class_type_field2;
+     module_expr           : module_expr2;
+     module_type           : module_type2;
+     signature_item        : signature_item2;
+     structure_item        : structure_item2;
 (*$*)
      > ocaml_version)
   : (A.types, B.types) migration_functions
@@ -392,6 +545,15 @@ module Convert (A : OCaml_version) (B : OCaml_version) = struct
     copy_type_declaration;
     copy_type_extension;
     copy_extension_constructor;
+    copy_class_expr;
+    copy_class_field;
+    copy_class_type;
+    copy_class_signature;
+    copy_class_type_field;
+    copy_module_expr;
+    copy_module_type;
+    copy_signature_item;
+    copy_structure_item;
 (*$*)
   } : (A.types, B.types) migration_functions =
     migrate (module A) (module B)
@@ -408,48 +570,6 @@ end
       n n n;
   )
 *)
-module OCaml_402 = struct
-  module Ast = Astlib.Ast_402
-  include Make_witness(Astlib.Ast_402)
-  let version = 402
-  let string_version = "4.02"
-end
-let ocaml_402 : OCaml_402.types ocaml_version = (module OCaml_402)
-module OCaml_403 = struct
-  module Ast = Astlib.Ast_403
-  include Make_witness(Astlib.Ast_403)
-  let version = 403
-  let string_version = "4.03"
-end
-let ocaml_403 : OCaml_403.types ocaml_version = (module OCaml_403)
-module OCaml_404 = struct
-  module Ast = Astlib.Ast_404
-  include Make_witness(Astlib.Ast_404)
-  let version = 404
-  let string_version = "4.04"
-end
-let ocaml_404 : OCaml_404.types ocaml_version = (module OCaml_404)
-module OCaml_405 = struct
-  module Ast = Astlib.Ast_405
-  include Make_witness(Astlib.Ast_405)
-  let version = 405
-  let string_version = "4.05"
-end
-let ocaml_405 : OCaml_405.types ocaml_version = (module OCaml_405)
-module OCaml_406 = struct
-  module Ast = Astlib.Ast_406
-  include Make_witness(Astlib.Ast_406)
-  let version = 406
-  let string_version = "4.06"
-end
-let ocaml_406 : OCaml_406.types ocaml_version = (module OCaml_406)
-module OCaml_407 = struct
-  module Ast = Astlib.Ast_407
-  include Make_witness(Astlib.Ast_407)
-  let version = 407
-  let string_version = "4.07"
-end
-let ocaml_407 : OCaml_407.types ocaml_version = (module OCaml_407)
 module OCaml_408 = struct
   module Ast = Astlib.Ast_408
   include Make_witness(Astlib.Ast_408)
@@ -506,17 +626,32 @@ module OCaml_500 = struct
   let string_version = "5.0"
 end
 let ocaml_500 : OCaml_500.types ocaml_version = (module OCaml_500)
+module OCaml_501 = struct
+  module Ast = Astlib.Ast_501
+  include Make_witness(Astlib.Ast_501)
+  let version = 501
+  let string_version = "5.1"
+end
+let ocaml_501 : OCaml_501.types ocaml_version = (module OCaml_501)
+module OCaml_502 = struct
+  module Ast = Astlib.Ast_502
+  include Make_witness(Astlib.Ast_502)
+  let version = 502
+  let string_version = "5.2"
+end
+let ocaml_502 : OCaml_502.types ocaml_version = (module OCaml_502)
+module OCaml_503 = struct
+  module Ast = Astlib.Ast_503
+  include Make_witness(Astlib.Ast_503)
+  let version = 503
+  let string_version = "5.3"
+end
+let ocaml_503 : OCaml_503.types ocaml_version = (module OCaml_503)
 (*$*)
 
 let all_versions : (module OCaml_version) list = [
   (*$foreach_version (fun n _ ->
       printf "(module OCaml_%d : OCaml_version);\n" n)*)
-(module OCaml_402 : OCaml_version);
-(module OCaml_403 : OCaml_version);
-(module OCaml_404 : OCaml_version);
-(module OCaml_405 : OCaml_version);
-(module OCaml_406 : OCaml_version);
-(module OCaml_407 : OCaml_version);
 (module OCaml_408 : OCaml_version);
 (module OCaml_409 : OCaml_version);
 (module OCaml_410 : OCaml_version);
@@ -525,6 +660,9 @@ let all_versions : (module OCaml_version) list = [
 (module OCaml_413 : OCaml_version);
 (module OCaml_414 : OCaml_version);
 (module OCaml_500 : OCaml_version);
+(module OCaml_501 : OCaml_version);
+(module OCaml_502 : OCaml_version);
+(module OCaml_503 : OCaml_version);
 (*$*)
 ]
 
@@ -533,18 +671,6 @@ let all_versions : (module OCaml_version) list = [
     printf "    (Astlib.Migrate_%d_%d)(Astlib.Migrate_%d_%d)\n" a b b a
   )
 *)
-include Register_migration(OCaml_402)(OCaml_403)
-    (Astlib.Migrate_402_403)(Astlib.Migrate_403_402)
-include Register_migration(OCaml_403)(OCaml_404)
-    (Astlib.Migrate_403_404)(Astlib.Migrate_404_403)
-include Register_migration(OCaml_404)(OCaml_405)
-    (Astlib.Migrate_404_405)(Astlib.Migrate_405_404)
-include Register_migration(OCaml_405)(OCaml_406)
-    (Astlib.Migrate_405_406)(Astlib.Migrate_406_405)
-include Register_migration(OCaml_406)(OCaml_407)
-    (Astlib.Migrate_406_407)(Astlib.Migrate_407_406)
-include Register_migration(OCaml_407)(OCaml_408)
-    (Astlib.Migrate_407_408)(Astlib.Migrate_408_407)
 include Register_migration(OCaml_408)(OCaml_409)
     (Astlib.Migrate_408_409)(Astlib.Migrate_409_408)
 include Register_migration(OCaml_409)(OCaml_410)
@@ -559,6 +685,12 @@ include Register_migration(OCaml_413)(OCaml_414)
     (Astlib.Migrate_413_414)(Astlib.Migrate_414_413)
 include Register_migration(OCaml_414)(OCaml_500)
     (Astlib.Migrate_414_500)(Astlib.Migrate_500_414)
+include Register_migration(OCaml_500)(OCaml_501)
+    (Astlib.Migrate_500_501)(Astlib.Migrate_501_500)
+include Register_migration(OCaml_501)(OCaml_502)
+    (Astlib.Migrate_501_502)(Astlib.Migrate_502_501)
+include Register_migration(OCaml_502)(OCaml_503)
+    (Astlib.Migrate_502_503)(Astlib.Migrate_503_502)
 (*$*)
 
 module OCaml_current = OCaml_OCAML_VERSION
@@ -577,5 +709,10 @@ module Find_version = struct
           else
             loop tail
     in
-    loop all_versions
+    (* Traverse the versions from last to first:
+       if the magic numbers aren't unique among versions,
+       we want the latest version with a magic number match.
+       The situation in mind is trunk support. *)
+      let all_versions_top_down = List.rev all_versions in
+      loop all_versions_top_down
 end

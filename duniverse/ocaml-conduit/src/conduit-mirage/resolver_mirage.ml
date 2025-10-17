@@ -24,13 +24,7 @@ module type S = sig
   val localhost : t
 end
 
-module Make
-    (R : Mirage_random.S)
-    (T : Mirage_time.S)
-    (C : Mirage_clock.MCLOCK)
-    (P : Mirage_clock.PCLOCK)
-    (S : Tcpip.Stack.V4V6) =
-struct
+module Make (S : Tcpip.Stack.V4V6) = struct
   include Resolver_lwt
 
   let is_tls_service =
@@ -89,16 +83,28 @@ struct
       (* Strip the tld from the hostname *)
       let remote_name = get_short_host uri in
       Printf.printf "vchan_lookup: %s %s -> normalizes to %s\n%!"
-        (Sexplib.Sexp.to_string_hum (Resolver.sexp_of_service service))
+        (Sexplib0.Sexp.to_string_hum (Resolver.sexp_of_service service))
         (Uri.to_string uri) remote_name;
       Lwt.return (`Vchan_domain_socket (remote_name, service.Resolver.name))
 
-  module DNS = Dns_client_mirage.Make (R) (T) (C) (P) (S)
+  module H = Happy_eyeballs_mirage.Make (S)
+  module DNS = Dns_client_mirage.Make (S) (H)
+
+  let resolve_v4v6 dns host =
+    (* Try to resolve a host, default to IPv4 *)
+    DNS.gethostbyname dns host >>= function
+    | Ok addr -> Lwt.return (Ok (Ipaddr.V4 addr))
+    | Error (`Msg v4_err) -> (
+        DNS.gethostbyname6 dns host >|= function
+        | Ok addr -> Ok (Ipaddr.V6 addr)
+        | Error (`Msg v6_err) ->
+            let msg = Fmt.str "v4: %s; v6: %s" v4_err v6_err in
+            Error (`Msg msg))
 
   let dns_stub_resolver dns service uri : Conduit.endp Lwt.t =
     let hostn = get_host uri in
     let port = get_port service uri in
-    (match Ipaddr.V4.of_string hostn with
+    (match Ipaddr.of_string hostn with
     | Ok addr -> Lwt.return (Ok addr)
     | Error _ -> (
         match Domain_name.of_string hostn with
@@ -106,27 +112,27 @@ struct
         | Ok domain -> (
             match Domain_name.host domain with
             | Error (`Msg msg) -> Lwt.return (Error (`Msg msg))
-            | Ok host -> DNS.gethostbyname dns host)))
+            | Ok host -> resolve_v4v6 dns host)))
     >|= function
     | Error (`Msg err) -> `Unknown ("name resolution failed: " ^ err)
-    | Ok addr -> `TCP (Ipaddr.V4 addr, port)
+    | Ok addr -> `TCP (addr, port)
 
   let register ?nameservers s res =
     (* DNS stub resolver *)
-    let nameservers = Option.map (fun ns -> (`Tcp, ns)) nameservers in
-    let dns = DNS.create ?nameservers s in
+    H.connect_device s >>= fun he ->
+    DNS.connect ?nameservers (s, he) >|= fun dns ->
     let f = dns_stub_resolver dns in
     Resolver_lwt.add_rewrite ~host:"" ~f res;
     let service = Resolver_lwt.(service res ++ static_service) in
     Resolver_lwt.set_service ~f:service res;
     let vchan_tld = ".xen" in
     let vchan_res = vchan_resolver ~tld:vchan_tld in
-    Resolver_lwt.add_rewrite ~host:vchan_tld ~f:vchan_res res
+    Resolver_lwt.add_rewrite ~host:vchan_tld ~f:vchan_res res;
+    Ok ()
 
   let v ?nameservers stack =
     let res = Resolver_lwt.init () in
-    register ?nameservers stack res;
-    res
+    register ?nameservers stack res >|= Result.map (fun () -> res)
 
   type t = Resolver_lwt.t
 end

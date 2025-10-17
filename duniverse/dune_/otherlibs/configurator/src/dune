@@ -12,3 +12,6 @@
  (special_builtin_support
   (configurator
    (api_version 1))))
+
+(documentation
+ (package dune-configurator))

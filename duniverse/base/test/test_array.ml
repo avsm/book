@@ -47,7 +47,6 @@ let%test_module "Sort" =
         (* run [five_element_sort] on all permutations of an array of five elements *)
 
         let all_perms = List_helpers.permutations [ 1; 2; 3; 4; 5 ]
-
         let%test _ = List.length all_perms = 120
         let%test _ = not (List.contains_dup ~compare:[%compare: int list] all_perms)
 
@@ -147,7 +146,7 @@ let%expect_test "merge" =
 let%expect_test "merge with duplicates" =
   (* Testing that equal elements from a1 come before equal elements from a2 *)
   let test a1 a2 =
-    let compare = Comparable.lift Int.compare ~f:fst in
+    let compare a b = Comparable.lift Int.compare ~f:fst a b in
     let res = merge a1 a2 ~compare in
     print_s ([%sexp_of: (int * string) array] res);
     require_equal
@@ -400,8 +399,9 @@ let%test_unit _ = [%test_result: int option] (random_element [||]) ~expect:None
 let%test_unit _ = [%test_result: int option] (random_element [| 0 |]) ~expect:(Some 0)
 
 let%test_unit _ =
-  List.iter [ [||]; [| 1 |]; [| 1; 2; 3; 4; 5 |] ] ~f:(fun t ->
-    [%test_result: int array] (Sequence.to_array (to_sequence t)) ~expect:t)
+  List.iter
+    [ [||]; [| 1 |]; [| 1; 2; 3; 4; 5 |] ]
+    ~f:(fun t -> [%test_result: int array] (Sequence.to_array (to_sequence t)) ~expect:t)
 ;;
 
 let test_fold_map array ~init ~f ~expect =
@@ -530,4 +530,90 @@ let%expect_test "create_float_uninitialized" =
   (* sanity check without depending on specific contents *)
   print_s [%sexp (Array.length array : int)];
   [%expect {| 10 |}]
+;;
+
+module Int_array = struct
+  type t = int array [@@deriving equal, sexp_of]
+end
+
+module Int_list = struct
+  type t = int list [@@deriving equal, sexp_of]
+end
+
+let%expect_test "swap" =
+  let array = [| 0; 1; 2; 3 |] in
+  print_s [%sexp (array : int array)];
+  [%expect {| (0 1 2 3) |}];
+  swap array 0 0;
+  print_s [%sexp (array : int array)];
+  [%expect {| (0 1 2 3) |}];
+  swap array 0 3;
+  print_s [%sexp (array : int array)];
+  [%expect {| (3 1 2 0) |}]
+;;
+
+let%expect_test "rev and rev_inplace" =
+  let test ordered_list =
+    let ordered_array = of_list ordered_list in
+    let reversed_array =
+      let array = copy ordered_array in
+      rev_inplace array;
+      array
+    in
+    require_equal
+      [%here]
+      (module Int_list)
+      (to_list reversed_array)
+      (List.rev ordered_list);
+    require_equal [%here] (module Int_array) reversed_array (rev ordered_array);
+    print_s [%sexp (reversed_array : int array)]
+  in
+  test [];
+  [%expect {| () |}];
+  test [ 0 ];
+  [%expect {| (0) |}];
+  test (List.init 10 ~f:Fn.id);
+  [%expect {| (9 8 7 6 5 4 3 2 1 0) |}]
+;;
+
+let%expect_test "map_inplace" =
+  let test list =
+    let f x = x * x in
+    let array = of_list list in
+    map_inplace array ~f;
+    require_equal [%here] (module Int_list) (to_list array) (List.map list ~f);
+    print_s [%sexp (array : int array)]
+  in
+  test [];
+  [%expect {| () |}];
+  test [ 0 ];
+  [%expect {| (0) |}];
+  test (List.init 10 ~f:Fn.id);
+  [%expect {| (0 1 4 9 16 25 36 49 64 81) |}]
+;;
+
+let%expect_test "cartesian_product" =
+  require [%here] (is_empty (cartesian_product [||] [||]));
+  require [%here] (is_empty (cartesian_product [||] [| 13 |]));
+  require [%here] (is_empty (cartesian_product [| 13 |] [||]));
+  print_s [%sexp (cartesian_product [| 1; 2; 3 |] [| "a"; "b" |] : (int * string) array)];
+  [%expect {|
+    ((1 a)
+     (1 b)
+     (2 a)
+     (2 b)
+     (3 a)
+     (3 b)) |}]
+;;
+
+let%expect_test "create_local" =
+  let len = 10 in
+  let array = create_local ~len (-1) in
+  for i = 0 to len - 1 do
+    assert (get array i = -1);
+    set array i i
+  done;
+  let array = init len ~f:(fun i -> get array i) in
+  print_s (sexp_of_t sexp_of_int array);
+  [%expect {| (0 1 2 3 4 5 6 7 8 9) |}]
 ;;

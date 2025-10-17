@@ -1,1 +1,4 @@
-val command : unit Cmdliner.Term.t * Cmdliner.Term.info
+open Import
+
+val term : unit Term.t
+val command : unit Cmd.t

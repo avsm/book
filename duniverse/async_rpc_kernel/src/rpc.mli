@@ -25,7 +25,7 @@ module Description : sig
     { name : string
     ; version : int
     }
-  [@@deriving compare, hash, sexp_of]
+  [@@deriving compare, equal, hash, sexp_of]
 
   include Comparable.S_plain with type t := t
   include Hashable.S_plain with type t := t
@@ -34,7 +34,7 @@ module Description : sig
 
   module Stable : sig
     module V1 : sig
-      type nonrec t = t [@@deriving compare, sexp, bin_io, hash]
+      type nonrec t = t [@@deriving compare, equal, sexp, bin_io, hash]
     end
   end
 end
@@ -71,12 +71,29 @@ module Implementation : sig
   type 'connection_state t [@@deriving sexp_of]
 
   val description : _ t -> Description.t
+  val shapes : _ t -> Rpc_shapes.t
 
   (** We may want to use an ['a t] implementation (perhaps provided by someone else) in a
-      ['b t] context.  We can do this as long as we can map our state into the state
-      expected by the original implementer. *)
+      ['b t] context. We can do this as long as we can map our state into the state
+      expected by the original implementer.
+
+      Note [f] is called on every RPC rather than once on the initial connection state. *)
   val lift : 'a t -> f:('b -> 'a) -> 'b t
 
+  (** Similar to [lift], but useful if you want to do asynchronous work to map connection
+      state. Like [lift], [f] will be called on every RPC. This can make RPC
+      implementations less efficient if they were previously relying on functions like
+      [Rpc.implement'] to avoid extra async work to send responses. This can also allow
+      blocking implementations to run in a different order from the order that queries
+      arrive on a connection.
+
+      Additionally, async exceptions raised by [One_way] RPCs do not currently respect
+      [on_exception] and will unconditionally close the connection. [lift_deferred] can
+      turn synchronous exceptions in [One_way] implementations into asynchronous ones,
+      triggering this behaviour. *)
+  val lift_deferred : 'a t -> f:('b -> 'a Deferred.t) -> 'b t
+
+  val with_authorization : 'a t -> f:('b -> 'a Or_not_authorized.t) -> 'b t
   val update_on_exception : 'a t -> f:(On_exception.t -> On_exception.t) -> 'a t
 end
 
@@ -89,6 +106,7 @@ module Implementations : sig
   (** a server that can handle no queries *)
   val null : unit -> 'connection_state t
 
+  (** Calls [Implementation.lift] on all implementations in [t]. *)
   val lift : 'a t -> f:('b -> 'a) -> 'b t
 
   type 'connection_state on_unknown_rpc =
@@ -228,7 +246,8 @@ module Rpc : sig
   (** [dispatch'] exposes [Rpc_result.t] as output. Passing it through
       [rpc_result_to_or_error] gives you the same result as [dispatch] *)
   val dispatch'
-    :  ('query, 'response) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response) t
     -> Connection.t
     -> 'query
     -> 'response Rpc_result.t Deferred.t
@@ -240,13 +259,15 @@ module Rpc : sig
     -> 'response Or_error.t
 
   val dispatch
-    :  ('query, 'response) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response) t
     -> Connection.t
     -> 'query
     -> 'response Or_error.t Deferred.t
 
   val dispatch_exn
-    :  ('query, 'response) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response) t
     -> Connection.t
     -> 'query
     -> 'response Deferred.t
@@ -277,7 +298,8 @@ module Rpc : sig
         The return value of [handle_response] has the same meaning as in the function
         argument of [Implementations.Expert.create]. *)
     val schedule_dispatch
-      :  Connection.t
+      :  ?metadata:Rpc_metadata.t
+      -> Connection.t
       -> rpc_tag:string
       -> version:int
       -> Bigstring.t
@@ -288,7 +310,8 @@ module Rpc : sig
       -> [ `Flushed of unit Deferred.t | `Connection_closed ]
 
     val dispatch
-      :  Connection.t
+      :  ?metadata:Rpc_metadata.t
+      -> Connection.t
       -> rpc_tag:string
       -> version:int
       -> Bigstring.t
@@ -404,10 +427,11 @@ module Pipe_rpc : sig
 
   val create
     :  ?client_pushes_back:unit
-    (** If the connection is backed up, the server stops consuming elements from the
-        pipe. Servers should pay attention to the pipe's pushback, otherwise they risk
-        running out of memory if they fill the pipe much faster than the transport can
-        handle, or if the client pushes back as discussed next.
+    (** If the connection is backed up, the rpc server library stops consuming elements
+        from the pipe being filled by [implement]'s caller. Servers should pay attention
+        to the pipe's pushback, otherwise they risk running out of memory if they fill the
+        pipe much faster than the transport can handle, or if the client pushes back as
+        discussed next.
 
         If [client_pushes_back] is set, the client side of the connection will stop
         reading elements from the underlying file descriptor when the client's pipe has
@@ -421,9 +445,15 @@ module Pipe_rpc : sig
           messages on the connection if any pipe gets saturated, not just ones relating
           to that pipe.
 
+        - This includes RPC heartbeats. If the pipe consumer takes too long to
+          process items this will cause the RPC connection to closed with a
+          "No heartbeats received" error.
+
         - A server that doesn't pay attention to pushback on its end will accumulate
           elements on its side of the connection, rather than on the client's side,
-          meaning a slow client can make the server run out of memory. *)
+          meaning a slow client can make the server run out of memory.
+
+    *)
     -> name:string
     -> version:int
     -> bin_query:'query Bin_prot.Type_class.t
@@ -446,9 +476,10 @@ module Pipe_rpc : sig
         -> ('response Pipe.Reader.t, 'error) Result.t Deferred.t)
     -> 'connection_state Implementation.t
 
-  (** A [Direct_stream_writer.t] is a simple object for responding to a [Pipe_rpc]
-      query. *)
+  (** A [Direct_stream_writer.t] is a simple object for responding to a [Pipe_rpc] or
+      {!State_rpc} query. *)
   module Direct_stream_writer : sig
+
     type 'a t
 
     (** [write t x] returns [`Closed] if [t] is closed, or [`Flushed d] if it is open. In
@@ -546,7 +577,8 @@ module Pipe_rpc : sig
       function returns. Elements written before the function returns will be queued up to
       be written after the function returns. *)
   val implement_direct
-    :  ('query, 'response, 'error) t
+    :  ?on_exception:On_exception.t (** default: [On_exception.continue] **)
+    -> ('query, 'response, 'error) t
     -> ('connection_state
         -> 'query
         -> 'response Direct_stream_writer.t
@@ -561,13 +593,15 @@ module Pipe_rpc : sig
 
       Closing the pipe has the effect of calling [abort]. *)
   val dispatch
-    :  ('query, 'response, 'error) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response, 'error) t
     -> Connection.t
     -> 'query
     -> ('response Pipe.Reader.t * Metadata.t, 'error) Result.t Or_error.t Deferred.t
 
   val dispatch_exn
-    :  ('query, 'response, 'error) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response, 'error) t
     -> Connection.t
     -> 'query
     -> ('response Pipe.Reader.t * Metadata.t) Deferred.t
@@ -607,7 +641,8 @@ module Pipe_rpc : sig
       the implementation side. Calling it with a different [Pipe_rpc.t] or [Connection.t]
       has undefined behavior. *)
   val dispatch_iter
-    :  ('query, 'response, 'error) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'response, 'error) t
     -> Connection.t
     -> 'query
     -> f:('response Pipe_message.t -> Pipe_response.t)
@@ -671,15 +706,25 @@ module State_rpc : sig
   val bin_error : (_, _, _, 'error) t -> 'error Bin_prot.Type_class.t
 
   val implement
-    :  ?on_exception:On_exception.t (* default: [On_exception.continue] *)
+    :  ?on_exception:On_exception.t (** default: [On_exception.continue] *)
     -> ('query, 'state, 'update, 'error) t
     -> ('connection_state
         -> 'query
         -> ('state * 'update Pipe.Reader.t, 'error) Result.t Deferred.t)
     -> 'connection_state Implementation.t
 
+  val implement_direct
+    :  ?on_exception:On_exception.t (** default: [On_exception.continue] *)
+    -> ('query, 'state, 'update, 'error) t
+    -> ('connection_state
+        -> 'query
+        -> 'update Pipe_rpc.Direct_stream_writer.t
+        -> ('state, 'error) Result.t Deferred.t)
+    -> 'connection_state Implementation.t
+
   val dispatch
-    :  ('query, 'state, 'update, 'error) t
+    :  ?metadata:Rpc_metadata.t
+    -> ('query, 'state, 'update, 'error) t
     -> Connection.t
     -> 'query
     -> ('state * 'update Pipe.Reader.t * Metadata.t, 'error) Result.t Or_error.t
@@ -720,7 +765,12 @@ module One_way : sig
 
   (** [dispatch'] exposes [Rpc_result.t] as output. Passing it through
       [rpc_result_to_or_error] gives you the same result as [dispatch] *)
-  val dispatch' : 'msg t -> Connection.t -> 'msg -> unit Rpc_result.t
+  val dispatch'
+    :  ?metadata:Rpc_metadata.t
+    -> 'msg t
+    -> Connection.t
+    -> 'msg
+    -> unit Rpc_result.t
 
   val rpc_result_to_or_error
     :  'msg t
@@ -728,8 +778,14 @@ module One_way : sig
     -> unit Rpc_result.t
     -> unit Or_error.t
 
-  val dispatch : 'msg t -> Connection.t -> 'msg -> unit Or_error.t
-  val dispatch_exn : 'msg t -> Connection.t -> 'msg -> unit
+  val dispatch
+    :  ?metadata:Rpc_metadata.t
+    -> 'msg t
+    -> Connection.t
+    -> 'msg
+    -> unit Or_error.t
+
+  val dispatch_exn : ?metadata:Rpc_metadata.t -> 'msg t -> Connection.t -> 'msg -> unit
 
   module Expert : sig
     val implement
@@ -739,7 +795,8 @@ module One_way : sig
       -> 'connection_state Implementation.t
 
     val dispatch
-      :  _ t
+      :  ?metadata:Rpc_metadata.t
+      -> _ t
       -> Connection.t
       -> Bigstring.t
       -> pos:int
@@ -749,7 +806,8 @@ module One_way : sig
     (** Like [dispatch], but does not copy data out of the buffer, so it must not change
         until the returned [unit Deferred.t] is determined. *)
     val schedule_dispatch
-      :  _ t
+      :  ?metadata:Rpc_metadata.t
+      -> _ t
       -> Connection.t
       -> Bigstring.t
       -> pos:int

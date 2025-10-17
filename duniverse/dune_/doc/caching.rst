@@ -2,6 +2,8 @@
 Dune Cache
 **********
 
+.. TODO(diataxis) This is reference material with some explanation.
+
 Dune implements a cache of build results that is shared across different
 workspaces. Before executing a build rule, Dune looks it up in the shared
 cache, and if it finds a matching entry, Dune skips the rule's execution and
@@ -13,17 +15,29 @@ or simply undoing some changes within the same workspace.
 Configuration
 =============
 
-For now, Dune cache is an opt-in feature. There are three ways to enable it.
-Choose the one that is more convenient for you:
+There are three ways to configure the Dune cache.  Choose the one that is more
+convenient for you:
 
-* Add ``(cache enabled)`` to your Dune configuration file
+* Add ``(cache <setting>)`` to your Dune configuration file
   (``~/.config/dune/config`` by default).
-* Set the environment variable ``DUNE_CACHE`` to ``enabled``
-* Run Dune with the ``--cache=enabled`` flag.
+* Set the environment variable ``DUNE_CACHE`` to ``<setting>``
+* Run Dune with the ``--cache=<setting>`` flag.
+
+Here, ``<setting>`` must be one of:
+
+* ``disabled``: disables the Dune cache completely.
+
+* ``enabled-except-user-rules``: enables the Dune cache, but excludes
+  user-written rules. This setting is a conservative choice that can avoid
+  breaking rules whose dependencies are not correctly specified. Currently the
+  default.
+
+* ``enabled``: enables the Dune cache unconditionally.
 
 By default, Dune stores the cache in your ``XDG_CACHE_HOME`` directory on \*nix
-systems and ``"HOME\\Local Settings\\Cache"`` on Windows. You can change the
-default location by setting the environment variable ``DUNE_CACHE_ROOT``.
+systems and ``%LOCALAPPDATA%\Microsoft\Windows\Temporary Internet Files\dune`` on Windows.
+You can change the default location by setting the environment variable
+``DUNE_CACHE_ROOT``.
 
 
 Cache Storage Mode
@@ -94,4 +108,4 @@ Some build rules are inherently not reproducible because they involve running
 non-deterministic commands that, for example, depend on the current time or
 download files from the Internet. To prevent Dune from caching such rules, mark
 them as non-reproducible by using ``(deps (universe))``. Please see
-:ref:`deps-field`.
+:doc:`concepts/dependency-spec`.

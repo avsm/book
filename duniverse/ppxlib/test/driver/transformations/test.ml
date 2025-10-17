@@ -1,5 +1,3 @@
-#require "base";;
-
 open Stdppx
 open Ppxlib
 
@@ -56,17 +54,50 @@ let () =
 [%%expect{|
 |}]
 
-let _ = Caml.Printf.sprintf "%s\n" [%plop]
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop]
 [%%expect{|
 - : string = "-\n"
 |}]
 
-let _ = Caml.Printf.sprintf "%s\n" [%plop.Truc]
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop.Truc]
 [%%expect{|
 - : string = "Truc\n"
 |}]
 
-let _ = Caml.Printf.sprintf "%s\n" [%plop.Truc.Bidule]
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop.Truc.Bidule]
+[%%expect{|
+- : string = "Truc.Bidule\n"
+|}]
+
+
+(* Extension with a path argument and ctxt *)
+
+let () =
+  Driver.register_transformation "plop_ctxt"
+    ~rules:[Context_free.Rule.extension
+              (Extension.V3.declare_with_path_arg "plop_ctxt"
+                 Expression
+                 Ast_pattern.(pstr nil)
+                 (fun ~ctxt ~arg ->
+                    let open Ast_builder.Default in
+                    let loc = Expansion_context.Extension.extension_point_loc ctxt in
+                    match arg with
+                    | None -> estring ~loc "-"
+                    | Some { loc; txt } -> estring ~loc (Longident.name txt)))]
+[%%expect{|
+|}]
+
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop_ctxt]
+[%%expect{|
+- : string = "-\n"
+|}]
+
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop_ctxt.Truc]
+[%%expect{|
+- : string = "Truc\n"
+|}]
+
+let _ = Stdlib.Printf.sprintf "%s\n" [%plop_ctxt.Truc.Bidule]
 [%%expect{|
 - : string = "Truc.Bidule\n"
 |}]

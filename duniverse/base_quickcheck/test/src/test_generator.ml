@@ -26,6 +26,14 @@ let%expect_test "create & generate" =
 include (Generator : Applicative.S with type 'a t := 'a t)
 include (Generator : Monad.S with type 'a t := 'a t)
 
+open struct
+  (* We want to use a consistent test count on 32- and 64-bit targets since these tests
+     reflect on the actual trials and distributions. *)
+  let config = { Test.default_config with test_count = 10_000 }
+  let test_generator ?mode ?cr t m = test_generator ~config ?mode ?cr t m
+  let show_distribution ?show t m = show_distribution ~config ?show t m
+end
+
 let%expect_test "return" =
   test_generator (Generator.return ()) m_unit;
   [%expect {| (generator exhaustive) |}];
@@ -278,6 +286,7 @@ let%expect_test "fixed_point" =
   let recursive_calls = ref 0 in
   let values_generated = ref 0 in
   Test.with_sample_exn
+    ~config
     ~f:(Sequence.iter ~f:(fun () -> Int.incr values_generated))
     (Generator.fixed_point (fun _ ->
        Int.incr recursive_calls;
@@ -309,6 +318,7 @@ let%expect_test "recursive_union" =
   let recursive_calls = ref 0 in
   let values_generated = ref 0 in
   Test.with_sample_exn
+    ~config
     ~f:(Sequence.iter ~f:(fun () -> Int.incr values_generated))
     (Generator.recursive_union [ Generator.unit ] ~f:(fun _ ->
        Int.incr recursive_calls;
@@ -341,10 +351,13 @@ let%expect_test "weighted_recursive_union" =
   let recursive_calls = ref 0 in
   let values_generated = ref 0 in
   Test.with_sample_exn
+    ~config
     ~f:(Sequence.iter ~f:(fun () -> Int.incr values_generated))
-    (Generator.weighted_recursive_union [ 1., Generator.unit ] ~f:(fun _ ->
-       Int.incr recursive_calls;
-       [ 2., Generator.unit ]));
+    (Generator.weighted_recursive_union
+       [ 1., Generator.unit ]
+       ~f:(fun _ ->
+         Int.incr recursive_calls;
+         [ 2., Generator.unit ]));
   print_s [%message "" (recursive_calls : int ref) (values_generated : int ref)];
   require_equal [%here] (module Int) !recursive_calls 1;
   require_equal [%here] (module Int) !values_generated 10_000;
@@ -537,6 +550,57 @@ let%expect_test "int_log_uniform_inclusive" =
      (4.84% 4)) |}]
 ;;
 
+let int_geometric = Generator.int_geometric
+
+let%expect_test "int_geometric" =
+  let test n p =
+    let gen = Generator.int_geometric n ~p in
+    test_generator
+      gen
+      (m_nat ~up_to:n)
+      ~mode:(if n <= 0 then `exhaustive else `inexhaustive);
+    show_distribution gen (module Int) ~show:4
+  in
+  (* check that we stay above the lower bound, test sensible distributions *)
+  test 1 0.25;
+  [%expect
+    {|
+    (generator
+     ("generated 29 distinct values in 10_000 iterations"
+      ("did not generate these values" (0))))
+    ((25.65% 1) (18.97% 2) (14.45% 3) (10.34% 4)) |}];
+  test 2 0.5;
+  [%expect
+    {|
+    (generator
+     ("generated 14 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((50.77% 2) (25.07% 3) (11.79% 4) (5.78% 5)) |}];
+  test (-3) 0.75;
+  [%expect
+    {|
+    (generator "generated 8 distinct values in 10_000 iterations")
+    ((75.84% -3) (17.57% -2) (4.97% -1) (1.2% 0)) |}];
+  (* test a very low [p] *)
+  test 1 Float.min_positive_subnormal_value;
+  expect_test_output [%here]
+  |> replace ~pattern:(Int.to_string Int.max_value) ~with_:"MAX_VALUE"
+  |> print_string;
+  [%expect
+    {|
+    (generator
+     ("generated 1 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((1x MAX_VALUE)) |}];
+  (* test bounds checking *)
+  require_does_raise [%here] (fun () -> Generator.int_geometric 0 ~p:Float.nan);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p NAN)) |}];
+  require_does_raise [%here] (fun () -> Generator.int_geometric 0 ~p:(-1.));
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p -1)) |}];
+  require_does_raise [%here] (fun () -> Generator.int_geometric 0 ~p:2.);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p 2)) |}]
+;;
+
 let int32 = Generator.int32
 
 let%expect_test "int32" =
@@ -641,6 +705,54 @@ let%expect_test "int32_log_uniform_inclusive" =
      (5.08% 5)
      (5.07% 7)
      (4.84% 4)) |}]
+;;
+
+let int32_geometric = Generator.int32_geometric
+
+let%expect_test "int32_geometric" =
+  let test n p =
+    let gen = Generator.int32_geometric (Int32.of_int_exn n) ~p in
+    test_generator
+      gen
+      (m_nat' ~up_to:n (module Int32))
+      ~mode:(if n <= 0 then `exhaustive else `inexhaustive);
+    show_distribution gen (module Int32) ~show:4
+  in
+  (* check that we stay above the lower bound, test sensible distributions *)
+  test 1 0.25;
+  [%expect
+    {|
+    (generator
+     ("generated 29 distinct values in 10_000 iterations"
+      ("did not generate these values" (0))))
+    ((25.65% 1) (18.97% 2) (14.45% 3) (10.34% 4)) |}];
+  test 2 0.5;
+  [%expect
+    {|
+    (generator
+     ("generated 14 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((50.77% 2) (25.07% 3) (11.79% 4) (5.78% 5)) |}];
+  test (-3) 0.75;
+  [%expect
+    {|
+    (generator "generated 8 distinct values in 10_000 iterations")
+    ((75.84% -3) (17.57% -2) (4.97% -1) (1.2% 0)) |}];
+  (* test a very low [p] *)
+  test 1 Float.min_positive_subnormal_value;
+  [%expect
+    {|
+      (generator
+       ("generated 1 distinct values in 10_000 iterations"
+        ("did not generate these values" (0 1))))
+      ((1x 2147483647)) |}];
+  (* test bounds checking *)
+  require_does_raise [%here] (fun () -> Generator.int32_geometric 0l ~p:Float.nan);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p NAN)) |}];
+  require_does_raise [%here] (fun () -> Generator.int32_geometric 0l ~p:(-1.));
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p -1)) |}];
+  require_does_raise [%here] (fun () -> Generator.int32_geometric 0l ~p:2.);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p 2)) |}]
 ;;
 
 let int63 = Generator.int63
@@ -762,6 +874,54 @@ let%expect_test "int63_log_uniform_inclusive" =
      (4.84% 4)) |}]
 ;;
 
+let int63_geometric = Generator.int63_geometric
+
+let%expect_test "int63_geometric" =
+  let test n p =
+    let gen = Generator.int63_geometric (Int63.of_int_exn n) ~p in
+    test_generator
+      gen
+      (m_nat' ~up_to:n (module Int63))
+      ~mode:(if n <= 0 then `exhaustive else `inexhaustive);
+    show_distribution gen (module Int63) ~show:4
+  in
+  (* check that we stay above the lower bound, test sensible distributions *)
+  test 1 0.25;
+  [%expect
+    {|
+    (generator
+     ("generated 29 distinct values in 10_000 iterations"
+      ("did not generate these values" (0))))
+    ((25.65% 1) (18.97% 2) (14.45% 3) (10.34% 4)) |}];
+  test 2 0.5;
+  [%expect
+    {|
+    (generator
+     ("generated 14 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((50.77% 2) (25.07% 3) (11.79% 4) (5.78% 5)) |}];
+  test (-3) 0.75;
+  [%expect
+    {|
+    (generator "generated 8 distinct values in 10_000 iterations")
+    ((75.84% -3) (17.57% -2) (4.97% -1) (1.2% 0)) |}];
+  (* test a very low [p] *)
+  test 1 Float.min_positive_subnormal_value;
+  [%expect
+    {|
+    (generator
+     ("generated 1 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((1x 4611686018427387903)) |}];
+  (* test bounds checking *)
+  require_does_raise [%here] (fun () -> Generator.int63_geometric Int63.zero ~p:Float.nan);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p NAN)) |}];
+  require_does_raise [%here] (fun () -> Generator.int63_geometric Int63.zero ~p:(-1.));
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p -1)) |}];
+  require_does_raise [%here] (fun () -> Generator.int63_geometric Int63.zero ~p:2.);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p 2)) |}]
+;;
+
 let int64 = Generator.int64
 
 let%expect_test "int64" =
@@ -867,6 +1027,54 @@ let%expect_test "int64_log_uniform_inclusive" =
      (5.08% 5)
      (5.07% 7)
      (4.84% 4)) |}]
+;;
+
+let int64_geometric = Generator.int64_geometric
+
+let%expect_test "int64_geometric" =
+  let test n p =
+    let gen = Generator.int64_geometric (Int64.of_int_exn n) ~p in
+    test_generator
+      gen
+      (m_nat' ~up_to:n (module Int64))
+      ~mode:(if n <= 0 then `exhaustive else `inexhaustive);
+    show_distribution gen (module Int64) ~show:4
+  in
+  (* check that we stay above the lower bound, test sensible distributions *)
+  test 1 0.25;
+  [%expect
+    {|
+    (generator
+     ("generated 29 distinct values in 10_000 iterations"
+      ("did not generate these values" (0))))
+    ((25.65% 1) (18.97% 2) (14.45% 3) (10.34% 4)) |}];
+  test 2 0.5;
+  [%expect
+    {|
+    (generator
+     ("generated 14 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((50.77% 2) (25.07% 3) (11.79% 4) (5.78% 5)) |}];
+  test (-3) 0.75;
+  [%expect
+    {|
+    (generator "generated 8 distinct values in 10_000 iterations")
+    ((75.84% -3) (17.57% -2) (4.97% -1) (1.2% 0)) |}];
+  (* test a very low [p] *)
+  test 1 Float.min_positive_subnormal_value;
+  [%expect
+    {|
+      (generator
+       ("generated 1 distinct values in 10_000 iterations"
+        ("did not generate these values" (0 1))))
+      ((1x 9223372036854775807)) |}];
+  (* test bounds checking *)
+  require_does_raise [%here] (fun () -> Generator.int64_geometric 0L ~p:Float.nan);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p NAN)) |}];
+  require_does_raise [%here] (fun () -> Generator.int64_geometric 0L ~p:(-1.));
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p -1)) |}];
+  require_does_raise [%here] (fun () -> Generator.int64_geometric 0L ~p:2.);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p 2)) |}]
 ;;
 
 let nativeint = Generator.nativeint
@@ -981,6 +1189,57 @@ let%expect_test "nativeint_log_uniform_inclusive" =
      (5.08% 5)
      (5.07% 7)
      (4.84% 4)) |}]
+;;
+
+let nativeint_geometric = Generator.nativeint_geometric
+
+let%expect_test "nativeint_geometric" =
+  let test n p =
+    let gen = Generator.nativeint_geometric (Nativeint.of_int n) ~p in
+    test_generator
+      gen
+      (m_nat' ~up_to:n (module Nativeint))
+      ~mode:(if n <= 0 then `exhaustive else `inexhaustive);
+    show_distribution gen (module Nativeint) ~show:4
+  in
+  (* check that we stay above the lower bound, test sensible distributions *)
+  test 1 0.25;
+  [%expect
+    {|
+    (generator
+     ("generated 29 distinct values in 10_000 iterations"
+      ("did not generate these values" (0))))
+    ((25.65% 1) (18.97% 2) (14.45% 3) (10.34% 4)) |}];
+  test 2 0.5;
+  [%expect
+    {|
+    (generator
+     ("generated 14 distinct values in 10_000 iterations"
+      ("did not generate these values" (0 1))))
+    ((50.77% 2) (25.07% 3) (11.79% 4) (5.78% 5)) |}];
+  test (-3) 0.75;
+  [%expect
+    {|
+    (generator "generated 8 distinct values in 10_000 iterations")
+    ((75.84% -3) (17.57% -2) (4.97% -1) (1.2% 0)) |}];
+  (* test a very low [p] *)
+  test 1 Float.min_positive_subnormal_value;
+  expect_test_output [%here]
+  |> replace ~pattern:(Nativeint.to_string Nativeint.max_value) ~with_:"MAX_VALUE"
+  |> print_string;
+  [%expect
+    {|
+      (generator
+       ("generated 1 distinct values in 10_000 iterations"
+        ("did not generate these values" (0 1))))
+      ((1x MAX_VALUE)) |}];
+  (* test bounds checking *)
+  require_does_raise [%here] (fun () -> Generator.nativeint_geometric 0n ~p:Float.nan);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p NAN)) |}];
+  require_does_raise [%here] (fun () -> Generator.nativeint_geometric 0n ~p:(-1.));
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p -1)) |}];
+  require_does_raise [%here] (fun () -> Generator.nativeint_geometric 0n ~p:2.);
+  [%expect {| ("geometric distribution: p must be between 0 and 1" (p 2)) |}]
 ;;
 
 let float = Generator.float
@@ -1400,6 +1659,54 @@ let%expect_test "string_with_length_of" =
        ("" "\000" " " 0 A _ z "\000\000" "  " 00 AA __)))) |}]
 ;;
 
+let string_like = Generator.string_like
+
+let%expect_test "string_like" =
+  test_generator ~mode:`inexhaustive (Generator.string_like "__") m_string;
+  [%expect
+    {|
+    (generator
+     ("generated 2_643 distinct values in 10_000 iterations"
+      ("did not generate these values" (" " "\000\000" "  " 00)))) |}];
+  Test.with_sample_exn
+    (Generator.string_like "The quick brown fox jumps over the lazy dog.")
+    ~f:(fun sequence ->
+      Sequence.take sequence 30
+      |> Sequence.iter ~f:(fun string -> print_s (sexp_of_string string)));
+  [%expect
+    {|
+    "The quick uick brown fox jumps over the lazy dog."
+    "The quickdog."
+    "The quick brownThe quick brown fox jumps over the lazy dog."
+    .
+    "The quick brown fmps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog./"
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown  jumps over the lazy dog."
+    "The ThOHQuJyXVs8 TThOHQuXVs8gcTe\255P\000xv\134uV\197p2qysr7fAzjbAWyMdog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quickL brown fox jdJ=3umps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog.brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over tox jumps  jumps over tox jumps over the lazy dI7bog."
+    "The quick brownzy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "ThbgX\171e quuick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps HjvQyI1e lazy dog."
+    "The quick brown fox jumps over the lazy dog."
+    "The quick brown fox jumps ov jumps over the lazy dog."
+    "TOe quick brown fox jm|tumps over thethe lazy dog."
+    "\\\003DuRB9A4O8p~OUoHsP6e\255C44ZQROn4\164ru\03104FN\144wMhD"
+    "tg9+W3saM\173ZkL;3KDi\\tmSUMwxY6Y\"PLkM27]fXyN9,'"
+    "The quick brown fox jumps over the lazy dog." |}]
+;;
+
 let bytes = Generator.bytes
 
 let%expect_test "bytes" =
@@ -1603,17 +1910,17 @@ module Debug = struct
         counts |> [%sexp_of: int Map.M(Int).t] |> print_s)
     in
     (* small sample size *)
-    test { Test.default_config with test_count = 3 };
+    test { config with test_count = 3 };
     [%expect {| ((0 1) (1 1) (3 1)) |}];
     (* larger sample size *)
-    test { Test.default_config with test_count = 10 };
+    test { config with test_count = 10 };
     [%expect {| ((0 2) (1 2) (2 1) (3 1) (4 2) (6 1) (10 1)) |}];
     (* nonstandard sizes *)
-    test { Test.default_config with sizes = Sequence.cycle_list_exn [ 1; 2 ] };
+    test { config with sizes = Sequence.cycle_list_exn [ 1; 2 ] };
     [%expect {| ((0 2466) (1 2534) (2 3304) (3 1696)) |}];
     (* not enough sizes *)
     require_does_raise [%here] (fun () ->
-      test { Test.default_config with sizes = Sequence.init 10 ~f:Fn.id });
+      test { config with sizes = Sequence.init 10 ~f:Fn.id });
     [%expect
       {|
       ("Base_quickcheck.Test.run: insufficient size values for test count"
@@ -1635,7 +1942,7 @@ module Debug = struct
       in
       Test.with_sample_exn
         t
-        ~config:{ Test.default_config with test_count = n }
+        ~config:{ config with test_count = n }
         ~f:(Sequence.iter ~f:ignore);
       print_s [%message "counts" (before : int ref) (after : int ref)]
     in

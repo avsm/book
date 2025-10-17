@@ -1,46 +1,33 @@
 let ( let* ) = Result.bind
 
 module Cs = struct
-  open Cstruct
-
-  let begins_with cs target =
-    let l1 = length cs and l2 = length target in
-    l1 >= l2 && equal (sub cs 0 l2) target
-
-  let ends_with cs target =
-    let l1 = length cs and l2 = length target in
-    l1 >= l2 && equal (sub cs (l1 - l2) l2) target
+  open String
 
   let null cs = length cs = 0
 
-  let open_begin = of_string "-----BEGIN "
-  and open_end   = of_string "-----END "
-  and close      = of_string "-----"
+  let open_begin = "-----BEGIN "
+  and open_end   = "-----END "
+  and close      = "-----"
 
   let tok_of_line cs =
     if null cs then
       `Empty
-    else if get_char cs 0 = '#' then
+    else if get cs 0 = '#' then
       `Empty
-    else if begins_with cs open_begin && ends_with cs close then
-      `Begin (to_string @@ sub cs 11 (length cs - 16))
-    else if begins_with cs open_end && ends_with cs close then
-      `End (to_string @@ sub cs 9 (length cs - 14))
+    else if starts_with ~prefix:open_begin cs && ends_with ~suffix:close cs then
+      `Begin (sub cs 11 (length cs - 16))
+    else if starts_with ~prefix:open_end cs && ends_with ~suffix:close cs then
+      `End (sub cs 9 (length cs - 14))
     else
       `Data cs
 
-  let chop cs off len =
-    let (a, b) = split cs off in (a, shift b len)
-
-  let rec lines cs =
-    let rec eol i =
-      match get_char cs i with
-      | '\r' when get_char cs (i + 1) = '\n' -> chop cs i 2
-      | '\n' -> chop cs i 1
-      | _    -> eol (i + 1) in
-    match eol 0 with
-    | exception Invalid_argument _ -> [ tok_of_line cs ]
-    | a, b -> tok_of_line a :: lines b
+  let lines data =
+    List.map tok_of_line
+      (List.map
+         (fun line ->
+            let ll = length line in
+            if ll > 0 && get line (ll - 1) = '\r' then sub line 0 (ll - 1) else line)
+         (String.split_on_char '\n' data))
 
   let combine ilines =
     let rec accumulate t acc = function
@@ -48,45 +35,63 @@ module Cs = struct
       | `Data cs :: tail -> accumulate t (cs :: acc) tail
       | `End t' :: tail ->
         if String.equal t t' then
-          Ok (concat (List.rev acc), tail)
+          let data = match Base64.decode (concat "" (List.rev acc)) with
+            | Ok data -> Ok (t, data)
+            | Error e -> Error e
+          in
+          data, tail
         else
-          Error (`Msg ("invalid end, expected " ^ t ^ ", found " ^ t'))
-      | _ :: _ -> Error (`Msg "invalid line, expected data or end")
-      | [] -> Error (`Msg "end of input")
+          Error (`Msg ("invalid end, expected " ^ t ^ ", found " ^ t')), tail
+      | _ :: tail -> Error (`Msg "invalid line, expected data or end"), tail
+      | [] -> Error (`Msg "end of input"), []
     in
 
     let rec block acc = function
       | `Begin t :: tail ->
-        let* body, tail = accumulate t [] tail in
-        let* data = Base64.decode (Cstruct.to_string body) in
-        block ((t, Cstruct.of_string data) :: acc) tail
-      | _::xs -> block acc xs
-      | []    -> Ok (List.rev acc)
+        let body, tail = accumulate t [] tail in
+        block (body :: acc) tail
+      | _ :: xs -> block acc xs
+      | [] -> List.rev acc
     in
     block [] ilines
 
-  let parse data= combine (lines data)
+  let parse_with_errors data = combine (lines data)
 
   let unparse ~tag value =
-    let rec split_at_64 acc = function
-      | x when length x <= 64 -> List.rev (x :: acc)
-      | x -> let here, rest = split x 64 in
-        split_at_64 (here :: acc) rest
+    let split_at_64 data =
+      let dlen = length data in
+      let rec go acc off =
+        if dlen - off <= 64 then
+          List.rev (sub data off (dlen - off) :: acc)
+        else
+          let chunk = sub data off 64 in
+          go (chunk :: acc) (off + 64)
+      in
+      go [] 0
     in
-    let raw = Cstruct.of_string (Base64.encode_string (Cstruct.to_string value)) in
-    let pieces = split_at_64 [] raw in
-    let nl = of_string "\n" in
+    let raw = Base64.encode_string value in
+    let pieces = split_at_64 raw in
+    let nl = "\n" in
     let lines = List.flatten (List.map (fun x -> [ x ; nl ]) pieces)
     in
 
-    let tag = of_string tag in
     let first = [ open_begin ; tag ; close ; nl ]
     and last = [ open_end ; tag ; close ; nl ]
     in
-    concat (first @ lines @ last)
+    concat "" (first @ lines @ last)
 end
 
-let parse, unparse = Cs.(parse, unparse)
+let parse_with_errors, unparse = Cs.(parse_with_errors, unparse)
+
+let parse data =
+  let entries, errors =
+    List.partition_map
+      (function Ok v -> Either.Left v | Error e -> Either.Right e)
+      (parse_with_errors data)
+  in
+  match errors with
+  | [] -> Ok entries
+  | first_error :: _ -> Error first_error
 
 let exactly_one ~what = function
   | []  -> Error (`Msg ("No " ^ what))

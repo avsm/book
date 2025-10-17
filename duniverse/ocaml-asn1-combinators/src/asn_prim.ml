@@ -7,7 +7,7 @@ module Writer = Asn_writer
 
 module type Prim = sig
   type t
-  val of_cstruct : Cstruct.t -> t
+  val of_octets  : string -> t
   val to_writer  : t -> Writer.t
   val random     : unit -> t
 end
@@ -61,11 +61,11 @@ module Boolean : Prim with type t = bool = struct
 
   type t = bool
 
-  let of_cstruct cs =
-    if cs.Cstruct.len = 1 then
+  let of_octets buf =
+    if String.length buf = 1 then
       (* XXX DER check *)
-      Cstruct.get_uint8 cs 0 <> 0x00
-    else parse_error "BOOLEAN: %a" pp_cs cs
+      String.get_uint8 buf 0 <> 0x00
+    else parse_error "BOOLEAN: %a" pp_octets buf
 
   let to_writer b = Writer.of_byte (if b then 0xff else 0x00)
 
@@ -76,68 +76,48 @@ module Null : Prim with type t = unit = struct
 
   type t = unit
 
-  let of_cstruct cs = if cs.Cstruct.len <> 0 then
-    parse_error "NULL: %a" pp_cs cs
+  let of_octets buf =
+    if String.length buf <> 0 then
+      parse_error "NULL: %a" pp_octets buf
 
   let to_writer () = Writer.empty
 
   let random () = ()
 end
 
-module Integer : Prim with type t = Z.t = struct
+module Integer : Prim_s with type t = string = struct
 
-  type t = Z.t
+  type t = string
 
-  let of_int8 x = Z.of_int (if x >= 0x80 then x - 0x100 else x) [@@inline]
-  let of_int16 x = Z.of_int (if x >= 0x8000 then x - 0x10000 else x) [@@inline]
-
-  let of_cstruct cs =
-    let open Cstruct in
-
-    let rec go acc i = function
-      n when n >= 8 ->
-        let w = Z.of_int64 (BE.get_uint64 cs i) in
-        go Z.((acc lsl 64) lor (extract w 0 64)) (i + 8) (n - 8)
-    | n when n >= 4 ->
-        let w = Z.of_int32 (BE.get_uint32 cs i) in
-        go Z.((acc lsl 32) lor (extract w 0 32)) (i + 4) (n - 4)
-    | n when n >= 2 ->
-        go Z.((acc lsl 16) lor ~$(BE.get_uint16 cs i)) (i + 2) (n - 2)
-    | 1 -> Z.((acc lsl 8) lor ~$(get_uint8 cs i))
-    | _ -> acc in
-    match cs.Cstruct.len with
-      0 -> parse_error "INTEGER: length 0"
-    | 1 -> of_int8 (get_uint8 cs 0)
-    | n ->
-        let w0 = BE.get_uint16 cs 0 in
+  let of_octets buf =
+    match String.length buf with
+    | 0 -> parse_error "INTEGER: length 0"
+    | 1 -> buf
+    | _ ->
+        let w0 = String.get_uint16_be buf 0 in
         match w0 land 0xff80 with
-          0x0000 | 0xff80 -> parse_error "INTEGER: redundant form"
-        | _ -> go (of_int16 w0) 2 (n - 2)
+        | 0x0000 | 0xff80 -> parse_error "INTEGER: redundant form"
+        | _ -> buf
 
-  let last8 z = Z.(extract z 0 8 |> to_int)
+  let to_writer = Writer.of_octets
 
-  let to_writer n =
-    let sz  = Z.size n * 8 + 1 in
-    let sz1 = sz - 1 in
-    let cs  = Cstruct.create sz in
+  (* we produce integers that fit into an int *)
+  let random ?size () =
+    let rec one () =
+      let buf = random_string ?size ~chars:(0, 256) () in
+      match String.length buf with
+      | 0 -> one ()
+      | 1 -> buf
+      | _ ->
+        match String.get_uint16_be buf 0 land 0xff80 with
+        | 0x0000 | 0xff80 -> one ()
+        | _ -> buf
+    in
+    one ()
 
-    let rec write i n =
-      if n = Z.(~$(-1)) || n = Z.zero then i else
-        ( Cstruct.set_uint8 cs i (last8 n) ;
-          write (pred i) Z.(n asr 8) ) in
+  let concat = String.concat ""
 
-    let (bad_b0, padding) =
-      if n >= Z.zero then ((<=) 0x80, 0x00)
-      else ((>) 0x80, 0xff) in
-    let off =
-      let i = write sz1 n in
-      if i = sz1 || bad_b0 (Cstruct.get_uint8 cs (succ i)) then
-        ( Cstruct.set_uint8 cs i padding ; i )
-      else succ i in
-    Writer.of_cstruct Cstruct.(sub cs off (sz - off))
-
-
-  let random () = Z.of_int (Random.int max_r_int - max_r_int / 2)
+  let length = String.length
 
 end
 
@@ -145,9 +125,9 @@ module Gen_string : Prim_s with type t = string = struct
 
   type t = string
 
-  let of_cstruct x = Cstruct.to_string x
+  let of_octets x = x
 
-  let to_writer = Writer.of_string
+  let to_writer = Writer.of_octets
 
   let random ?size () =
     random_string ?size ~chars:(32, 127) ()
@@ -155,22 +135,20 @@ module Gen_string : Prim_s with type t = string = struct
   let (concat, length) = String.(concat "", length)
 end
 
-module Octets : Prim_s with type t = Cstruct.t = struct
+module Octets : Prim_s with type t = string = struct
 
-  type t = Cstruct.t
+  type t = string
 
-  let of_cstruct { Cstruct.buffer; off; len } =
-    (* XXX Mumbo jumbo to retain cs equality. *)
-    Cstruct.of_bigarray @@ Bigarray.Array1.sub buffer off len
+  let of_octets buf = buf
 
-  let to_writer = Writer.of_cstruct
+  let to_writer = Writer.of_octets
 
   let random ?size () =
-    random_string ?size ~chars:(0, 256) () |> Cstruct.of_string
+    random_string ?size ~chars:(0, 256) ()
 
-  let concat = Cstruct.concat
+  let concat = String.concat ""
 
-  let length = Cstruct.length
+  let length = String.length
 
 end
 
@@ -184,25 +162,25 @@ module Bits : sig
 end =
 struct
 
-  type t = int * Cstruct.t
+  type t = int * string
 
-  let of_cstruct cs =
-    let n = Cstruct.length cs in
+  let of_octets buf =
+    let n = String.length buf in
     if n = 0 then parse_error "BITS" else
-    let unused = Cstruct.get_uint8 cs 0 in
+    let unused = String.get_uint8 buf 0 in
     if n = 1 && unused > 0 || unused > 7 then parse_error "BITS" else
-    unused, Octets.of_cstruct (Cstruct.shift cs 1)
+    unused, Octets.of_octets (String.sub buf 1 (String.length buf - 1))
 
-  let to_writer (unused, cs) =
-    let size = Cstruct.length cs in
-    let write off cs' =
-      Cstruct.set_uint8 cs' off unused;
-      Cstruct.blit cs 0 cs' (off + 1) size in
+  let to_writer (unused, buf) =
+    let size = String.length buf in
+    let write off buf' =
+      Bytes.set_uint8 buf' off unused;
+      Bytes.blit_string buf 0 buf' (off + 1) size in
     Writer.immediate (size + 1) write
 
   let to_array (unused, cs) =
-    Array.init (Cstruct.length cs * 8 - unused) @@ fun i ->
-      let byte = (Cstruct.get_uint8 cs (i / 8)) lsl (i mod 8) in
+    Array.init (String.length cs * 8 - unused) @@ fun i ->
+      let byte = (String.get_uint8 cs (i / 8)) lsl (i mod 8) in
       byte land 0x80 = 0x80
 
   let (|<) n = function
@@ -210,33 +188,33 @@ struct
     | false -> (n lsl 1)
 
   let of_array arr =
-    let cs = Cstruct.create ((Array.length arr + 7) / 8) in
+    let buf = Bytes.create ((Array.length arr + 7) / 8) in
     match
       Array.fold_left
         (fun (n, acc, i) bit ->
           if n = 8 then
-            ( Cstruct.set_uint8 cs i acc ; (1, 0 |< bit, i + 1) )
+            ( Bytes.set_uint8 buf i acc ; (1, 0 |< bit, i + 1) )
           else (n + 1, acc |< bit, i))
         (0, 0, 0)
         arr
     with
-    | (0, _acc, _) -> (0, cs)
+    | (0, _acc, _) -> (0, Bytes.unsafe_to_string buf)
     | (n, acc, i) ->
-        Cstruct.set_uint8 cs i (acc lsl (8 - n));
-        (8 - n, cs)
+        Bytes.set_uint8 buf i (acc lsl (8 - n));
+        (8 - n, Bytes.unsafe_to_string buf)
 
   let random ?size () = (0, Octets.random ?size ())
 
-  let concat css =
-    let (unused, css') =
+  let concat bufs =
+    let (unused, bufs') =
       let rec go = function
         | []           -> (0, [])
-        | [(u, cs)]    -> (u, [cs])
-        | (_, cs)::ucs -> let (u, css') = go ucs in (u, cs::css') in
-      go css in
-    (unused, Cstruct.concat css')
+        | [(u, buf)]    -> (u, [buf])
+        | (_, buf)::bufs -> let (u, bufs') = go bufs in (u, buf::bufs') in
+      go bufs in
+    (unused, String.concat "" bufs')
 
-  and length (unused, cs) = Cstruct.length cs - unused
+  and length (unused, buf) = String.length buf - unused
 
 end
 
@@ -244,36 +222,36 @@ module OID = struct
 
   open Asn_oid
 
-  let uint64_chain cs i n =
-    let rec go acc cs i = function
+  let uint64_chain buf i n =
+    let rec go acc buf i = function
       0 -> parse_error "OID: unterminated component"
     | n ->
-        match Cstruct.get_uint8 cs i with
+        match String.get_uint8 buf i with
           0x80 when acc = 0L -> parse_error "OID: redundant form"
         | b ->
             let lo  = b land 0x7f in
             let acc = Int64.(logor (shift_left acc 7) (of_int lo)) in
-            if b < 0x80 then (acc, i + 1) else go acc cs (i + 1) (n - 1) in
+            if b < 0x80 then (acc, i + 1) else go acc buf (i + 1) (n - 1) in
     if n < 1 then parse_error "OID: 0 length component" else
-      go 0L cs i (min n 8)
+      go 0L buf i (min n 8)
 
-  let int_chain cs i n =
-    let (n, i) = uint64_chain cs i n in
+  let int_chain buf i n =
+    let (n, i) = uint64_chain buf i n in
     match Int64.to_nat_checked n with
       Some n -> (n, i) | _ -> parse_error "OID: component out of range"
 
-  let of_cstruct cs =
-    let rec components cs i = function
+  let of_octets buf =
+    let rec components buf i = function
       0 -> []
-    | n -> let (c, i') = int_chain cs i n in
-           c :: components cs i' (n + i - i') in
-    match Cstruct.length cs with
+    | n -> let (c, i') = int_chain buf i n in
+           c :: components buf i' (n + i - i') in
+    match String.length buf with
       0 -> parse_error "OID: 0 length"
     | n ->
-        let (b1, i) = int_chain cs 0 n in
+        let (b1, i) = int_chain buf 0 n in
         let v1 = b1 / 40 and v2 = b1 mod 40 in
         match base_opt v1 v2 with
-          Some b -> b <|| components cs i (n - i)
+          Some b -> b <|| components buf i (n - i)
         | None -> parse_error "OID: invalid base"
 
   let to_writer = fun (Oid (v1, v2, vs)) ->
@@ -334,7 +312,7 @@ module Time = struct
     Scanf.sscanf s "%2u%2u%2u%2u%2u%r%r%!"
       (fun ic -> try Scanf.bscanf ic "%2u" id with _ -> 0) tz @@
     fun y m d hh mm ss tz ->
-      let y  = (if y > 50 then 1900 else 2000) + y in
+      let y  = (if y >= 50 then 1900 else 2000) + y in
       let dt = ((y, m, d), ((hh, mm, ss), tz)) in
       match Ptime.of_date_time dt with
         Some t -> t | _ -> parse_error "UTCTime: out of range: %s" s
@@ -354,17 +332,19 @@ module Time = struct
           Some t -> Ptime.(Span.v (0, ps) |> add_span t) | _ -> None
       with Some t -> t | _ -> parse_error "GeneralizedTime: out of range: %s" s
 
-  let get = function Some x -> x | _ -> assert false
-
-  let date y m d = Ptime.of_date (y, m, d) |> get
+  let date y m d = Ptime.of_date (y, m, d) |> Option.get
 
   let r_date ~start ~fin =
     let dd, dps = match Ptime.(diff fin start |> Span.to_d_ps) with
       | (dd, 0L)  -> Random.(int dd, int64 86_400_000_000_000_000L)
       | (dd, dps) -> Random.(int (dd + 1), int64 dps) in
-    Ptime.(Span.(v Random.(int (dd + 1), int64 dps)) |> add_span start) |> get
+    Ptime.(Span.(v Random.(int (dd + 1), int64 dps)) |> add_span start) |> Option.get
 
-  let random ?(frac=false) () =
-    Ptime.truncate ~frac_s:(if frac then 3 else 0) @@
-      r_date ~start:(date 1970 1 1) ~fin:(date 2050 12 31)
+  let utc_random () =
+    Ptime.truncate ~frac_s:0 @@
+      r_date ~start:(date 1950 1 1) ~fin:(date 2049 12 31)
+
+  let gen_random () =
+    Ptime.truncate ~frac_s:3 @@
+      r_date ~start:(date 0000 1 1) ~fin:(date 9999 12 31)
 end

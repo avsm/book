@@ -8,6 +8,7 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Attribute
 open Syntax
 
 (* Because the main function, [NewRuleSyntax.rule], is called by the stage 2
@@ -28,10 +29,12 @@ let (>>) f g x =
 
 (* [return pos x] is the semantic action [{x}]. *)
 
+(* No %prec annotation or attribute can be supplied when this form is used. *)
+
 let return pos x : seq_expression =
   let action = Action.from_il_expr (IL.EVar x) in
   let raw_action _ _ = action in
-  Positions.with_pos pos (EAction (XATraditional raw_action, None))
+  Positions.with_pos pos (EAction (XATraditional raw_action, None, []))
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -360,7 +363,7 @@ and extend (p : pattern) (e1 : symbol_expression) (context : context) : context 
 and production_aux
   (context : context)
   (e : seq_expression)
-  (level : branch_production_level)
+  (level : production_level)
 : parameterized_branch =
   let e, pos = Positions.decompose e in
   match e with
@@ -370,21 +373,22 @@ and production_aux
          context, then continue with [e2]. *)
       production_aux (extend p e1 context) e2 level
 
-  | EAction (XATraditional raw_action, prec) ->
+  | EAction (XATraditional raw_action, prec, attrs) ->
       (* An action expression. This is the end of the sequence. *)
       tilde_used_warning context.tilde_used;
       (* Check that the semantic action seems well-formed. *)
       let action = raw_action Settings.DollarsDisallowed (uxs context) in
       (* Build and return a complete production. *)
       {
-        pr_branch_position         = context.pos;
-        pr_producers               = producers context;
-        pr_action                  = context.bindings action;
-        pr_branch_prec_annotation  = prec;
-        pr_branch_production_level = level;
+        pb_position         = context.pos;
+        pb_producers        = producers context;
+        pb_action           = context.bindings action;
+        pb_prec_annotation  = prec;
+        pb_production_level = level;
+        pb_attributes       = attrs;
       }
 
-  | EAction (XAPointFree oid, prec) ->
+  | EAction (XAPointFree oid, prec, attrs) ->
       (* A point-free semantic action, containing an OCaml identifier [id]
          between angle brackets. This is syntactic sugar for a traditional
          semantic action containing an application of [id] to a tuple of the
@@ -414,7 +418,7 @@ and production_aux
       (* Build a traditional semantic action. *)
       let action = Action.from_il_expr e in
       let raw_action _ _ = action in
-      let e = EAction (XATraditional raw_action, prec) in
+      let e = EAction (XATraditional raw_action, prec, attrs) in
       let e = Positions.with_pos pos e in
       (* Reset [tilde_used], to avoid triggering the warning
          via our recursive call. *)
@@ -432,6 +436,7 @@ and production_aux
          that in a sequence [e1; e2; e3] only the value of the last expression
          is returned. *)
       (* No %prec annotation can be supplied when this sugar is used. *)
+      (* No attribute can be supplied when this sugar is used. *)
       let x = semvar context in
       let e = ECons (SemPatVar (Positions.with_pos pos x), e, return pos x) in
       let e = Positions.with_pos pos e in

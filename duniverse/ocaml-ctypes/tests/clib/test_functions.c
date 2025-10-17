@@ -236,7 +236,7 @@ struct animal_methods {
   char *(*identify)(struct animal *);
 };
 
-int check_name(struct animal *a, char *name)
+int check_name(struct animal *a, const char *name)
 {
   return strcmp(a->vtable->identify(a), name) == 0;
 }
@@ -544,14 +544,14 @@ double *matrix_transpose(int rows, int cols, double *matrix)
   return rv;
 }
 
-int (*plus_callback)(int) = NULL;
+int (*plus_callback)(int, int) = NULL;
 
 /* Sum the range [a, b] */
 int sum_range_with_plus_callback(int a, int b)
 {
   int sum = 0, i = 0;
   for (i = a; i <= b; i++) {
-    sum += i;
+    sum = plus_callback (sum, i);
   }
   return sum;
 }
@@ -755,7 +755,7 @@ GEN_RETURN_F(float)
 GEN_RETURN_F(double)
 GEN_RETURN_F(bool)
 
-char *string_array[2] = { "Hello", "world" };
+const char *string_array[2] = { "Hello", "world" };
 int32_t int_array[5] = { 0, 1, 2, 3, 4 };
 
 void check_ones(const int *p, size_t sz)

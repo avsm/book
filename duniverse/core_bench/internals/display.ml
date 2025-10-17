@@ -23,7 +23,8 @@ module Warnings = struct
         "Benchmarks that take 1ns to %s can be estimated precisely. For more reliable \n\
          estimates, redesign your benchmark to have a shorter execution time.\n\
          %!"
-        (Time.Span.to_string (Time.Span.of_ns long_running_benchmark_time_limit_nanos))
+        (Time_float.Span.to_string
+           (Time_float.Span.of_ns long_running_benchmark_time_limit_nanos))
   ;;
 end
 
@@ -205,7 +206,7 @@ let make_speed_and_percentage_columns display_config tbl =
     (* To computer speedup and percentage, we need the Nanos-vs-Rubs regression as to be
        present in the results. *)
     let timing_key = Analysis_config.make_key Analysis_config.nanos_vs_runs in
-    match Int.Table.find tbl timing_key with
+    match Hashtbl.find tbl timing_key with
     | None ->
       printf "Error: Estimating speedup/percentage requires Nanos-vs-Runs analysis.\n%!";
       []
@@ -261,12 +262,12 @@ let make_columns_for_regressions display_config results =
   let add_to_table regr =
     Regr.update
       ~regr
-      (Int.Table.find_or_add tbl (R.key regr) ~default:(fun () -> Regr.create regr))
+      (Hashtbl.find_or_add tbl (R.key regr) ~default:(fun () -> Regr.create regr))
   in
   List.iter results ~f:(fun result ->
     Array.iter (Analysis_result.regressions result) ~f:(fun regr -> add_to_table regr));
   let regressions =
-    List.sort (Int.Table.to_alist tbl) ~compare:(fun (a, _) (b, _) -> compare a b)
+    List.sort (Hashtbl.to_alist tbl) ~compare:(fun (a, _) (b, _) -> compare a b)
   in
   let show_absolute_ci = display_config.Display_config.show_absolute_ci in
   let show_all_values = display_config.Display_config.show_all_values in
@@ -295,8 +296,11 @@ let make_columns display_config results =
   in
   let cols =
     let name =
-      Ascii_table_kernel.Column.create ~align:Left "Name" (fun res ->
-        Analysis_result.name res)
+      Ascii_table_kernel.Column.create
+        ~max_width:display_config.Display_config.max_name_length
+        ~align:Left
+        "Name"
+        (fun res -> Analysis_result.name res)
     in
     name :: cols
   in

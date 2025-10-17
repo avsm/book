@@ -1,3 +1,78 @@
+## v1.0.6 (2025-04-15)
+
+* Update tests to mirage-crypto-rng 1.2.0 API (@hannesm)
+* Certificate.fold_pem_multiple: improve error message (#180 @hannesm)
+
+## v1.0.5 (2024-10-28)
+
+* Removed links to nqsb (we're no longer in charge of that domain)
+  (6398b0c2a24e1a09d494d93ac65423eca9d7de24)
+
+## v1.0.4 (2024-09-29)
+
+* **breaking change** Allow decoding of negative serial numbers (#177 @hannesm)
+  Now, `serial` returns the entire (integer) value as a string - previously the
+  potentially leading 0 byte was removed. So:
+  -serial d795 49bd 1a67 1751
+  +serial 00d7 9549 bd1a 6717  51
+  fixes in 38cc70a54d2d98526564733838769d82b10679fc and #179 (#178 @dinosaure)
+* Add alternate SHA1RSA OID 1.3.14.3.2.29 (#176 @mefyl)
+* Allow custom pretty printers for unknown X509 extensions (#175 @reynir)
+* Minor code cleanups: remove unused algorithms, remove `def` and `def'`
+  (#177 @hannesm)
+
+## v1.0.3 (2024-09-04)
+
+* Use the opam package kdf instead of pbkdf (@hannesm #174)
+
+## v1.0.2 (2024-08-25)
+
+* Fix RSA public and private key encoding and decoding (@hannesm #172, reported
+  by @anmonteiro #171)
+
+## v1.0.1 (2024-08-06)
+
+* Speedup PEM decoding and encoding significantly (@hannesm #170)
+
+## v1.0.0 (2024-07-20)
+
+* **breaking change** Replace `Cstruct.t` by `string` (@dinosaure, @hannesm, #167)
+* Remove P224 (@dinosaure, @hannes, #166) - which was removed in mirage-crypto-ec 1.0.0
+* **breaking change** The serial number of certificates is a `string` and enforced to be a positive
+  integer of at most 20 bytes in length (@hannesm, #167)
+* **breaking change** `Authenticator.server_key_fingerprint` and
+  `Authenticator.server_cert_fingerprint` are now known as
+  `Authenticator.key_fingerprint` and `Authenticator.cert_fingerprint`
+  respectively to better reflect that they do not check extended key usage is
+  "server" and may as well be used for authenticating clients (@reynir, #164)
+* Add Certificate.fold_decode_pem_multiple to decode multiple pem encoded certificates and make the error handling explicit (ignore, log, fail on first error). Motivated by mirage/ca-certs#30 (@art-w #169)
+
+## v0.16.5 (2023-07-03)
+
+* Always embed local_key_id in PKCS12 bags (reported #163 by @NightBlues,
+  revised and implemented by @hannesm)
+
+## v0.16.4 (2023-02-13)
+
+* Adapt to mirage-crypto-rng 0.11.0 API changes (#162 @hannesm)
+
+## v0.16.3 (2023-02-04)
+
+* Validation: allow self-signed server certificate with BasicConstraints CA=true
+  (reported by @mbacarella in mirleft/ocaml-tls#446
+   (https://github.com/lightningnetwork/lnd/issues/5450), fix #161 by @hannesm)
+
+## v0.16.2 (2022-10-05)
+
+* Improve parse error message of Authenticator.of_string (mirage/ocaml-git#593
+  by @dinosaure, mirage/ocaml-git#582 by @reynir)
+
+## v0.16.1 (2022-09-14)
+
+* Support ECDSA signatures where the hash algorithm output length exceeds the
+  size of the elliptic curve (by truncating, and using the leftmost bits).
+  Reported as #158 by @torinnd, fixed in #159 by @hannesm
+
 ## v0.16.0 (2022-02-15)
 
 * Provide X509.Authenticator.of_string to construct an Authenticator.t from

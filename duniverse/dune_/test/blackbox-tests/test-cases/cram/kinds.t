@@ -36,7 +36,6 @@ other files are visible within the test.
   $ echo "Contents of file a" > dir/dir.t/a
   $ cat > dir/dir.t/run.t << EOF
   >   $ echo Dir test
-  >  
   >   $ cat a
   > EOF
 
@@ -52,7 +51,6 @@ other files are visible within the test.
   $ cat dir/dir.t/run.t
     $ echo Dir test
     Dir test
-   
     $ cat a
     Contents of file a
 
@@ -63,8 +61,8 @@ If there is no run.t file, an error message is displayed.
   $ mkdir -p dir-no-run/dir.t
   $ echo "Contents of file a" > dir-no-run/dir.t/a
   $ dune runtest dir-no-run
+  File "dir-no-run/dir.t", line 1, characters 0-0:
   Error: Cram test directory dir-no-run/dir.t does not contain a run.t file.
-  -> required by alias dir-no-run/runtest
   [1]
 
 However, if the directory is empty, this check is skipped. (git can leave such

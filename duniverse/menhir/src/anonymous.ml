@@ -32,7 +32,7 @@ let fn_producer accu ((_, p, _) : producer) =
   fn_parameter accu p
 
 let fn_branch accu branch =
-  List.fold_left fn_producer accu branch.pr_producers
+  List.fold_left fn_producer accu branch.pb_producers
 
 let fn_branches accu branches =
   List.fold_left fn_branch accu branches
@@ -42,7 +42,7 @@ let fn_branches accu branches =
 (* This functor makes it easy to share mutable internal state between
    the functions that follow. *)
 
-module Run (X : sig end) = struct
+module Run () = struct
 
 (* ------------------------------------------------------------------------ *)
 
@@ -123,10 +123,10 @@ and transform_producer parameters ((x, p, attrs) : producer) =
   x, transform_parameter parameters p, attrs
 
 and transform_parameterized_branch parameters branch =
-  let pr_producers =
-    List.map (transform_producer parameters) branch.pr_producers
+  let pb_producers =
+    List.map (transform_producer parameters) branch.pb_producers
   in
-  { branch with pr_producers }
+  { branch with pb_producers }
 
 let transform_parameterized_rule rule =
   let pr_branches =
@@ -141,7 +141,7 @@ end
 (* The main entry point invokes the functor and reads its result. *)
 
 let transform_partial_grammar g =
-  let module R = Run(struct end) in
+  let module R = Run() in
   let pg_rules = List.map R.transform_parameterized_rule g.pg_rules in
   let pg_rules = !R.rules @ pg_rules in
   { g with pg_rules }

@@ -101,30 +101,49 @@ int main(int argc, char ** argv)
 |}
 ;;
 
+let prog_bmi2 =
+  {|
+int main(int argc, char ** argv)
+{
+#ifndef __BMI2__
+#error "BMI2 Not supported"
+#endif
+  return 0;
+}
+|}
+;;
+
 let () =
   let output = ref "" in
   main
     ~name:"discover"
     ~args:[ "-o", Set_string output, "FILENAME output file" ]
-    (fun c ->
-       let flags =
-         List.filter_map
-           (fun (flag, prog) ->
-              match c_test c ~c_flags:[ flag ] prog with
-              | true -> Some flag
-              | false -> None)
-           [ "-mpopcnt", prog_popcnt
-      (*     ; "-mlzcnt", prog_lzcnt
-           ; "-mbmi", prog_tzcnt *)
-           ; "-mcrc32", prog_crc32
-           ; "-mcrc32", prog_crc32_on_32bit_target
-           ; "-msse4.2", prog_sse42
-           ; "-msse4.1", prog_sse41
-           ; "-mprfchw", prog_prefetchw
-           ; "-mprefetchwt1", prog_prefetchwt1
-           ; "-march=armv8-a+crc", prog_arm_crc32
-           ]
-         |> List.sort_uniq String.compare
-       in
-       Flags.write_sexp !output flags)
+    (fun _c ->
+      let flags =
+        List.filter_map
+          (fun (flag, prog) ->
+           let test_flag flag prog =
+            let f, oc = Filename.open_temp_file "baseconf" ".c" in
+            Fun.protect ~finally:(fun () -> close_out oc; Sys.remove f)
+              (fun () ->
+                Out_channel.(output_string oc prog; flush oc);
+                Sys.command (Printf.sprintf "cc %s %s -o /dev/null >/dev/null 2>&1" f flag) = 0)
+            in
+            match test_flag flag prog with
+            | true -> Some flag
+            | false -> None)
+          [ "-mpopcnt", prog_popcnt (* ; "-mlzcnt", prog_lzcnt
+                                     * ; "-mbmi", prog_tzcnt *)
+          ; "-mcrc32", prog_crc32
+          ; "-mcrc32", prog_crc32_on_32bit_target
+          ; "-mbmi2", prog_bmi2
+          ; "-msse4.2", prog_sse42
+          ; "-msse4.1", prog_sse41
+          ; "-mprfchw", prog_prefetchw
+          ; "-mprefetchwt1", prog_prefetchwt1
+          ; "-march=armv8-a+crc", prog_arm_crc32
+          ]
+        |> List.sort_uniq String.compare
+      in
+      Flags.write_sexp !output flags)
 ;;

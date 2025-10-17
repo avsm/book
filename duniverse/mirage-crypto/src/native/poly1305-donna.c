@@ -7,7 +7,10 @@ typedef struct poly1305_context {
         unsigned char opaque[136];
 } poly1305_context;
 
-#ifdef ARCH_64BIT
+/* 64-bit Windows sets ARCH_64BIT but poly1305-donna-64 requires 128-bit integers
+ * that are not supported by the Microsoft compiler. Drop down to 32-bit for MSVC.
+ */
+#if defined(ARCH_64BIT) && !defined(_MSC_VER)
 #include "poly1305-donna-64.h"
 #else
 #include "poly1305-donna-32.h"
@@ -51,18 +54,18 @@ poly1305_update(poly1305_context *ctx, const unsigned char *m, size_t bytes) {
 }
 
 //stubs for OCaml
-CAMLprim value mc_poly1305_init (value ctx, value key, value off) {
-  poly1305_init ((poly1305_context *) Bytes_val(ctx), _ba_uint8_off(key, off));
+CAMLprim value mc_poly1305_init (value ctx, value key) {
+  poly1305_init ((poly1305_context *) Bytes_val(ctx), _st_uint8(key));
   return Val_unit;
 }
 
 CAMLprim value mc_poly1305_update (value ctx, value buf, value off, value len) {
-  poly1305_update ((poly1305_context *) Bytes_val(ctx), _ba_uint8_off(buf, off), Int_val(len));
+  poly1305_update ((poly1305_context *) Bytes_val(ctx), _st_uint8_off(buf, off), Int_val(len));
   return Val_unit;
 }
 
 CAMLprim value mc_poly1305_finalize (value ctx, value mac, value off) {
-  poly1305_finish ((poly1305_context *) Bytes_val(ctx), _ba_uint8_off(mac, off));
+  poly1305_finish ((poly1305_context *) Bytes_val(ctx), _bp_uint8_off(mac, off));
   return Val_unit;
 }
 

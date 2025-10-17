@@ -11,6 +11,8 @@
 let position = Positions.position
 open Keyword
 type sw = subject * where
+open Attribute
+open Syntax
 open BasicSyntax
 open ListMonad
 let drop = MenhirLib.General.drop
@@ -59,18 +61,69 @@ let find grammar symbol : rule =
 
 (* [check_no_producer_attributes] checks that a producer, which represents a
    use site of an %inline symbol, does not carry any attributes. This ensures
-   that we need not worry about propagating attributes through inlining. *)
+   that we need not worry about propagating producer attributes through
+   inlining. *)
 
 let check_no_producer_attributes producer =
   match producer_attributes producer with
   | [] ->
       ()
-  | (id, _payload) :: _attributes ->
+  | attr :: _ ->
       Error.error
-        [position id]
+        [attr.origin]
         "the nonterminal symbol %s is declared %%inline.\n\
          A use of it cannot carry an attribute."
         (producer_symbol producer)
+
+(* [combine_name_attributes] combines the [@name] attributes of the caller and
+   callee, as described below. It produces a list of zero or one attribute. *)
+
+type oattr =
+  attribute option
+
+let combine_name_attributes (caller : oattr) (callee : oattr) : attributes =
+  match caller, callee with
+  | Some caller, Some callee ->
+      let key = caller.key in
+      assert (key = "name");
+      let payload = Printf.sprintf "%s_%s" caller.payload callee.payload in
+      let origin = caller.origin in (* not great! information is lost *)
+      let attr = { key; payload; origin } in
+      [attr]
+  | Some attr, None ->
+      [attr]
+  | None, Some attr ->
+      [attr]
+  | None, None ->
+      []
+
+(* [inline_attributes caller callee] computes the attributes of the new branch
+   that is obtained by inlining the branch [callee] into the branch [caller]. *)
+
+(* Our general policy is as follows:
+   the attributes of the new branch are those of the caller.
+   The attributes of the callee (if there are any) are lost.
+   This policy could change in the future. *)
+
+(* As an exception to this general policy, [@name] attributes are treated
+   in a special way. Our motivation is to preserve the property that no
+   two productions carry the same name. To this end, the [@name] attributes
+   of the caller and callee are combined, as follows:
+   - if both names are present, then they are concatenated,
+     with a '_' character as a separator;
+   - if only one name is present, then this name is retained. *)
+
+let inline_attributes (caller : branch) (callee : branch) : attributes =
+  let caller, callee = caller.br_attributes, callee.br_attributes in
+  (* Isolate the [@name] attributes. *)
+  let ocaller, caller = extract_attribute "name" caller
+  and ocallee, callee = extract_attribute "name" callee in
+  (* Combine the [@name] attributes of the caller and callee. *)
+  let oname = combine_name_attributes ocaller ocallee in
+  (* Apply the default policy to the remaining attributes. *)
+  let attrs = (ignore callee; caller) in
+  (* Put everything together. *)
+  oname @ attrs
 
 (* -------------------------------------------------------------------------- *)
 
@@ -81,7 +134,7 @@ let check_no_producer_attributes producer =
    host production does not already have a %prec annotation. *)
 
 let check_prec_inline caller producer nsuffix callee =
-  callee.branch_prec_annotation |> Option.iter (fun callee_prec ->
+  callee.prec_annotation |> Option.iter (fun callee_prec ->
     (* The callee has a %prec annotation. *)
     (* Check condition 1. *)
     if nsuffix > 0 then begin
@@ -93,7 +146,7 @@ let check_prec_inline caller producer nsuffix callee =
         symbol symbol
     end;
     (* Check condition 2. *)
-    caller.branch_prec_annotation |> Option.iter (fun caller_prec ->
+    caller.prec_annotation |> Option.iter (fun caller_prec ->
       let symbol = producer_symbol producer in
       Error.error [ position callee_prec; position caller_prec ]
         "this production carries a %%prec annotation,\n\
@@ -112,12 +165,12 @@ let check_prec_inline caller producer nsuffix callee =
    remains undocumented. *)
 
 let propagate_prec_annotation caller callee =
-  match callee.branch_prec_annotation with
+  match callee.prec_annotation with
   | (Some _) as annotation ->
-      assert (caller.branch_prec_annotation = None);
+      assert (caller.prec_annotation = None);
       annotation
   | None ->
-      caller.branch_prec_annotation
+      caller.prec_annotation
 
 (* -------------------------------------------------------------------------- *)
 
@@ -321,7 +374,7 @@ let inline_branch caller (i, producer : site) (callee : branch) : branch =
      between %prec and %inline. Then, (possibly) propagate a %prec
      annotation. *)
   check_prec_inline caller producer nsuffix callee;
-  let branch_prec_annotation = propagate_prec_annotation caller callee in
+  let prec_annotation = propagate_prec_annotation caller callee in
 
   (* Compute the names of the producers in the host branch (the caller), minus
      the one that is being inlined away. Rename the producers of the inlined
@@ -360,15 +413,21 @@ let inline_branch caller (i, producer : site) (callee : branch) : branch =
   in
   let action = Action.compose x callee_action caller_action in
 
+  (* The position and production level of the new branch are those
+     of the caller. *)
+
+  let { branch_position; production_level; _ } = caller in
+  let br_attributes = inline_attributes caller callee in
+
   (* We are done! Build a new branch. *)
 
-  let { branch_position; branch_production_level; _ } = caller in
   {
     branch_position;
     producers;
     action;
-    branch_prec_annotation;
-    branch_production_level;
+    prec_annotation;
+    production_level;
+    br_attributes;
   }
 
 (* -------------------------------------------------------------------------- *)
@@ -467,7 +526,7 @@ module Inline (G : sig val grammar: grammar end) = struct
 
   (* Apply [defensive_fix] to obtain a closed function [expand_symbol]. *)
 
-  let expand_symbol : Syntax.symbol -> rule =
+  let expand_symbol : symbol -> rule =
     Fix.Memoize.String.defensive_fix expand_symbol
 
   (* Wrap [expand_symbol] in an exception handler, so that, when a cycle

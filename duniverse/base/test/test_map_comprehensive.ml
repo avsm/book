@@ -43,20 +43,13 @@ module type S = sig
   module Types : Types
 
   include
-    Map.Creators_generic
+    Map.Creators_and_accessors_generic
     with type ('a, 'b, 'c) t := ('a, 'b, 'c) Types.t
     with type ('a, 'b, 'c) tree := ('a, 'b, 'c) Types.tree
     with type 'a key := 'a Types.key
     with type 'a cmp := 'a Types.cmp
-    with type ('a, 'b, 'c) options := ('a, 'b, 'c) Types.create_options
-
-  include
-    Map.Accessors_generic
-    with type ('a, 'b, 'c) t := ('a, 'b, 'c) Types.t
-    with type ('a, 'b, 'c) tree := ('a, 'b, 'c) Types.tree
-    with type 'a key := 'a Types.key
-    with type 'a cmp := 'a Types.cmp
-    with type ('a, 'b, 'c) options := ('a, 'b, 'c) Types.access_options
+    with type ('a, 'b, 'c) create_options := ('a, 'b, 'c) Types.create_options
+    with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Types.access_options
 end
 
 (** Helpers for testing a tree or map type that is an instance of [S]. *)
@@ -219,8 +212,7 @@ end
 module Test_creators_and_accessors
     (Types : Types)
     (Impl : S with module Types := Types)
-    (Instance : Instance with module Types := Types) : S with module Types := Types =
-struct
+    (Instance : Instance with module Types := Types) : S with module Types := Types = struct
   open Instance
   open Impl
 
@@ -255,12 +247,24 @@ struct
       type t = Inst.t * Key.t * int [@@deriving quickcheck, sexp_of]
     end
 
+    module Inst_inst = struct
+      type t = Inst.t Instance.t [@@deriving equal, quickcheck, sexp_of]
+    end
+
     module Inst_multi = struct
       type t = int list Instance.t [@@deriving equal, quickcheck, sexp_of]
     end
 
     module Key_and_data = struct
       type t = Key.t * int [@@deriving equal, sexp_of]
+    end
+
+    module Key_and_data_inst = struct
+      type t = (Key.t * int) Instance.t [@@deriving equal, sexp_of]
+    end
+
+    module Key_and_data_inst_multi = struct
+      type t = (Key.t * int) list Instance.t [@@deriving equal, sexp_of]
     end
 
     module Maybe_bound = struct
@@ -272,6 +276,11 @@ struct
         | Unbounded
       [@@deriving quickcheck, sexp_of]
     end
+
+    let ok_or_duplicate_key = function
+      | `Ok x -> Ok x
+      | `Duplicate_key key -> Or_error.error_s [%sexp (key : Key.t)]
+    ;;
   end
 
   (** creators *)
@@ -310,7 +319,7 @@ struct
           [%here]
           (module Ok (Alist))
           (Or_error.map t_or_error ~f:to_alist)
-          (let compare = Comparable.lift Key.compare ~f:fst in
+          (let compare a b = Comparable.lift Key.compare ~f:fst a b in
            if List.contains_dup alist ~compare
            then Or_error.error_string "duplicate"
            else Ok (List.sort alist ~compare));
@@ -333,7 +342,8 @@ struct
           create of_alist_fold alist ~init:[] ~f:(fun xs x -> x :: xs) |> map ~f:List.rev
         in
         let t_reduce =
-          create of_alist_reduce (List.Assoc.map alist ~f:List.return) ~f:( @ )
+          create of_alist_reduce (List.Assoc.map alist ~f:List.return) ~f:(fun x y ->
+            x @ y)
         in
         require_equal
           [%here]
@@ -387,12 +397,46 @@ struct
           create
             of_sequence_reduce
             (alist |> List.Assoc.map ~f:List.return |> Sequence.of_list)
-            ~f:( @ )
+            ~f:(fun x y -> x @ y)
         in
         let expect = create of_alist_multi alist in
         require_equal [%here] (module Inst_multi) t_multi expect;
         require_equal [%here] (module Inst_multi) t_fold expect;
         require_equal [%here] (module Inst_multi) t_reduce expect);
+    [%expect {| |}]
+  ;;
+
+  let of_list_with_key = of_list_with_key
+  let of_list_with_key_or_error = of_list_with_key_or_error
+  let of_list_with_key_exn = of_list_with_key_exn
+  let of_list_with_key_multi = of_list_with_key_multi
+
+  let%expect_test _ =
+    quickcheck_m
+      [%here]
+      (module Alist)
+      ~f:(fun list ->
+        let alist = List.map list ~f:(fun (key, data) -> key, (key, data)) in
+        require_equal
+          [%here]
+          (module Ok (Key_and_data_inst))
+          (create of_list_with_key list ~get_key:fst |> ok_or_duplicate_key)
+          (create of_alist alist |> ok_or_duplicate_key);
+        require_equal
+          [%here]
+          (module Ok (Key_and_data_inst))
+          (create of_list_with_key_or_error list ~get_key:fst)
+          (create of_alist_or_error alist);
+        require_equal
+          [%here]
+          (module Ok (Key_and_data_inst))
+          (Or_error.try_with (fun () -> create of_list_with_key_exn list ~get_key:fst))
+          (Or_error.try_with (fun () -> create of_alist_exn alist));
+        require_equal
+          [%here]
+          (module Key_and_data_inst_multi)
+          (create of_list_with_key_multi list ~get_key:fst)
+          (create of_alist_multi alist));
     [%expect {| |}]
   ;;
 
@@ -406,7 +450,8 @@ struct
         let seq = Sequence.of_list alist in
         let actual = create of_increasing_sequence seq in
         let expect =
-          if List.is_sorted alist ~compare:(Comparable.lift Key.compare ~f:fst)
+          if List.is_sorted alist ~compare:(fun a b ->
+            Comparable.lift Key.compare ~f:fst a b)
           then create of_alist_or_error alist
           else Or_error.error_string "decreasing keys"
         in
@@ -423,7 +468,7 @@ struct
       ~f:(fun alist ->
         let actual = create of_sorted_array (Array.of_list alist) in
         let expect =
-          let compare = Comparable.lift Key.compare ~f:fst in
+          let compare a b = Comparable.lift Key.compare ~f:fst a b in
           if List.is_sorted_strictly ~compare alist
           || List.is_sorted_strictly ~compare (List.rev alist)
           then create of_alist_or_error alist
@@ -441,7 +486,8 @@ struct
       (module Alist)
       ~f:(fun alist ->
         let alist =
-          List.dedup_and_sort alist ~compare:(Comparable.lift Key.compare ~f:fst)
+          List.dedup_and_sort alist ~compare:(fun a b ->
+            Comparable.lift Key.compare ~f:fst a b)
         in
         let actual_fwd = create of_sorted_array_unchecked (Array.of_list alist) in
         let actual_rev = create of_sorted_array_unchecked (Array.of_list_rev alist) in
@@ -459,7 +505,8 @@ struct
       (module Alist)
       ~f:(fun alist ->
         let alist =
-          List.dedup_and_sort alist ~compare:(Comparable.lift Key.compare ~f:fst)
+          List.dedup_and_sort alist ~compare:(fun a b ->
+            Comparable.lift Key.compare ~f:fst a b)
         in
         let actual =
           let array = Array.of_list alist in
@@ -481,7 +528,7 @@ struct
       [%here]
       (module Alist)
       ~f:(fun alist ->
-        let iteri ~f = List.iter alist ~f:(fun (key, data) -> f ~key ~data) in
+        let iteri ~f = List.iter alist ~f:(fun (key, data) -> f ~key ~data) [@nontail] in
         let actual_or_duplicate =
           match create of_iteri ~iteri with
           | `Ok t -> Ok t
@@ -516,6 +563,25 @@ struct
         in
         require_equal [%here] (module Ok (Inst)) actual_or_duplicate expect;
         require_equal [%here] (module Ok (Inst)) actual_exn expect);
+    [%expect {| |}]
+  ;;
+
+  let transpose_keys = transpose_keys
+
+  let%expect_test _ =
+    quickcheck_m
+      [%here]
+      (module Inst_inst)
+      ~f:(fun t ->
+        let transpose_keys = create (access transpose_keys) in
+        let transposed = transpose_keys t in
+        require [%here] (access invariants transposed);
+        let round_trip = transpose_keys transposed in
+        require_equal
+          [%here]
+          (module Inst_inst)
+          (filter t ~f:(Fn.non is_empty))
+          round_trip);
     [%expect {| |}]
   ;;
 
@@ -574,7 +640,7 @@ struct
           (module Alist)
           (to_alist (access set t ~key ~data))
           (List.sort
-             ~compare:(Comparable.lift Key.compare ~f:fst)
+             ~compare:(fun a b -> Comparable.lift Key.compare ~f:fst a b)
              ((key, data) :: List.Assoc.remove (to_alist t) key ~equal:Key.equal)));
     [%expect {| |}]
   ;;
@@ -748,6 +814,15 @@ struct
   let filter = filter
   let filteri = filteri
 
+  module Physical_equality (T : sig
+      type t [@@deriving sexp_of]
+    end) =
+  struct
+    type t = T.t [@@deriving sexp_of]
+
+    let equal a b = phys_equal a b
+  end
+
   let%expect_test _ =
     quickcheck_m
       [%here]
@@ -755,19 +830,23 @@ struct
       ~f:(fun (t, k, d) ->
         require_equal
           [%here]
+          (module Physical_equality (Inst))
+          (filter ~f:(fun _ -> true) t)
+          t;
+        require_equal
+          [%here]
           (module Alist)
-          (to_alist (access filter_keys t ~f:(fun key -> Key.( <= ) key k)))
+          (to_alist (filter_keys t ~f:(fun key -> Key.( <= ) key k)))
           (List.filter (to_alist t) ~f:(fun (key, _) -> Key.( <= ) key k));
         require_equal
           [%here]
           (module Alist)
-          (to_alist (access filter t ~f:(fun data -> data <= d)))
+          (to_alist (filter t ~f:(fun data -> data <= d)))
           (List.filter (to_alist t) ~f:(fun (_, data) -> data <= d));
         require_equal
           [%here]
           (module Alist)
-          (to_alist
-             (access filteri t ~f:(fun ~key ~data -> Key.( <= ) key k && data <= d)))
+          (to_alist (filteri t ~f:(fun ~key ~data -> Key.( <= ) key k && data <= d)))
           (List.filter (to_alist t) ~f:(fun (key, data) -> Key.( <= ) key k && data <= d)));
     [%expect {| |}]
   ;;
@@ -783,15 +862,14 @@ struct
         require_equal
           [%here]
           (module Alist)
-          (to_alist
-             (access filter_map t ~f:(fun data -> Option.some_if (data >= d) (data - d))))
+          (to_alist (filter_map t ~f:(fun data -> Option.some_if (data >= d) (data - d))))
           (List.filter_map (to_alist t) ~f:(fun (key, data) ->
              Option.some_if (data >= d) (key, data - d)));
         require_equal
           [%here]
           (module Alist)
           (to_alist
-             (access filter_mapi t ~f:(fun ~key ~data ->
+             (filter_mapi t ~f:(fun ~key ~data ->
                 Option.some_if (Key.( <= ) key k && data >= d) (data - d))))
           (List.filter_map (to_alist t) ~f:(fun (key, data) ->
              Option.some_if (Key.( <= ) key k && data >= d) (key, data - d))));
@@ -810,15 +888,20 @@ struct
       ~f:(fun (t, k, d) ->
         require_equal
           [%here]
+          (module Physical_equality (Inst))
+          (fst (partition_tf ~f:(fun _ -> true) t))
+          t;
+        require_equal
+          [%here]
           (module Pair (Alist))
-          (let a, b = access partition_tf t ~f:(fun data -> data <= d) in
+          (let a, b = partition_tf t ~f:(fun data -> data <= d) in
            to_alist a, to_alist b)
           (List.partition_tf (to_alist t) ~f:(fun (_, data) -> data <= d));
         require_equal
           [%here]
           (module Pair (Alist))
           (let a, b =
-             access partitioni_tf t ~f:(fun ~key ~data -> Key.( <= ) key k && data <= d)
+             partitioni_tf t ~f:(fun ~key ~data -> Key.( <= ) key k && data <= d)
            in
            to_alist a, to_alist b)
           (List.partition_tf (to_alist t) ~f:(fun (key, data) ->
@@ -827,7 +910,7 @@ struct
           [%here]
           (module Pair (Alist))
           (let a, b =
-             access partition_map t ~f:(fun data ->
+             partition_map t ~f:(fun data ->
                if data >= d then First (data - d) else Second d)
            in
            to_alist a, to_alist b)
@@ -837,7 +920,7 @@ struct
           [%here]
           (module Pair (Alist))
           (let a, b =
-             access partition_mapi t ~f:(fun ~key ~data ->
+             partition_mapi t ~f:(fun ~key ~data ->
                if Key.( <= ) key k && data >= d then First (data - d) else Second d)
            in
            to_alist a, to_alist b)
@@ -911,9 +994,7 @@ struct
       ~f:(fun (t, threshold) ->
         let t =
           mapi t ~f:(fun ~key ~data ->
-            if Key.( <= ) key threshold
-            then Ok data
-            else Or_error.error_string "too big")
+            if Key.( <= ) key threshold then Ok data else Or_error.error_string "too big")
         in
         require_equal
           [%here]
@@ -1113,7 +1194,7 @@ struct
             fold_symmetric_diff
             a
             b
-            ~data_equal:Int.equal
+            ~data_equal:(fun x y -> Int.equal x y)
             ~init:[]
             ~f:(fun acc pair -> pair :: acc)
           |> List.rev
@@ -1192,7 +1273,7 @@ struct
 
   let split = split
 
-  let%expect_test _ =
+  let%expect_test "split" =
     quickcheck_m
       [%here]
       (module Inst_and_key)
@@ -1211,6 +1292,46 @@ struct
                | Greater -> `Trd (key, data))
            in
            create of_alist_exn before, List.hd equal, create of_alist_exn after));
+    [%expect {| |}]
+  ;;
+
+  let split_le_gt = split_le_gt
+
+  let%expect_test "split_le_gt" =
+    quickcheck_m
+      [%here]
+      (module Inst_and_key)
+      ~f:(fun (t, k) ->
+        require_equal
+          [%here]
+          (module struct
+            type t = Inst.t * Inst.t [@@deriving equal, sexp_of]
+          end)
+          (access split_le_gt t k)
+          (let before, after =
+             List.partition_tf (to_alist t) ~f:(fun (key, _) -> Key.( <= ) key k)
+           in
+           create of_alist_exn before, create of_alist_exn after));
+    [%expect {| |}]
+  ;;
+
+  let split_lt_ge = split_lt_ge
+
+  let%expect_test "split_lt_ge" =
+    quickcheck_m
+      [%here]
+      (module Inst_and_key)
+      ~f:(fun (t, k) ->
+        require_equal
+          [%here]
+          (module struct
+            type t = Inst.t * Inst.t [@@deriving equal, sexp_of]
+          end)
+          (access split_lt_ge t k)
+          (let before, after =
+             List.partition_tf (to_alist t) ~f:(fun (key, _) -> Key.( < ) key k)
+           in
+           create of_alist_exn before, create of_alist_exn after));
     [%expect {| |}]
   ;;
 
@@ -1377,11 +1498,7 @@ struct
                t
                ~compare:(fun ~key ~data k' ->
                  require_equal [%here] (module Key) k' k;
-                 require_equal
-                   [%here]
-                   (module Opt (Int))
-                   (access find t key)
-                   (Some data);
+                 require_equal [%here] (module Opt (Int)) (access find t key) (Some data);
                  [%expect {| |}];
                  compare (key, data) k')
                which_target
@@ -1409,11 +1526,7 @@ struct
                binary_search_segmented
                t
                ~segment_of:(fun ~key ~data ->
-                 require_equal
-                   [%here]
-                   (module Opt (Int))
-                   (access find t key)
-                   (Some data);
+                 require_equal [%here] (module Opt (Int)) (access find t key) (Some data);
                  [%expect {| |}];
                  segment_of (key, data))
                which_target)
@@ -1449,6 +1562,40 @@ struct
     [%expect {| |}]
   ;;
 
+  module Make_applicative_traversals (A : Applicative.Lazy_applicative) = struct
+    module M = Make_applicative_traversals (A)
+
+    let mapi = M.mapi
+    let filter_mapi = M.filter_mapi
+  end
+
+  let%expect_test _ =
+    let module M =
+      Make_applicative_traversals (struct
+        module M = struct
+          type 'a t = 'a
+
+          let return x = x
+          let apply f x = f x
+          let of_thunk f = f ()
+          let map = `Define_using_apply
+        end
+
+        include M
+        include Applicative.Make (M)
+      end)
+    in
+    quickcheck_m
+      [%here]
+      (module Inst)
+      ~f:(fun t ->
+        let f1 ~key:_ ~data = (data * 2) + 1 in
+        let f2 ~key:_ ~data = if data < 0 then None else Some data in
+        require_equal [%here] (module Inst) (mapi t ~f:f1) (M.mapi t ~f:f1);
+        require_equal [%here] (module Inst) (filter_mapi t ~f:f2) (M.filter_mapi t ~f:f2));
+    [%expect {| |}]
+  ;;
+
   (** tree conversion *)
 
   let to_tree = to_tree
@@ -1479,20 +1626,7 @@ end [@ocaml.remove_aliases] = struct
 
   (** module types *)
 
-  module type Accessors1 = Accessors1
-  module type Accessors2 = Accessors2
-  module type Accessors3 = Accessors3
-  module type Accessors3_with_comparator = Accessors3_with_comparator
   module type Accessors_generic = Accessors_generic
-  module type Creators1 = Creators1
-  module type Creators2 = Creators2
-  module type Creators3_with_comparator = Creators3_with_comparator
-  module type Creators_and_accessors1 = Creators_and_accessors1
-  module type Creators_and_accessors2 = Creators_and_accessors2
-
-  module type Creators_and_accessors3_with_comparator =
-    Creators_and_accessors3_with_comparator
-
   module type Creators_and_accessors_generic = Creators_and_accessors_generic
   module type Creators_generic = Creators_generic
   module type For_deriving = For_deriving
@@ -1551,7 +1685,21 @@ end [@ocaml.remove_aliases] = struct
 
   let%expect_test _ =
     print_s [%sexp ([%sexp_grammar: int M(Int).t] : _ Sexp_grammar.t)];
-    [%expect {| (List (Many (List (Cons Integer (Cons Integer Empty))))) |}]
+    [%expect
+      {|
+      (Tagged (
+        (key sexp_grammar.assoc)
+        (value ())
+        (grammar (
+          List (
+            Many (
+              List (
+                Cons
+                (Tagged ((key sexp_grammar.assoc.key) (value ()) (grammar Integer)))
+                (Cons
+                  (Tagged (
+                    (key sexp_grammar.assoc.value) (value ()) (grammar Integer)))
+                  Empty)))))))) |}]
   ;;
 
   (** comparisons *)

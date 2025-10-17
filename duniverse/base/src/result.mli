@@ -14,10 +14,10 @@ open! Import
 
     The return type of [pred] could be [nat option], but [(nat, string)
     Result.t] gives more control over the error message. *)
-type ('ok, 'err) t = ('ok, 'err) Caml.result =
+type ('ok, 'err) t = ('ok, 'err) Stdlib.result =
   | Ok of 'ok
   | Error of 'err
-[@@deriving_inline sexp, sexp_grammar, compare, equal, hash]
+[@@deriving_inline sexp, sexp_grammar, compare, equal, globalize, hash]
 
 include Sexplib0.Sexpable.S2 with type ('ok, 'err) t := ('ok, 'err) t
 
@@ -28,12 +28,19 @@ val t_sexp_grammar
 
 include Ppx_compare_lib.Comparable.S2 with type ('ok, 'err) t := ('ok, 'err) t
 include Ppx_compare_lib.Equal.S2 with type ('ok, 'err) t := ('ok, 'err) t
+
+val globalize
+  :  (('ok[@ocaml.local]) -> 'ok)
+  -> (('err[@ocaml.local]) -> 'err)
+  -> (('ok, 'err) t[@ocaml.local])
+  -> ('ok, 'err) t
+
 include Ppx_hash_lib.Hashable.S2 with type ('ok, 'err) t := ('ok, 'err) t
 
 [@@@end]
 
-include Monad.S2 with type ('a, 'err) t := ('a, 'err) t
-module Error : Monad.S2 with type ('err, 'a) t := ('a, 'err) t
+include Monad.S2_local with type ('a, 'err) t := ('a, 'err) t
+module Error : Monad.S2_local with type ('err, 'a) t := ('a, 'err) t
 
 include Invariant_intf.S2 with type ('ok, 'err) t := ('ok, 'err) t
 
@@ -50,17 +57,17 @@ val ok_exn : ('ok, exn) t -> 'ok
 val ok_or_failwith : ('ok, string) t -> 'ok
 val error : (_, 'err) t -> 'err option
 val of_option : 'ok option -> error:'err -> ('ok, 'err) t
-val iter : ('ok, _) t -> f:('ok -> unit) -> unit
-val iter_error : (_, 'err) t -> f:('err -> unit) -> unit
-val map : ('ok, 'err) t -> f:('ok -> 'c) -> ('c, 'err) t
-val map_error : ('ok, 'err) t -> f:('err -> 'c) -> ('ok, 'c) t
+val iter : ('ok, _) t -> f:(('ok -> unit)[@local]) -> unit
+val iter_error : (_, 'err) t -> f:(('err -> unit)[@local]) -> unit
+val map : ('ok, 'err) t -> f:(('ok -> 'c)[@local]) -> ('c, 'err) t
+val map_error : ('ok, 'err) t -> f:(('err -> 'c)[@local]) -> ('ok, 'c) t
 
 (** Returns [Ok] if both are [Ok] and [Error] otherwise. *)
 val combine
   :  ('ok1, 'err) t
   -> ('ok2, 'err) t
-  -> ok:('ok1 -> 'ok2 -> 'ok3)
-  -> err:('err -> 'err -> 'err)
+  -> ok:(('ok1 -> 'ok2 -> 'ok3)[@local])
+  -> err:(('err -> 'err -> 'err)[@local])
   -> ('ok3, 'err) t
 
 (** [combine_errors ts] returns [Ok] if every element in [ts] is [Ok], else it returns
@@ -91,7 +98,7 @@ val ok_fst : ('ok, 'err) t -> ('ok, 'err) Either0.t
 (** [ok_if_true] returns [Ok ()] if [bool] is true, and [Error error] if it is false. *)
 val ok_if_true : bool -> error:'err -> (unit, 'err) t
 
-val try_with : (unit -> 'a) -> ('a, exn) t
+val try_with : ((unit -> 'a)[@local]) -> ('a, exn) t
 
 module Export : sig
   type ('ok, 'err) _result = ('ok, 'err) t =

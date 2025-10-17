@@ -33,14 +33,19 @@ val sum: int -> (int -> int) -> int
 
 val with_buffer: int -> (Buffer.t -> unit) -> string
 
-(* [separated_list_to_string printer sep l] converts [l] into a string
-   representation built by using [printer] on each element and [sep] as
-   a separator. *)
-
 type 'a iter = ('a -> unit) -> unit
 
-val separated_iter_to_string:  ('a -> string) -> string -> 'a iter -> string
+(**[separated_list_to_string printer sep xs] converts [xs] into a string by
+   applying [printer] to each element and by inserting [sep] as a separator
+   between two successive elements. *)
 val separated_list_to_string:  ('a -> string) -> string -> 'a list -> string
+val separated_iter_to_string:  ('a -> string) -> string -> 'a iter -> string
+
+(**[preceded_list_to_string printer del xs] converts the list [xs] into a
+   string by applying [printer] to each element and by preceding each element
+   with the delimiter [del]. *)
+val preceded_list_to_string: ('a -> string) -> string -> 'a list -> string
+val preceded_iter_to_string: ('a -> string) -> string -> 'a iter -> string
 
 (* If [a] is an array, therefore a mapping of integers to elements, then
    [inverse a] computes its inverse, a mapping of elements to integers.
@@ -188,3 +193,12 @@ val nth: int -> string
    that alphabetical ordering coincides with numeric ordering. *)
 
 val padded_index: int -> int -> string
+
+(**[longest_run c s] computes the length of the longest run of consecutive
+   characters equal to [c] in the string [s]. *)
+val longest_run: char -> string -> int
+
+(**[unquote s] assumes that the string [s] begins and ends with a quote
+   character ['"']. It removes these quotes and returns the remainder
+   of the string, in which escape sequences have been decoded. *)
+val unquote: string -> string

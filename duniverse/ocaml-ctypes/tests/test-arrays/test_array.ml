@@ -6,6 +6,7 @@
  *)
 
 open OUnit2
+module Float_ = struct let float = float end (*has to be above the module Ctypes*)
 open Ctypes
 
 let _ = Dl.(dlopen ~filename:"../clib/clib.so" ~flags:[RTLD_NOW])
@@ -45,7 +46,7 @@ let test_multidimensional_arrays _ =
 
   (* three dimensions *)
   let three = Array.make (array 2 (array 5 float)) 10 in
-  let float = Stdlib.float in
+  let float = Float_.float in
 
   for i = 0 to 9 do
     for j = 0 to 1 do
@@ -102,6 +103,21 @@ let test_iter _ =
   let r = ref 0 in
   let a = CArray.of_list int [] in
   let () = CArray.iter (fun _ -> assert false) a in
+  assert_equal !r 0
+
+
+(*
+  Test the CArray.iteri function
+ *)
+ let test_iteri _ =
+  let r = ref 0 in
+  let a = CArray.of_list int [1; 2; 3] in
+  let () = CArray.iteri (fun i v -> r := !r + i + v) a in
+  assert_equal !r 9;
+
+  let r = ref 0 in
+  let a = CArray.of_list int [] in
+  let () = CArray.iteri (fun _ -> assert false) a in
   assert_equal !r 0
 
 
@@ -368,6 +384,9 @@ let suite = "Array tests" >:::
 
    "CArray.iter "
     >:: test_iter;
+
+    "CArray.iteri "
+    >:: test_iteri;
 
    "CArray.map "
     >:: test_map;

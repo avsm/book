@@ -73,10 +73,10 @@ type t = Scheduler0.t =
   ; mutable cycle_count : int
   ; mutable cycle_start : Time_ns.t
   ; mutable in_cycle : bool
-  ; mutable run_every_cycle_start : (Types.Cycle_hook.t[@sexp.opaque]) list
+  ; mutable run_every_cycle_start : (Types.Cycle_hook.t[@sexp.opaque]) array
   ; run_every_cycle_start_state :
       (Types.Cycle_hook_handle.t, (Types.Cycle_hook.t[@sexp.opaque])) Hashtbl.t
-  ; mutable run_every_cycle_end : (Types.Cycle_hook.t[@sexp.opaque]) list
+  ; mutable run_every_cycle_end : (Types.Cycle_hook.t[@sexp.opaque]) array
   ; run_every_cycle_end_state :
       (Types.Cycle_hook_handle.t, (Types.Cycle_hook.t[@sexp.opaque])) Hashtbl.t
   ; mutable last_cycle_time : Time_ns.Span.t
@@ -108,7 +108,8 @@ type t = Scheduler0.t =
   ; mutable job_queued_hook : (Priority.t -> unit) option
   ; mutable event_added_hook : (Time_ns.t -> unit) option
   ; mutable yield : ((unit, read_write) Types.Bvar.t[@sexp.opaque])
-  ; mutable yield_until_no_jobs_remain :
+  ; mutable
+    yield_until_no_jobs_remain :
       ((unit, read_write) Types.Bvar.t[@sexp.opaque] (* configuration*))
   ; mutable check_invariants : bool
   ; mutable max_num_jobs_per_priority_per_cycle : Max_num_jobs_per_priority_per_cycle.t
@@ -137,8 +138,9 @@ let num_jobs_run t =
 let last_cycle_num_jobs t = t.last_cycle_num_jobs
 
 let unordered_is_sublist ~equal ~sublist:small large =
-  let remove l x =
-    match List.split_while l ~f:(fun y -> not (equal y x)) with
+  let large = Array.to_list large in
+  let remove a x =
+    match List.split_while a ~f:(fun y -> not (equal y x)) with
     | _, [] -> None
     | l, _ :: r -> Some (l @ r)
   in
@@ -147,10 +149,10 @@ let unordered_is_sublist ~equal ~sublist:small large =
        Option.bind acc ~f:(fun l -> remove l x)))
 ;;
 
-let check_hook_table_invariant table list =
+let check_hook_table_invariant table array =
   (* You can in fact have hooks in the list for which there is no corresponding entry in
      the table. Such hooks can never be removed. *)
-  assert (unordered_is_sublist ~equal:phys_equal ~sublist:(Hashtbl.data table) list)
+  assert (unordered_is_sublist ~equal:phys_equal ~sublist:(Hashtbl.data table) array)
 ;;
 
 let invariant t : unit =
@@ -174,9 +176,7 @@ let invariant t : unit =
       ~run_every_cycle_start:ignore
       ~run_every_cycle_start_state:
         (check (fun run_every_cycle_start_state ->
-           check_hook_table_invariant
-             run_every_cycle_start_state
-             t.run_every_cycle_start))
+           check_hook_table_invariant run_every_cycle_start_state t.run_every_cycle_start))
       ~run_every_cycle_end:ignore
       ~run_every_cycle_end_state:
         (check (fun run_every_cycle_end_state ->
@@ -253,9 +253,9 @@ let create () =
     ; cycle_start = now
     ; cycle_count = 0
     ; in_cycle = false
-    ; run_every_cycle_start = []
+    ; run_every_cycle_start = [||]
     ; run_every_cycle_start_state = Hashtbl.create (module Types.Cycle_hook_handle)
-    ; run_every_cycle_end = []
+    ; run_every_cycle_end = [||]
     ; run_every_cycle_end_state = Hashtbl.create (module Types.Cycle_hook_handle)
     ; last_cycle_time = sec 0.
     ; last_cycle_num_jobs = 0
@@ -291,6 +291,12 @@ let create () =
 
 let is_dead t = is_some t.uncaught_exn
 let set_check_access t f = t.check_access <- f
+
+let backtrace_of_first_job t =
+  Option.first_some
+    (Job_queue.backtrace_of_first_enqueue t.normal_priority_jobs)
+    (Job_queue.backtrace_of_first_enqueue t.low_priority_jobs)
+;;
 
 let t_ref =
   match Result.try_with create with

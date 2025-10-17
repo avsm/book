@@ -8,6 +8,7 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Attribute
 open BasicSyntax
 open Syntax
 open Positions
@@ -148,25 +149,26 @@ module Nonterminal = struct
   let positions nt =
     (StringMap.find (print false nt) grammar.rules).positions
 
-  let init f =
+  let[@inline] init f =
     Array.init n f
 
-  let iter f =
+  let[@inline] iter f =
     Misc.iteri n f
 
-  let fold f accu =
+  let[@inline] fold f accu =
     Misc.foldi n f accu
 
-  let map f =
+  let[@inline] map f =
     Misc.mapi n f
 
-  let iterx f =
-    for nt = start to n - 1 do
-      f nt
-    done
+  let[@inline] iterx f =
+    Misc.iterij start n f
 
-  let foldx f accu =
+  let[@inline] foldx f accu =
     Misc.foldij start n f accu
+
+  let[@inline] mapx f =
+    Misc.mapij start n f
 
   let ocamltype nt =
     assert (not (is_internal_start nt));
@@ -195,7 +197,7 @@ module Nonterminal = struct
   let tabulate f =
     Array.get (Array.init n f)
 
-  let attributes : Syntax.attributes array =
+  let attributes : attributes array =
     Array.make n []
 
   let () =
@@ -325,28 +327,30 @@ module Terminal = struct
   let init f =
     Array.init n f
 
-  let iter f =
+  let[@inline] iter f =
     Misc.iteri n f
 
-  let fold f accu =
+  let[@inline] fold f accu =
     Misc.foldi n f accu
 
-  let map f =
+  let[@inline] map f =
     Misc.mapi n f
 
   let () =
     assert (sharp = n - 1)
-  let foldx f accu =
+  let[@inline] foldx f accu =
     Misc.foldi sharp f accu
-  let mapx f =
+  let[@inline] mapx f =
     Misc.mapi sharp f
 
   let () =
     assert (error = 0)
-  let iter_real f =
-    for i = 1 to n-2 do
-      f i
-    done
+  let[@inline] iter_real f =
+    Misc.iterij 1 sharp f
+  let[@inline] fold_real f accu =
+    Misc.foldij 1 sharp f accu
+  let[@inline] map_real f =
+    Misc.mapij 1 sharp f
 
   let tokens_without_an_alias =
     let accu = ref [] in
@@ -374,14 +378,8 @@ module Terminal = struct
     token_properties.(tok).tk_alias
 
   let unquoted_alias tok =
-    alias tok |> Option.map (fun qid ->
-      assert (qid.[0] = '"');
-      (* Skip the opening quote and decode the remainder using the lexer
-         [decode_string]. *)
-      let qid = String.sub qid 1 (String.length qid - 1) in
-      let lexbuf = Lexing.from_string qid in
-      Misc.with_buffer 8 (fun b -> Lexer.decode_string b lexbuf)
-  )
+    alias tok
+    |> Option.map Misc.unquote
 
   let print_concrete t =
   match unquoted_alias t with
@@ -492,14 +490,63 @@ module TerminalSet = struct
 
   include BoundedBitSet.Make(Terminal)()
 
+  (* The signature [GSet.S] does not offer [diff], [of_list] and [big_union],
+     so we implement these functions here in a naive way. *)
+
+  let diff xs ys =
+    fold remove ys xs
+
+  let of_list xs =
+    List.fold_right add xs empty
+
+  let big_union xss =
+    List.fold_right union xss empty
+
   let print toks =
     Misc.separated_iter_to_string Terminal.print " " (fun f -> iter f toks)
 
   let universe =
-    remove Terminal.sharp (
-      remove Terminal.error (
-        Terminal.fold add empty
-      )
+    Terminal.fold_real add empty
+
+  let cardinal_universe =
+    Terminal.n - 2
+
+  let () =
+    assert (cardinal universe = cardinal_universe)
+
+  let is_universe s =
+    cardinal s = cardinal_universe
+
+  (* The following definitions aim to define [identify]. *)
+
+  (* [big_max f toks] computes the maximum of the function [f] over the
+     set of terminal symbols [toks]. *)
+
+  let big_max (f : element -> int) (toks : t) : int =
+    fold (fun t accu -> max (f t) accu) toks 0
+
+  (* [separator] is a run of underscore characters '_' that is long
+     enough so as to guarantee that no terminal symbol contains such
+     a run in its name. *)
+
+  let separator : string Lazy.t =
+    lazy begin
+      let longest_run t = Misc.longest_run '_' (Terminal.print t) in
+      let k = big_max longest_run universe in
+      String.make (k+1) '_'
+    end
+
+  (* [identify toks] converts the set of terminal symbols [toks] into
+     a valid OCaml identifier. The cardinal of the set is mentioned
+     (for informative purposes; it is not required for disambiguation)
+     and the symbols are separated using [separator]. *)
+
+  let identify toks =
+    String.concat (Lazy.force separator) (
+      (* The cardinal: *)
+      Printf.sprintf "c%d" (cardinal toks) ::
+      (* The symbols: *)
+      List.map Terminal.print (elements toks)
     )
 
   (* The following definitions are used in the computation of FIRST sets
@@ -729,7 +776,8 @@ module Production = struct
      side. [rhs_attributes] maps a production to an array of the attributes
      attached to the elements of the right-hand side. [prec_decl] maps a
      production to an optional [%prec] annotation. [production_level] maps
-     a production to a production level (see [ParserAux]). *)
+     a production to a production level (see [ParserAux]). [attributes]
+     maps a production to the list of its attributes. *)
 
   let table : (Nonterminal.t * Symbol.t array) array =
     Array.make n (-1, [||])
@@ -743,18 +791,21 @@ module Production = struct
   let positions : Positions.t list array =
     Array.make n []
 
-  let rhs_attributes : Syntax.attributes array array =
+  let rhs_attributes : attributes array array =
     Array.make n [||]
 
   let prec_decl : symbol located option array =
     Array.make n None
 
-  let production_level : branch_production_level array =
+  let production_level : production_level array =
     (* The start productions receive a level that pretends that they
        originate in a fictitious "builtin" file. So, a reduce/reduce
        conflict that involves a start production will not be solved. *)
     let dummy = ProductionLevel (InputFile.builtin_input_file, 0) in
     Array.make n dummy
+
+  let attributes : attributes array =
+    Array.make n []
 
   (* [ntprods] maps a nonterminal symbol to the interval of its productions. *)
 
@@ -780,6 +831,7 @@ module Production = struct
       identifiers.(k) <- [| "_1" |];
       ntprods.(nt') <- (k, k+1);
       positions.(k) <- Nonterminal.positions nt;
+        (* A start production has no attributes. *)
       k+1,
       NonterminalMap.add nt k startprods
     ) grammar.start_symbols (0, NonterminalMap.empty)
@@ -798,9 +850,10 @@ module Production = struct
       identifiers.(k) <- Array.map producer_identifier producers;
       actions.(k) <- Some branch.action;
       rhs_attributes.(k) <- Array.map producer_attributes producers;
-      production_level.(k) <- branch.branch_production_level;
-      prec_decl.(k) <- branch.branch_prec_annotation;
+      production_level.(k) <- branch.production_level;
+      prec_decl.(k) <- branch.prec_annotation;
       positions.(k) <- [ branch.branch_position ];
+      attributes.(k) <- branch.br_attributes;
       if not (MArray.for_all Symbol.non_error rhs) then
         grammar_uses_error_token := true;
       k+1
@@ -811,15 +864,15 @@ module Production = struct
 
   (* Iteration over the productions associated with a specific nonterminal. *)
 
-  let iternt nt f =
+  let[@inline] iternt nt f =
     let k, k' = ntprods.(nt) in
     Misc.iterij k k' f
 
-  let foldnt nt f accu =
+  let[@inline] foldnt nt f accu =
     let k, k' = ntprods.(nt) in
     Misc.foldij k k' f accu
 
-  let mapnt nt f =
+  let[@inline] mapnt nt f =
     let k, k' = ntprods.(nt) in
     Misc.mapij k k' f
 
@@ -871,8 +924,8 @@ module Production = struct
   let positions prod =
     positions.(prod)
 
-  let lhs_attributes prod =
-    Nonterminal.attributes (nt prod)
+  let attributes prod =
+    attributes.(prod)
 
   let rhs_attributes prod =
     rhs_attributes.(prod)
@@ -891,27 +944,25 @@ module Production = struct
   let init f =
     Array.init n f
 
-  let iter f =
+  let[@inline] iter f =
     Misc.iteri n f
 
-  let fold f accu =
+  let[@inline] fold f accu =
     Misc.foldi n f accu
 
-  let map f =
+  let[@inline] map f =
     Misc.mapi n f
 
-  let amap f =
+  let[@inline] amap f =
     Array.init n f
 
-  let iterx f =
-    for prod = start to n - 1 do
-      f prod
-    done
+  let[@inline] iterx f =
+    Misc.iterij start n f
 
-  let foldx f accu =
+  let[@inline] foldx f accu =
     Misc.foldij start n f accu
 
-  let mapx f =
+  let[@inline] mapx f =
     Misc.mapij start n f
 
   (* Printing a production. *)
@@ -939,10 +990,10 @@ module Production = struct
 
   (* Tabulation and sum. *)
 
-  let tabulate f =
+  let[@inline] tabulate f =
     Misc.tabulate n f
 
-  let sum f =
+  let[@inline] sum f =
     Misc.sum n f
 
   (* This array allows recording, for each %prec declaration, whether it is
@@ -960,7 +1011,10 @@ module Production = struct
     (* assuming that generic hashing and equality on positions are OK *)
     Hashtbl.create 16
 
-  let consult_prec_decl prod =
+  type fact =
+    unit Lazy.t
+
+  let consult_prec_decl prod : fact * symbol located option =
     let osym = prec_decl.(prod) in
     lazy (
       Option.iter (fun sym ->
@@ -993,12 +1047,12 @@ module Production = struct
      of the rightmost terminal symbol in the production's right-hand
      side. *)
 
-  type production_level =
-    | PNone
-    | PRightmostToken of Terminal.t
-    | PPrecDecl of symbol
+  type scan =
+    | PNone                        (* no terminal symbol; no %prec annotation *)
+    | PRightmostToken of Terminal.t(* a rightmost terminal symbol exists *)
+    | PPrecDecl of symbol          (* a %prec annotation exists *)
 
-  let rightmost_terminal prod =
+  let scan prod : scan =
     Array.fold_left (fun accu symbol ->
       match symbol with
       | Symbol.T tok ->
@@ -1007,19 +1061,19 @@ module Production = struct
           accu
     ) PNone (rhs prod)
 
-  let combine e1 e2 =
-    lazy (Lazy.force e1; Lazy.force e2)
+  let combine (fact1 : fact) (fact2 : fact) : fact =
+    lazy (Lazy.force fact1; Lazy.force fact2)
 
-  let precedence prod =
+  let precedence prod : fact * precedence_level =
     let fact1, prec_decl = consult_prec_decl prod in
-    let oterminal =
+    let scan =
       match prec_decl with
       | None ->
-          rightmost_terminal prod
+          scan prod
       | Some { value = terminal } ->
           PPrecDecl terminal
     in
-    match oterminal with
+    match scan with
     | PNone ->
         fact1, UndefinedPrecedence
     | PRightmostToken tok ->
@@ -1043,7 +1097,7 @@ module ProductionMap = struct
 
   (* Iteration over the start productions only. *)
 
-  let start f =
+  let[@inline] start f =
     Misc.foldi Production.start (fun prod m ->
       add prod (f prod) m
     ) empty
@@ -1445,12 +1499,12 @@ let () =
           "%s generates the language {epsilon}." (Nonterminal.print false nt)
     ) grammar.start_symbols;
     (* If a nonterminal symbol generates the empty language, issue a warning. *)
-    for nt = Nonterminal.start to Nonterminal.n - 1 do
+    Nonterminal.iterx (fun nt ->
       if not (NONEMPTY.nonterminal nt) then
         Error.grammar_warning
           (Nonterminal.positions nt)
           "%s generates the empty language." (Nonterminal.print false nt);
-    done
+    )
   end
 
 (* ------------------------------------------------------------------------ *)
@@ -1459,26 +1513,26 @@ let () =
 let () =
   if verbose then
     Error.logG 2 (fun f ->
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "nullable(%s) = %b\n"
           (Nonterminal.print false nt)
           (NULLABLE.nonterminal nt)
-      done;
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      );
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "first(%s) = %s\n"
           (Nonterminal.print false nt)
           (TerminalSet.print (FIRST.nonterminal nt))
-      done;
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      );
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "minimal(%s) = %s\n"
           (Nonterminal.print false nt)
           (CompletedNatWitness.print Terminal.print (MINIMAL.nonterminal nt))
-      done;
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      );
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "maximal(%s) = %s\n"
           (Nonterminal.print false nt)
           (NatInfinityMax.print (MAXIMAL.nonterminal nt))
-      done;
+      );
   )
 
 let () =
@@ -1571,11 +1625,11 @@ let follow : Nonterminal.t -> TerminalSet.t =
 let () =
   if verbose then
     Error.logG 2 (fun f ->
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "follow(%s) = %s\n"
           (Nonterminal.print false nt)
           (TerminalSet.print (follow nt))
-      done
+      )
     )
 
 (* Compute FOLLOW sets for the terminal symbols as well. Again, unnecessary
@@ -1623,11 +1677,11 @@ let tfollow t =
 let () =
   if verbose then
     Error.logG 3 (fun f ->
-      for t = 0 to Terminal.n - 1 do
+      Terminal.iter (fun t ->
         Printf.fprintf f "follow(%s) = %s\n"
           (Terminal.print t)
           (TerminalSet.print (tfollow t))
-      done
+      )
     )
 
 (* ------------------------------------------------------------------------ *)
@@ -1673,11 +1727,11 @@ let sfollow : Nonterminal.t -> SymbolSet.t =
 let () =
   if verbose then
     Error.logG 3 (fun f ->
-      for nt = Nonterminal.start to Nonterminal.n - 1 do
+      Nonterminal.iterx (fun nt ->
         Printf.fprintf f "sfollow(%s) = %s\n"
           (Nonterminal.print false nt)
           (SymbolSet.print (sfollow nt))
-      done
+      )
     )
 
 (* ------------------------------------------------------------------------ *)

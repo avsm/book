@@ -1,13 +1,19 @@
-5.1.2 (unreleased)
+5.2.0 (16/06/2025)
 ------------------
 
-- Fix PKG_CONFIG_PATH for latest macOS xquartz (#36, @smorimoto)
+- Use modern X fonts instead of X core fonts (#38, @nchataing, Richard Jones)
+- Handle windows closing gracefully under X11 (#42, @xavierleroy)
+
+5.1.2 (24/05/2021)
+------------------
+
+- Fix `PKG_CONFIG_PATH` for latest macOS xquartz (#36, @smorimoto)
 
 5.1.1 (02/02/2021)
 ------------------
 
 - Fix configurator detection on native Windows (#19, @fdopen)
-- Use caml_alloc_custom_mem when available (#23, @hhugo)
+- Use `caml_alloc_custom_mem` when available (#23, @hhugo)
 - Fix windows dependencies (#20, @jeremiedimino)
 - Safe-string updates for native Windows (#28, fixes #27, @dra27)
 

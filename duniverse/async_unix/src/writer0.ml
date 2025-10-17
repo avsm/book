@@ -5,13 +5,14 @@ module Unix = Unix_syscalls
 module IOVec = Core_unix.IOVec
 module Id = Unique_id.Int63 ()
 
-let io_stats = Io_stats.create ()
 let debug = Debug.writer
 
 module Time_ns_suppress_sexp_in_test = struct
   type t = Time_ns.t
 
-  let sexp_of_t t = if am_running_inline_test then Sexp.List [] else Time_ns.sexp_of_t t
+  let sexp_of_t t =
+    if Ppx_inline_test_lib.am_running then Sexp.List [] else Time_ns.sexp_of_t t
+  ;;
 end
 
 module Flush_result = struct
@@ -100,12 +101,13 @@ type t =
        t], and sends them to [monitor]. *)
     monitor : Monitor.t
   ; inner_monitor : Monitor.t
-  ; mutable background_writer_state :
+  ; mutable
+    background_writer_state :
       [ `Running | `Not_running | `Stopped_permanently of Stop_reason.t ]
   ; background_writer_stopped : unit Ivar.t
   ; (* [syscall] determines the batching approach that the writer uses to batch data
        together and flush it using the underlying write syscall. *)
-    syscall : [ `Per_cycle | `Periodic of Time.Span.t ]
+    syscall : [ `Per_cycle | `Periodic of Time_float.Span.t ]
   ; (* Counts since the writer was created. *)
     mutable bytes_received : Int63.t
   ; mutable bytes_written : Int63.t
@@ -151,7 +153,9 @@ type t =
        [flush_at_shutdown_elt] is [Some] for the lifetime of the writer, until the
        close finishes, at which point it transitions to[None]. *)
     mutable flush_at_shutdown_elt : t Bag.Elt.t option
-  ; mutable check_buffer_age : t Check_buffer_age'.t Bag.Elt.t option
+  ; (* Lazy buffer age check so that forcing either [Writer.stdout] and [Writer.stderr]
+       doesn't schedule async work. *)
+    mutable check_buffer_age : t Check_buffer_age'.t Bag.Elt.t option Lazy.t
   ; (* The "consumer" of a writer is whomever is reading the bytes that the writer
        is writing.  E.g. if the writer's file descriptor is a socket, then it is whomever
        is on the other side of the socket connection.  If the consumer leaves, Unix will
@@ -175,38 +179,39 @@ let sexp_of_t t = [%sexp (t.fd : Fd.t_hum)]
 type t_internals = t
 
 let sexp_of_t_internals
-      { id
-      ; fd
-      ; monitor
-      ; inner_monitor
-      ; background_writer_state
-      ; background_writer_stopped
-      ; syscall
-      ; bytes_received
-      ; bytes_written
-      ; scheduled = _
-      ; scheduled_bytes
-      ; buf = _
-      ; scheduled_back
-      ; back
-      ; time_source
-      ; flushes = _
-      ; close_state
-      ; close_finished
-      ; close_started
-      ; producers_to_flush_at_close
-      ; flush_at_shutdown_elt
-      ; check_buffer_age
-      ; consumer_left
-      ; raise_when_consumer_leaves
-      ; open_flags
-      ; line_ending
-      ; backing_out_channel
-      }
+      ({ id
+       ; fd
+       ; monitor
+       ; inner_monitor
+       ; background_writer_state
+       ; background_writer_stopped
+       ; syscall
+       ; bytes_received
+       ; bytes_written
+       ; scheduled = _
+       ; scheduled_bytes
+       ; buf = _
+       ; scheduled_back
+       ; back
+       ; time_source
+       ; flushes = _
+       ; close_state
+       ; close_finished
+       ; close_started
+       ; producers_to_flush_at_close
+       ; flush_at_shutdown_elt
+       ; check_buffer_age
+       ; consumer_left
+       ; raise_when_consumer_leaves
+       ; open_flags
+       ; line_ending
+       ; backing_out_channel
+       } :
+         t_internals)
   =
-  let suppress_in_test x = if am_running_inline_test then None else Some x in
+  let suppress_in_test x = if Ppx_inline_test_lib.am_running then None else Some x in
   let monitor_name_in_test monitor =
-    if am_running_inline_test
+    if Ppx_inline_test_lib.am_running
     then [%sexp (Monitor.name monitor : Info.t)]
     else [%sexp (monitor : Monitor.t)]
   in
@@ -226,7 +231,7 @@ let sexp_of_t_internals
                                 | `Stopped_permanently of Stop_reason.t
                                 ]
     ; background_writer_stopped : unit Ivar.t
-    ; syscall : [ `Per_cycle | `Periodic of Time.Span.t ]
+    ; syscall : [ `Per_cycle | `Periodic of Time_float.Span.t ]
     ; bytes_received : Int63.t
     ; bytes_written : Int63.t
     ; scheduled_bytes : int
@@ -238,15 +243,12 @@ let sexp_of_t_internals
     ; close_started : unit Ivar.t
     ; num_producers_to_flush_at_close = (Bag.length producers_to_flush_at_close : int)
     ; flush_at_shutdown_elt =
-        (suppress_in_test flush_at_shutdown_elt : ((t[@sexp.opaque]) Bag.Elt.t option
-                                                     option
-                                                   [@sexp.option]))
+        (suppress_in_test flush_at_shutdown_elt
+         : ((t[@sexp.opaque]) Bag.Elt.t option option[@sexp.option]))
     ; check_buffer_age =
-        (suppress_in_test check_buffer_age : ((t[@sexp.opaque]) Check_buffer_age'.t
-                                                Bag.Elt.t
-                                                option
-                                                option
-                                              [@sexp.option]))
+        (suppress_in_test check_buffer_age
+         : ((t[@sexp.opaque]) Check_buffer_age'.t Bag.Elt.t option Lazy.t option
+            [@sexp.option]))
     ; consumer_left : unit Ivar.t
     ; raise_when_consumer_leaves : bool
     ; open_flags = (suppress_in_test open_flags : (open_flags option[@sexp.option]))
@@ -282,8 +284,7 @@ let invariant t : unit =
              assert (Ivar.is_full t.background_writer_stopped)
            | `Running | `Not_running ->
              assert (Bigstring.length t.buf > 0);
-             assert (
-               Int63.(t.bytes_received - t.bytes_written = of_int (bytes_to_write t)));
+             assert (Int63.(t.bytes_received - t.bytes_written = of_int (bytes_to_write t)));
              assert (Ivar.is_empty t.background_writer_stopped)))
       ~background_writer_stopped:ignore
       ~syscall:ignore
@@ -345,7 +346,7 @@ module Check_buffer_age : sig
   type t = writer Check_buffer_age'.t Bag.Elt.t option
 
   val dummy : t
-  val create : writer -> maximum_age:[ `At_most of Time.Span.t | `Unlimited ] -> t
+  val create : writer -> maximum_age:[ `At_most of Time_float.Span.t | `Unlimited ] -> t
   val destroy : t -> unit
   val too_old : t -> unit Deferred.t
 
@@ -632,7 +633,6 @@ let with_synchronous_backing_out_channel t backing_out_channel ~f =
      could happen but in practice is exceedingly unlikely. *)
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
     (fun () ->
        let%bind () = set_synchronous_backing_out_channel t backing_out_channel in
        f ())
@@ -691,7 +691,8 @@ let final_flush ?force t =
          [after (sec 5.)]  makes sense. *)
       (match Fd.kind t.fd with
        | File -> Deferred.never ()
-       | Char | Fifo | Socket _ -> Time_source.after t.time_source (Time_ns.Span.of_sec 5.))
+       | Char | Fifo | Socket _ ->
+         Time_source.after t.time_source (Time_ns.Span.of_sec 5.))
   in
   Deferred.any_unit
     [ (* If the consumer leaves, there's no more writing we can do. *)
@@ -699,27 +700,34 @@ let final_flush ?force t =
     ; Deferred.all_unit [ producers_flushed; flushed t ]
     ; force
       ; (* The buffer-age check might fire while we're waiting. *)
-      Check_buffer_age.too_old t.check_buffer_age
+      Check_buffer_age.too_old (Lazy.force t.check_buffer_age)
     ]
 ;;
 
-let close ?force_close t =
+let close_internal ~flush t =
   if debug then Debug.log "Writer.close" t [%sexp_of: t];
   (match t.close_state with
-   | `Closed_and_flushing | `Closed -> ()
+   | `Closed_and_flushing | `Closed ->
+     ()
    | `Open ->
      t.close_state <- `Closed_and_flushing;
      Ivar.fill t.close_started ();
-     final_flush t ?force:force_close
+     (match flush with
+      | `Flush force -> final_flush t ?force
+      | `No_flush -> return ())
      >>> fun () ->
      t.close_state <- `Closed;
-     Check_buffer_age.destroy t.check_buffer_age;
+     if Lazy.is_val t.check_buffer_age
+     then Check_buffer_age.destroy (force t.check_buffer_age);
      (match t.flush_at_shutdown_elt with
       | None -> assert false
       | Some elt -> Bag.remove writers_to_flush_at_shutdown elt);
      Unix.close t.fd >>> fun () -> Ivar.fill t.close_finished ());
   close_finished t
 ;;
+
+let close ?force_close t = close_internal ~flush:(`Flush force_close) t
+let close_noflush t = close_internal ~flush:`No_flush t
 
 let () =
   Shutdown.at_shutdown (fun () ->
@@ -772,7 +780,7 @@ let die t sexp =
 ;;
 
 type buffer_age_limit =
-  [ `At_most of Time.Span.t
+  [ `At_most of Time_float.Span.t
   | `Unlimited
   ]
 [@@deriving bin_io, sexp]
@@ -797,7 +805,7 @@ let create
     | None ->
       (match Fd.kind fd with
        | File -> `Unlimited
-       | Char | Fifo | Socket _ -> `At_most (Time.Span.of_min 2.))
+       | Char | Fifo | Socket _ -> `At_most (Time_float.Span.of_min 2.))
   in
   let buf_len =
     match buf_len with
@@ -809,12 +817,12 @@ let create
   let monitor =
     Monitor.create
       ()
-      ?name:(if am_running_inline_test then Some "Writer.monitor" else None)
+      ?name:(if Ppx_inline_test_lib.am_running then Some "Writer.monitor" else None)
   in
   let inner_monitor =
     Monitor.create
       ()
-      ?name:(if am_running_inline_test then Some "Writer.inner_monitor" else None)
+      ?name:(if Ppx_inline_test_lib.am_running then Some "Writer.inner_monitor" else None)
   in
   let consumer_left = Ivar.create () in
   let open_flags = Fd.syscall fd (fun file_descr -> Core_unix.fcntl_getfl file_descr) in
@@ -840,7 +848,7 @@ let create
     ; close_started = Ivar.create ()
     ; producers_to_flush_at_close = Bag.create ()
     ; flush_at_shutdown_elt = None
-    ; check_buffer_age = Check_buffer_age.dummy
+    ; check_buffer_age = lazy Check_buffer_age.dummy
     ; consumer_left
     ; raise_when_consumer_leaves
     ; open_flags
@@ -856,14 +864,15 @@ let create
            "Writer error from inner_monitor"
              ~_:(Monitor.extract_exn exn : Exn.t)
              ~writer:(t : t)]));
-  t.check_buffer_age <- Check_buffer_age.create t ~maximum_age:buffer_age_limit;
+  t.check_buffer_age <- lazy (Check_buffer_age.create t ~maximum_age:buffer_age_limit);
   t.flush_at_shutdown_elt <- Some (Bag.add writers_to_flush_at_shutdown t);
   t
 ;;
 
 let set_buffer_age_limit t maximum_age =
-  Check_buffer_age.destroy t.check_buffer_age;
-  t.check_buffer_age <- Check_buffer_age.create t ~maximum_age
+  if Lazy.is_val t.check_buffer_age
+  then Check_buffer_age.destroy (force t.check_buffer_age);
+  t.check_buffer_age <- lazy (Check_buffer_age.create t ~maximum_age)
 ;;
 
 let of_out_channel oc kind = create (Fd.of_out_channel oc kind)
@@ -899,16 +908,17 @@ let open_file
 let with_close t ~f =
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
-    f
-    ~finally:(fun () -> close t)
+    (fun () ->
+       let%bind res = f () in
+       let%map () = final_flush t in
+       res)
+    ~finally:(fun () -> close_noflush t)
 ;;
 
 let with_writer_exclusive t f =
   let%bind () = Unix.lockf t.fd Exclusive in
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
     f
     ~finally:(fun () ->
       let%map () = flushed t in
@@ -1058,9 +1068,7 @@ and write_when_ready t =
 and write_finished t bytes_written =
   if debug then Debug.log "Writer.write_finished" (bytes_written, t) [%sexp_of: int * t];
   assert (is_running t.background_writer_state);
-  let int63_bytes_written = Int63.of_int bytes_written in
-  Io_stats.update io_stats ~kind:(Fd.kind t.fd) ~bytes:int63_bytes_written;
-  t.bytes_written <- Int63.(int63_bytes_written + t.bytes_written);
+  t.bytes_written <- Int63.(t.bytes_written + of_int bytes_written);
   if Int63.(t.bytes_written > t.bytes_received)
   then die t [%message "writer wrote more bytes than it received"];
   fill_flushes t;
@@ -1110,6 +1118,8 @@ let maybe_start_writer t =
   | `Not_running ->
     if bytes_to_write t > 0
     then (
+      (* since we're writing, ensure the buffer age check is running *)
+      let (_ : _) = force t.check_buffer_age in
       t.background_writer_state <- `Running;
       (* We schedule the background writer thread to run with low priority, so that it
          runs at the end of the cycle and that all of the calls to Writer.write will
@@ -1184,7 +1194,8 @@ let write_gen_internal
       ~src_pos
       ~src_len
       ~allow_partial_write
-      ~(blit_to_bigstring : (a, Bigstring.t) Blit.blit)
+      ~(blit_to_bigstring :
+          src:a -> src_pos:int -> dst:Bigstring.t -> dst_pos:int -> len:int -> unit)
   =
   if is_stopped_permanently t
   then got_bytes t src_len
@@ -1270,7 +1281,8 @@ let write_bytes ?pos ?len t src =
     ?len
     t
     src
-    ~blit_to_bigstring:Bigstring.From_bytes.blit
+    ~blit_to_bigstring:(fun ~src ~src_pos ~dst ~dst_pos ~len ->
+      Bigstring.From_bytes.blit ~src ~src_pos ~dst ~dst_pos ~len)
     ~length:Bytes.length
 ;;
 
@@ -1280,7 +1292,8 @@ let write ?pos ?len t src =
     ?len
     t
     src
-    ~blit_to_bigstring:Bigstring.From_string.blit
+    ~blit_to_bigstring:(fun ~src ~src_pos ~dst ~dst_pos ~len ->
+      Bigstring.From_string.blit ~src ~src_pos ~dst ~dst_pos ~len)
     ~length:String.length
 ;;
 
@@ -1290,8 +1303,9 @@ let write_bigstring ?pos ?len t src =
     ?len
     t
     src
-    ~blit_to_bigstring:Bigstring.blit
-    ~length:Bigstring.length
+    ~blit_to_bigstring:(fun ~src ~src_pos ~dst ~dst_pos ~len ->
+      Bigstring.blit ~src ~src_pos ~dst ~dst_pos ~len)
+    ~length:(fun buf -> Bigstring.length buf)
 ;;
 
 let write_iobuf ?pos ?len t iobuf =
@@ -1301,8 +1315,9 @@ let write_iobuf ?pos ?len t iobuf =
     ?len
     t
     iobuf
-    ~blit_to_bigstring:Iobuf.Peek.To_bigstring.blit
-    ~length:Iobuf.length
+    ~blit_to_bigstring:(fun ~src ~src_pos ~dst ~dst_pos ~len ->
+      Iobuf.Peek.To_bigstring.blit ~src ~src_pos ~dst ~dst_pos ~len)
+    ~length:(fun buf -> Iobuf.length buf)
 ;;
 
 let write_substring t substring =
@@ -1421,13 +1436,14 @@ let write_sexp ?hum ?(terminate_with = Terminate_with.Space_if_needed) t sexp =
 
 let write_bin_prot t (writer : _ Bin_prot.Type_class.writer) v =
   let len = writer.size v in
-  assert (len > 0);
   let tot_len = len + Bin_prot.Utils.size_header_length in
   if is_stopped_permanently t
   then got_bytes t tot_len
   else (
     let buf, start_pos = give_buf t tot_len in
-    ignore (Bigstring.write_bin_prot buf ~pos:start_pos writer v : int);
+    ignore
+      (Bigstring.write_bin_prot_known_size buf ~pos:start_pos ~size:len writer.write v
+       : int);
     maybe_start_writer t)
 ;;
 
@@ -1692,7 +1708,7 @@ let make_writer_behave_nicely_in_pipeline writer =
   set_raise_when_consumer_leaves writer false;
   don't_wait_for
     (let%map () = consumer_left writer in
-     Shutdown.shutdown 0)
+     Shutdown.shutdown_with_signal_exn Signal.pipe)
 ;;
 
 let behave_nicely_in_pipeline ?writers () =
@@ -1866,7 +1882,6 @@ let with_flushed_at_close t ~flushed ~f =
   let producers_to_flush_at_close_elt = Bag.add t.producers_to_flush_at_close flushed in
   Monitor.protect
     ~run:`Schedule
-    ~rest:`Log
     f
     ~finally:(fun () ->
       Bag.remove t.producers_to_flush_at_close producers_to_flush_at_close_elt;
@@ -1938,3 +1953,14 @@ let pipe t =
   don't_wait_for (transfer t pipe_r (fun s -> write t s));
   pipe_w
 ;;
+
+module Private = struct
+  let set_bytes_received t i =
+    let (_ : _) = force t.check_buffer_age in
+    t.bytes_received <- i
+  ;;
+
+  let set_bytes_written t i = t.bytes_written <- i
+
+  module Check_buffer_age = Check_buffer_age
+end

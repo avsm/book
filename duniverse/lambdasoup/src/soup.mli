@@ -264,9 +264,6 @@ val element : (_ node) -> element node option
 val elements : (_ nodes) -> element nodes
 (** Filters non-elements from a sequence of nodes. *)
 
-val is_element : (_ node) -> bool
-(** Indicates whether the given node is an element. *)
-
 
 
 (** {2 Content access} *)
@@ -432,6 +429,15 @@ val parent : (_ node) -> element node option
 val is_root : (_ node) -> bool
 (** Indicates whether the given node is not a soup node, and either has no
     parent, or its parent is a soup node. *)
+
+val is_document : (_ node) -> bool
+(** Indicates whether the given node is a soup (document) node. *)
+
+val is_element : (_ node) -> bool
+(** Indicates whether the given node is an element. *)
+
+val is_text : (_ node) -> bool
+(** Indicates whether the given node is a text node. *)
 
 val child : (_ node) -> general node option
 (** [child node] evaluates to [node]'s first child. Equivalent to
@@ -635,6 +641,9 @@ val unwrap : (_ node) -> unit
 
 val append_root : soup node -> (_ node) -> unit
 (** [append_root soup node] adds [node] as the last root node of [soup]. *)
+
+val prepend_root : soup node -> (_ node) -> unit
+(** [prepend_root soup node] adds [node] as the first root node of [soup]. *)
 
 val set_name : string -> element node -> unit
 (** Sets the tag name of the given element. *)

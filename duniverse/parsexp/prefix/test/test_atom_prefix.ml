@@ -83,11 +83,13 @@ let test_every_prefix (saw_state : Coverage.Saw_state.t) ~parser_input ~verbose 
     Coverage.with_prefix_coverage (get_signified parser_input)
   in
   let%bind.Tilde_f len, state, _ =
-    List.iter (state_after_every_prefix Single parser_input)
+    Tilde_f.of_local (List.iter (state_after_every_prefix Single parser_input))
   in
   saw_state.f state;
   if verbose then print_s (show_state state len);
-  let%bind.Tilde_f of_atom = Option.iter (Atom_prefix.create_opt state) in
+  let%bind.Tilde_f of_atom =
+    Tilde_f.of_local (Option.iter (Atom_prefix.create_opt state))
+  in
   match Atom_prefix.get_signified of_atom with
   | Incomplete { prefix_of_prefix = prefix } | Complete { prefix } ->
     saw_prefix.f ~prefix;
@@ -98,7 +100,9 @@ let test_every_prefix (saw_state : Coverage.Saw_state.t) ~parser_input ~verbose 
 
 let%expect_test _ =
   Tilde_f.run
-    (let%bind.Tilde_f () = Tilde_f.of_unlabeled (require_does_not_raise [%here]) in
+    (let%bind.Tilde_f () =
+       Tilde_f.of_unlabeled (fun f -> require_does_not_raise [%here] (fun () -> f ()))
+     in
      let%bind.Tilde_f state_coverage = Coverage.with_state_coverage in
      let%bind.Tilde_f parser_input = Base_quickcheck.Test.run_exn (module Atom_string) in
      test_every_prefix state_coverage ~parser_input ~verbose:false);

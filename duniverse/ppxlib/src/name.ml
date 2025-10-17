@@ -1,5 +1,5 @@
 open! Import
-module Format = Caml.Format
+module Format = Stdlib.Format
 
 let fold_dot_suffixes name ~init:acc ~f =
   let rec collapse_after_at = function
@@ -44,10 +44,15 @@ module Pattern = struct
   let matches t matched = String.Set.mem matched t.dot_suffixes
 end
 
-let get_outer_namespace name =
+(* On the namespace "a.NAMESPACE", return the pair ("a", NAMESPACE) *)
+let split_outer_namespace name =
   match String.index_opt name '.' with
   | None -> None
-  | Some i -> Some (String.sub name ~pos:0 ~len:i)
+  | Some i ->
+      let n = String.length name in
+      let before_dot = String.sub name ~pos:0 ~len:i in
+      let after_dot = String.sub name ~pos:(i + 1) ~len:(n - i - 1) in
+      Some (before_dot, after_dot)
 
 module Allowlisted = struct
   (* Allow list the following attributes, as well as all their dot suffixes.
@@ -114,18 +119,53 @@ module Allowlisted = struct
 end
 
 module Reserved_namespaces = struct
-  let tbl : (string, unit) Hashtbl.t = Hashtbl.create 16
-  let reserve ns = Hashtbl.add_exn tbl ~key:ns ~data:()
+  type reserved = (string, sub_namespaces) Hashtbl.t
+  and sub_namespaces = All | Sub_namespaces of reserved
+
+  (* If [tbl] contains a mapping from "x" to [All], then "x" and all paths that
+   * start with "x." are reserved with respect to [tbl]
+   *
+   * If [tbl] contains a mapping from "x" to [Sub_namespaces tbl'], and P is
+   * reserved with respect to [tbl'], then all paths "x.P" are reserved with
+   * respect to [tbl].
+   *)
+  let create_reserved () : reserved = Hashtbl.create 16
+
+  let rec reserve ns tbl =
+    match split_outer_namespace ns with
+    | None -> Hashtbl.add_exn tbl ~key:ns ~data:All
+    | Some (outer_ns, rest_ns) -> (
+        match
+          Hashtbl.find_or_add tbl outer_ns ~default:(fun () ->
+              Sub_namespaces (create_reserved ()))
+        with
+        | Sub_namespaces rest_tbl -> reserve rest_ns rest_tbl
+        | All -> ())
+
+  let rec is_in_reserved_namespaces name tbl =
+    match split_outer_namespace name with
+    | Some (ns, rest) -> (
+        match Hashtbl.find_opt tbl ns with
+        | Some (Sub_namespaces rest_tbl) ->
+            is_in_reserved_namespaces rest rest_tbl
+        | Some All -> true
+        | None -> false)
+    | None -> (
+        match Hashtbl.find_opt tbl name with
+        | Some All -> true
+        | Some (Sub_namespaces _) | None -> false)
+
+  let tbl = create_reserved ()
+  let reserve ns = reserve ns tbl
+  let is_in_reserved_namespaces name = is_in_reserved_namespaces name tbl
   let () = reserve "merlin"
   let () = reserve "reason"
-  let () = reserve "refmt"
+  let () = reserve "refmt" (* reason *)
+  let () = reserve "ns" (* rescript *)
+  let () = reserve "res" (* rescript *)
   let () = reserve "metaocaml"
   let () = reserve "ocamlformat"
-
-  let is_in_reserved_namespaces name =
-    match get_outer_namespace name with
-    | Some ns -> Hashtbl.mem tbl ns
-    | None -> Hashtbl.mem tbl name
+  let () = reserve "ppxlib.migration"
 
   let check_not_reserved ~kind name =
     let kind, list =
@@ -178,7 +218,7 @@ module Registrar = struct
     | Some e ->
         let declared_at = function
           | None -> ""
-          | Some (loc : Caml.Printexc.location) ->
+          | Some (loc : Stdlib.Printexc.location) ->
               Printf.sprintf " declared at %s:%d" loc.filename loc.line_number
         in
         let context =
@@ -209,17 +249,21 @@ module Registrar = struct
           String.Map.add name t acc)
 
   let spellcheck t context ?(allowlist = []) name =
+    let all_for_context = get_all_for_context t context in
     let all =
-      let all = get_all_for_context t context in
-      String.Map.fold (fun key _ acc -> key :: acc) all.all []
+      String.Map.fold (fun key _ acc -> key :: acc) all_for_context.all []
     in
     match Spellcheck.spellcheck (all @ allowlist) name with
     | Some _ as x -> x
+    | None when String.Map.mem name all_for_context.all -> None
     | None -> (
         let other_contexts =
           Hashtbl.fold
-            (fun ctx { all } acc ->
-              if Poly.( <> ) context ctx && String.Map.mem name all then
+            (fun ctx all_from_context acc ->
+              if
+                Poly.( <> ) context ctx
+                && String.Map.mem name all_from_context.all
+              then
                 match t.string_of_context ctx with
                 | None -> acc
                 | Some s -> (s ^ "s") :: acc
@@ -248,14 +292,15 @@ module Registrar = struct
             Some
               (Format.asprintf
                  "@[Hint:@ `%s'@ is@ available@ for@ %a%t.@]@\n\
-                  Did you put it at the wrong level?" name pp_text c
-                 current_context)
+                  Did you put it at the wrong level?"
+                 name pp_text c current_context)
         | last :: rev_others ->
             let others = List.rev rev_others in
             Some
               (Format.asprintf
                  "@[Hint:@ `%s'@ is@ available@ for@ %a@ and@ %a%t.@]@\n\
-                  Did you put it at the wrong level?" name
+                  Did you put it at the wrong level?"
+                 name
                  (Format.pp_print_list pp_text ~pp_sep:(fun ppf () ->
                       Format.fprintf ppf ",@ "))
                  others pp_text last current_context))

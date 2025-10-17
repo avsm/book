@@ -27,11 +27,10 @@ let pp_output ppf = function
 let pp_toplevel_block (b: Mdx.Block.t) ppf =
   let ts =
     Mdx.Toplevel.of_lines
-      ~syntax:Normal
       ~loc:b.loc
       b.contents
   in
-  pp_list pp_toplevel ppf ts
+  pp_list pp_toplevel ppf ts.tests
 
 let pp_contents (t:Mdx.Block.t) ppf =
   Fmt.(list ~sep:(any "\n") pp_html) ppf t.contents
@@ -50,11 +49,10 @@ let pp_markdown_toplevel ppf (t:Mdx.Toplevel.t) =
 let pp_markdown_toplevel_block (b: Mdx.Block.t) ppf =
   let ts =
     Mdx.Toplevel.of_lines
-      ~syntax:Normal
       ~loc:b.loc
       b.contents
   in
-  pp_list pp_markdown_toplevel ppf ts
+  pp_list pp_markdown_toplevel ppf ts.tests
 
 let pp_cram ppf (t:Mdx.Cram.t) =
   let pp_exit ppf = match t.exit_code with
@@ -66,7 +64,7 @@ let pp_cram ppf (t:Mdx.Cram.t) =
     (pp_list pp_output) t.output pp_exit
 
 let pp_cram_block content ppf =
-  pp_list pp_cram ppf (snd (Mdx.Cram.of_lines ~syntax:Mdx.Syntax.Normal ~loc:Location.none content))
+  pp_list pp_cram ppf (Mdx.Cram.of_lines content).tests
 
 let header_to_string = Fmt.str "%a" Mdx.Block.Header.pp 
 
@@ -189,9 +187,9 @@ let get_output_infos = function
 
 let run (`File file) (`Output output) output_type =
   let (pp_block, pp_text, out_args) = get_output_infos output_type in
-  match Mdx.parse_file Normal file with
-  | Error (`Msg msg) ->
-    Printf.eprintf "%s\n" msg;
+  match Mdx.parse_file Markdown file with
+  | Error msgs ->
+    List.iter (fun (`Msg msg) -> Printf.eprintf "%s\n" msg) msgs;
     1
   | Ok [] -> 1
   | Ok t  ->

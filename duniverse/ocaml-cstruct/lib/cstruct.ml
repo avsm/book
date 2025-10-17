@@ -53,7 +53,8 @@ let err_of_bigarray t = err "Cstruct.of_bigarray off=%d len=%d" t
 let err_sub t = err "Cstruct.sub: %a off=%d len=%d" pp_t t
 let err_shift t = err "Cstruct.shift %a %d" pp_t t
 let err_shiftv n = err "Cstruct.shiftv short by %d" n
-let err_copy t = err "Cstruct.copy %a off=%d len=%d" pp_t t
+let err_copy_to_string caller t = err "Cstruct.%s %a off=%d len=%d" caller pp_t t
+let err_to_hex_string t = err "Cstruct.to_hex_string %a off=%d len=%d" pp_t t
 let err_blit_src src dst =
   err "Cstruct.blit src=%a dst=%a src-off=%d len=%d" pp_t src pp_t dst
 let err_blit_dst src dst =
@@ -199,14 +200,16 @@ external unsafe_compare_bigstring : buffer -> int -> buffer -> int -> int -> int
 
 external unsafe_fill_bigstring : buffer -> int -> int -> int -> unit = "caml_fill_bigstring" [@@noalloc]
 
-let copy src srcoff len =
+let copy_to_string caller src srcoff len =
   if len < 0 || srcoff < 0 || src.len - srcoff < len then
-    err_copy src srcoff len
+    err_copy_to_string caller src srcoff len
   else
     let b = Bytes.create len in
     unsafe_blit_bigstring_to_bytes src.buffer (src.off+srcoff) b 0 len;
     (* The following call is safe, since b is not visible elsewhere. *)
     Bytes.unsafe_to_string b
+
+let copy = copy_to_string "copy"
 
 let blit src srcoff dst dstoff len =
   if len < 0 || srcoff < 0 || src.len - srcoff < len then
@@ -216,6 +219,11 @@ let blit src srcoff dst dstoff len =
   else
     unsafe_blit_bigstring_to_bigstring src.buffer (src.off+srcoff) dst.buffer
       (dst.off+dstoff) len
+
+let sub_copy cstr off len : t =
+  let cstr2 = create_unsafe len in
+  blit cstr off cstr2 0 len;
+  cstr2
 
 let blit_from_string src srcoff dst dstoff len =
   if len < 0 || srcoff < 0 || dstoff < 0 || String.length src - srcoff < len then
@@ -392,9 +400,29 @@ let fillv ~src ~dst =
 
 let to_string ?(off=0) ?len:sz t =
   let len = match sz with None -> length t - off | Some l -> l in
-  (* The following call is safe, since this is the only reference to the
-     freshly-created value built by [to_bytes t]. *)
-  copy t off len
+  copy_to_string "to_string" t off len
+
+let to_hex_string ?(off=0) ?len:sz t : string =
+  let[@inline] nibble_to_char (i:int) : char =
+    if i < 10 then
+      Char.chr (i + Char.code '0')
+    else
+      Char.chr (i - 10 + Char.code 'a')
+  in
+
+  let len = match sz with None -> length t - off | Some l -> l in
+  if len < 0 || off < 0 || t.len - off < len then
+    err_to_hex_string t off len
+  else (
+    let out = Bytes.create (2 * len) in
+    for i=0 to len-1 do
+      let c = Char.code @@ Bigarray.Array1.get t.buffer (i+t.off+off) in
+      Bytes.set out (2*i) (nibble_to_char (c lsr 4));
+      Bytes.set out (2*i+1) (nibble_to_char (c land 0xf));
+    done;
+    Bytes.unsafe_to_string out
+  )
+
 
 let to_bytes ?off ?len t =
   Bytes.unsafe_of_string (to_string ?off ?len t)

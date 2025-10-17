@@ -1,8 +1,10 @@
 open! Import
-open! Caml.Int64
+open! Stdlib.Int64
 
 module T = struct
-  type t = int64 [@@deriving_inline hash, sexp, sexp_grammar]
+  type t = int64 [@@deriving_inline globalize, hash, sexp, sexp_grammar]
+
+  let (globalize : (t[@ocaml.local]) -> t) = (globalize_int64 : (t[@ocaml.local]) -> t)
 
   let (hash_fold_t : Ppx_hash_lib.Std.Hash.state -> t -> Ppx_hash_lib.Std.Hash.state) =
     hash_fold_int64
@@ -23,6 +25,7 @@ module T = struct
   let compare = Int64_replace_polymorphic_compare.compare
   let to_string = to_string
   let of_string = of_string
+  let of_string_opt = of_string_opt
 end
 
 include T
@@ -52,12 +55,12 @@ let minus_one = minus_one
 let one = one
 let zero = zero
 let to_float = to_float
-let of_float_unchecked = Caml.Int64.of_float
+let of_float_unchecked = Stdlib.Int64.of_float
 
 let of_float f =
   if Float_replace_polymorphic_compare.( >= ) f float_lower_bound
   && Float_replace_polymorphic_compare.( <= ) f float_upper_bound
-  then Caml.Int64.of_float f
+  then Stdlib.Int64.of_float f
   else
     Printf.invalid_argf
       "Int64.of_float: argument (%f) is out of range or NaN"
@@ -67,19 +70,19 @@ let of_float f =
 
 let ( ** ) b e = pow b e
 
-external bswap64 : t -> t = "%bswap_int64"
+external bswap64 : (t[@local_opt]) -> (t[@local_opt]) = "%bswap_int64"
 
-let[@inline always] bswap16 x = Caml.Int64.shift_right_logical (bswap64 x) 48
+let[@inline always] bswap16 x = Stdlib.Int64.shift_right_logical (bswap64 x) 48
 
 let[@inline always] bswap32 x =
   (* This is strictly better than coercing to an int32 to perform byteswap. Coercing
      from an int32 will add unnecessary shift operations to sign extend the number
      appropriately.
   *)
-  Caml.Int64.shift_right_logical (bswap64 x) 32
+  Stdlib.Int64.shift_right_logical (bswap64 x) 32
 ;;
 
-let[@inline always] bswap48 x = Caml.Int64.shift_right_logical (bswap64 x) 16
+let[@inline always] bswap48 x = Stdlib.Int64.shift_right_logical (bswap64 x) 16
 
 include Comparable.With_zero (struct
     include T
@@ -114,7 +117,7 @@ let clamp t ~min ~max =
 let incr r = r := add !r one
 let decr r = r := sub !r one
 
-external of_int64 : t -> t = "%identity"
+external of_int64 : (t[@local_opt]) -> (t[@local_opt]) = "%identity"
 
 let of_int64_exn = of_int64
 let to_int64 t = t
@@ -122,11 +125,16 @@ let popcount = Popcount.int64_popcount
 
 module Conv = Int_conversions
 
-external to_int_trunc : t -> int = "%int64_to_int"
-external to_int32_trunc : int64 -> int32 = "%int64_to_int32"
-external to_nativeint_trunc : int64 -> nativeint = "%int64_to_nativeint"
-external of_int : int -> int64 = "%int64_of_int"
-external of_int32 : int32 -> int64 = "%int64_of_int32"
+external to_int_trunc : (t[@local_opt]) -> int = "%int64_to_int"
+external to_int32_trunc : (int64[@local_opt]) -> (int32[@local_opt]) = "%int64_to_int32"
+
+external to_nativeint_trunc
+  :  (int64[@local_opt])
+  -> (nativeint[@local_opt])
+  = "%int64_to_nativeint"
+
+external of_int : (int[@local_opt]) -> (int64[@local_opt]) = "%int64_of_int"
+external of_int32 : (int32[@local_opt]) -> (int64[@local_opt]) = "%int64_of_int32"
 
 let of_int_exn = of_int
 let to_int = Conv.int64_to_int
@@ -149,38 +157,38 @@ module Pow2 = struct
     Printf.invalid_argf "argument must be strictly positive" ()
   ;;
 
-  let ( lor ) = Caml.Int64.logor
-  let ( lsr ) = Caml.Int64.shift_right_logical
-  let ( land ) = Caml.Int64.logand
+  let ( lor ) = Stdlib.Int64.logor
+  let ( lsr ) = Stdlib.Int64.shift_right_logical
+  let ( land ) = Stdlib.Int64.logand
 
   (** "ceiling power of 2" - Least power of 2 greater than or equal to x. *)
   let ceil_pow2 x =
-    if x <= Caml.Int64.zero then non_positive_argument ();
-    let x = Caml.Int64.pred x in
+    if x <= Stdlib.Int64.zero then non_positive_argument ();
+    let x = Stdlib.Int64.pred x in
     let x = x lor (x lsr 1) in
     let x = x lor (x lsr 2) in
     let x = x lor (x lsr 4) in
     let x = x lor (x lsr 8) in
     let x = x lor (x lsr 16) in
     let x = x lor (x lsr 32) in
-    Caml.Int64.succ x
+    Stdlib.Int64.succ x
   ;;
 
   (** "floor power of 2" - Largest power of 2 less than or equal to x. *)
   let floor_pow2 x =
-    if x <= Caml.Int64.zero then non_positive_argument ();
+    if x <= Stdlib.Int64.zero then non_positive_argument ();
     let x = x lor (x lsr 1) in
     let x = x lor (x lsr 2) in
     let x = x lor (x lsr 4) in
     let x = x lor (x lsr 8) in
     let x = x lor (x lsr 16) in
     let x = x lor (x lsr 32) in
-    Caml.Int64.sub x (x lsr 1)
+    Stdlib.Int64.sub x (x lsr 1)
   ;;
 
   let is_pow2 x =
-    if x <= Caml.Int64.zero then non_positive_argument ();
-    x land Caml.Int64.pred x = Caml.Int64.zero
+    if x <= Stdlib.Int64.zero then non_positive_argument ();
+    x land Stdlib.Int64.pred x = Stdlib.Int64.zero
   ;;
 
   (* C stubs for int clz and ctz to use the CLZ/BSR/CTZ/BSF instruction where possible *)
@@ -198,7 +206,7 @@ module Pow2 = struct
 
   (** Hacker's Delight Second Edition p106 *)
   let floor_log2 i =
-    if i <= Caml.Int64.zero
+    if i <= Stdlib.Int64.zero
     then
       raise_s
         (Sexp.message "[Int64.floor_log2] got invalid input" [ "", sexp_of_int64 i ]);
@@ -207,10 +215,12 @@ module Pow2 = struct
 
   (** Hacker's Delight Second Edition p106 *)
   let ceil_log2 i =
-    if Poly.( <= ) i Caml.Int64.zero
+    if Poly.( <= ) i Stdlib.Int64.zero
     then
       raise_s (Sexp.message "[Int64.ceil_log2] got invalid input" [ "", sexp_of_int64 i ]);
-    if Caml.Int64.equal i Caml.Int64.one then 0 else num_bits - clz (Caml.Int64.pred i)
+    if Stdlib.Int64.equal i Stdlib.Int64.one
+    then 0
+    else num_bits - clz (Stdlib.Int64.pred i)
   ;;
 end
 
@@ -236,7 +246,7 @@ include Conv.Make_hex (struct
     let neg = neg
     let ( < ) = ( < )
     let to_string i = Printf.sprintf "%Lx" i
-    let of_string s = Caml.Scanf.sscanf s "%Lx" Fn.id
+    let of_string s = Stdlib.Scanf.sscanf s "%Lx" Fn.id
     let module_name = "Base.Int64.Hex"
   end)
 
@@ -248,11 +258,11 @@ include Pretty_printer.Register (struct
   end)
 
 module Pre_O = struct
-  external ( + ) : t -> t -> t = "%int64_add"
-  external ( - ) : t -> t -> t = "%int64_sub"
-  external ( * ) : t -> t -> t = "%int64_mul"
-  external ( / ) : t -> t -> t = "%int64_div"
-  external ( ~- ) : t -> t = "%int64_neg"
+  external ( + ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_add"
+  external ( - ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_sub"
+  external ( * ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_mul"
+  external ( / ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_div"
+  external ( ~- ) : (t[@local_opt]) -> (t[@local_opt]) = "%int64_neg"
 
   let ( ** ) = ( ** )
 
@@ -260,7 +270,7 @@ module Pre_O = struct
 
   let abs = abs
 
-  external neg : t -> t = "%int64_neg"
+  external neg : (t[@local_opt]) -> (t[@local_opt]) = "%int64_neg"
 
   let zero = zero
   let of_int_exn = of_int_exn
@@ -281,15 +291,29 @@ module O = struct
       let to_string = T.to_string
     end)
 
-  external ( land ) : t -> t -> t = "%int64_and"
-  external ( lor ) : t -> t -> t = "%int64_or"
-  external ( lxor ) : t -> t -> t = "%int64_xor"
+  external ( land ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_and"
+  external ( lor ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_or"
+  external ( lxor ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_xor"
 
   let lnot = bit_not
 
-  external ( lsl ) : t -> int -> t = "%int64_lsl"
-  external ( asr ) : t -> int -> t = "%int64_asr"
-  external ( lsr ) : t -> int -> t = "%int64_lsr"
+  external ( lsl )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_lsl"
+
+  external ( asr )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_asr"
+
+  external ( lsr )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_lsr"
 end
 
 include O

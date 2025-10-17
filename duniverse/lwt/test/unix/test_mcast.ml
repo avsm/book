@@ -26,7 +26,7 @@ let child mcast_addr join fd =
   if debug then
     Printf.printf "\nReceived multicast message %S\n%!" (Bytes.unsafe_to_string (Bytes.sub buf 0 n));
   if Bytes.sub buf 0 n <> hello then
-    Lwt.fail (Failure "unexpected multicast message")
+    raise (Failure "unexpected multicast message")
   else
     Lwt.return_unit
 
@@ -53,7 +53,7 @@ let test_mcast name join set_loop =
              fd1 (ADDR_INET (Unix.inet_addr_any, mcast_port))) >>= fun () ->
            let t1 = child mcast_addr join fd1 in
            let t2 = parent mcast_addr mcast_port set_loop fd2 in
-           Lwt.join [t1; t2] >>= fun () -> Lwt.return true
+           Lwt.join [t1; t2] >>= fun () -> Lwt.return_true
         )
         (function
           | Lwt_unix.Timeout ->
@@ -61,9 +61,9 @@ let test_mcast name join set_loop =
           | Unix.Unix_error (Unix.EINVAL, "send", _)
           | Unix.Unix_error (Unix.ENODEV, "setsockopt", _)
           | Unix.Unix_error (Unix.ENETUNREACH, "send", _) ->
-            Lwt.fail Skip
+            raise Skip
           | e ->
-            Lwt.fail e
+            Lwt.reraise e
         )
     in
     Lwt.finalize t (fun () -> Lwt.join [Lwt_unix.close fd1; Lwt_unix.close fd2])

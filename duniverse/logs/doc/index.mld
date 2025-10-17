@@ -1,4 +1,4 @@
-{0 Logs {%html: <span class="version">v0.7.0+dune2</span>%}}
+{0 Logs {%html: <span class="version">v0.9.0+dune2</span>%}}
 
 Logs provides a logging infrastructure.
 
@@ -9,10 +9,15 @@ with the package and the API easily allows to implement your own.
 
 See the {{!Logs.basics}basics}.
 
-{1:api API}
+{1:library_logs Library [logs]}
+
+{!modules: Logs}
+
+{1:libraries Libraries [logs.{browser,cli,fmt,lwt,threaded}]}
+
+Each of these modules lives in its own library.
 
 {!modules:
-Logs
 Logs_browser
 Logs_cli
 Logs_fmt

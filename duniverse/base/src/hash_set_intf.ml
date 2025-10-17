@@ -2,7 +2,9 @@ open! Import
 module Key = Hashtbl_intf.Key
 
 module type Accessors = sig
-  include Container.Generic
+  type 'a t
+
+  include Container.Generic with type ('a, _) t := 'a t
 
   (** override [Container.Generic.mem] *)
   val mem : 'a t -> 'a -> bool
@@ -26,8 +28,8 @@ module type Accessors = sig
   val strict_remove_exn : 'a t -> 'a -> unit
   val clear : 'a t -> unit
   val equal : 'a t -> 'a t -> bool
-  val filter : 'a t -> f:('a -> bool) -> 'a t
-  val filter_inplace : 'a t -> f:('a -> bool) -> unit
+  val filter : 'a t -> f:(('a -> bool)[@local]) -> 'a t
+  val filter_inplace : 'a t -> f:(('a -> bool)[@local]) -> unit
 
   (** [inter t1 t2] computes the set intersection of [t1] and [t2].  Runs in O(min(length
       t1, length t2)).  Behavior is undefined if [t1] and [t2] don't have the same
@@ -37,7 +39,7 @@ module type Accessors = sig
   val union : 'a t -> 'a t -> 'a t
   val diff : 'a t -> 'a t -> 'a t
   val of_hashtbl_keys : ('a, _) Hashtbl.t -> 'a t
-  val to_hashtbl : 'key t -> f:('key -> 'data) -> ('key, 'data) Hashtbl.t
+  val to_hashtbl : 'key t -> f:(('key -> 'data)[@local]) -> ('key, 'data) Hashtbl.t
 end
 
 type ('key, 'z) create_options = ('key, unit, 'z) Hashtbl_intf.create_options
@@ -136,7 +138,7 @@ module type For_deriving = sig
 end
 
 module type Hash_set = sig
-  type 'a t [@@deriving_inline sexp_of]
+  type !'a t [@@deriving_inline sexp_of]
 
   val sexp_of_t : ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t
 

@@ -7,7 +7,10 @@ module type Quickcheck_async_configured = sig
   (** Like [test], but for asynchronous tests. *)
   val async_test
     :  ?seed:Quickcheck.seed
+    -> ?sizes:int Sequence.t
     -> ?trials:int
+    -> ?shrinker:'a Quickcheck.Shrinker.t
+    -> ?shrink_attempts:Quickcheck.shrink_attempts
     -> ?sexp_of:('a -> Sexp.t)
     -> ?examples:'a list
     -> 'a Quickcheck.Generator.t

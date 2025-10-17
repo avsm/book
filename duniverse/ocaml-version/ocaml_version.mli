@@ -95,7 +95,7 @@ val arch_of_string : string -> (arch, [> `Msg of string ]) result
     combinators defined in the [rresult] library. This function
     is liberal and will attempt to understand variants of the
     same architecture.  For example, both [aarch64] and [arm64]
-    are parsed into {!`Aarch64}. *)
+    are parsed into [Aarch64]. *)
 
 val arch_of_string_exn: string -> arch
 (** [arch_of_string_exn t] is the same as {!arch_of_string},
@@ -188,6 +188,87 @@ val sys_version : t
 (** Values representing official releases of OCaml. *)
 module Releases : sig
 
+  val v3_07_0 : t
+  (** Version 3.07 *)
+
+  val v3_07_1 : t
+  (** Version 3.07+1 *)
+
+  val v3_07_2 : t
+  (** Version 3.07+2 *)
+
+  val v3_07 : t
+  (** Latest release in the 3.07 series *)
+
+  val v3_08_0 : t
+  (** Version 3.08.0 *)
+
+  val v3_08_1 : t
+  (** Version 3.08.1 *)
+
+  val v3_08_2 : t
+  (** Version 3.08.2 *)
+
+  val v3_08_3 : t
+  (** Version 3.08.3 *)
+
+  val v3_08_4 : t
+  (** Version 3.08.4 *)
+
+  val v3_08 : t
+  (** Latest release in the 3.08.x series *)
+
+  val v3_09_0 : t
+  (** Version 3.09.0 *)
+
+  val v3_09_1 : t
+  (** Version 3.09.1 *)
+
+  val v3_09_2 : t
+  (** Version 3.09.2 *)
+
+  val v3_09_3 : t
+  (** Version 3.09.3 *)
+
+  val v3_09 : t
+  (** Latest release in the 3.09.x series *)
+
+  val v3_10_0 : t
+  (** Version 3.10.0 *)
+
+  val v3_10_1 : t
+  (** Version 3.10.1 *)
+
+  val v3_10_2 : t
+  (** Version 3.10.2 *)
+
+  val v3_10 : t
+  (** Latest release in the 3.10.x series *)
+
+  val v3_11_0 : t
+  (** Version 3.11.0 *)
+
+  val v3_11_1 : t
+  (** Version 3.11.1 *)
+
+  val v3_11_2 : t
+  (** Version 3.11.2 *)
+
+  val v3_11 : t
+  (** Latest release in the 3.11.x series *)
+
+  val v3_12_0 : t
+  (** Version 3.12.0 *)
+
+  val v3_12_1 : t
+  (** Version 3.12.1 *)
+
+  val v3_12 : t
+  (** Latest release in the 3.12.x series *)
+
+  val v4_00_0 : t
+  (** Version 4.00.0 *)
+
   val v4_00_1 : t
   (** Version 4.00.1 *)
 
@@ -258,7 +339,10 @@ module Releases : sig
   (** Latest release in the 4.07.x series *)
 
   val v4_08_0 : t
-  (** Versior 4.08.0 *)
+  (** Version 4.08.0 *)
+
+  val v4_08_1 : t
+  (** Version 4.08.1 *)
 
   val v4_08 : t
   (** Latest release in the 4.08.x series *)
@@ -317,6 +401,12 @@ module Releases : sig
   val v4_14_0 : t
   (** Version 4.14.0 *)
 
+  val v4_14_1 : t
+  (** Version 4.14.1 *)
+
+  val v4_14_2 : t
+  (** Version 4.14.2 *)
+
   val v4_14 : t
   (** Latest release in the 4.14.x series *)
 
@@ -332,6 +422,21 @@ module Releases : sig
   val v5_1 : t
   (** Latest release in the 5.1.x series *)
 
+  val v5_2_0 : t
+  (** Version 5.2.0 *)
+
+  val v5_2_1 : t
+  (** Version 5.2.1 *)
+
+  val v5_2 : t
+  (** Latest release in the 5.2.x series *)
+
+  val v5_3_0 : t
+  (** Version 5.3.0 *)
+
+  val v5_3 : t
+  (** Latest release in the 5.3.x series *)
+
   val all_patches : t list
   (** [all_patches] is an enumeration of all OCaml releases, including every patch release.
       To get the major and minor releases with the latest patch version, use {!all} instead. *)
@@ -341,7 +446,7 @@ module Releases : sig
       each major and minor release. *)
 
   val unreleased_betas : t list
-  (** Enumerates the latest beta / release-candidate versions for each {i
+  (** Enumerates the latest alpha / beta / release-candidate versions for each {i
       unreleased} minor OCaml series. *)
 
   val dev : t list
@@ -353,11 +458,11 @@ module Releases : sig
   (** [latest] is the most recent stable release of OCaml. *)
 
   val recent : t list
-  (** [recent] is the last eight releases of OCaml, with each at the latest patch level.
+  (** [recent] are the stable OCaml releases since 4.08, with each at the latest patch level.
       This is the set that is most reliably tested in the opam package repository. *)
 
   val recent_with_dev : t list
-  (** [recent_with_dev] are the last eight stable releases of OCaml and the latest
+  (** [recent_with_dev] are the OCaml releases since 4.02 and the latest
       development branches. *)
 
   val trunk : t
@@ -402,11 +507,11 @@ end
 module Has : sig
 
   val bytes : t -> bool
-  (** [bytes t] will return {!true} if that release has a {!bytes} type.
+  (** [bytes t] will return [true] if that release has a {!bytes} type.
       Note that opam provides a [bytes] compatibility package for older releases. *)
 
   val arch : arch -> t -> bool
-  (** [arch a t] will return {!true} if architecture [a] is supported on release [t]. *)
+  (** [arch a t] will return [true] if architecture [a] is supported on release [t]. *)
 
   val options_packages : t -> bool
   (** [options_packages t] will return true if the release [t] uses [ocaml-option-*]
@@ -414,7 +519,7 @@ module Has : sig
 
   val multicore : t -> bool
   (** [multicore t] will return true if the release [t] has a multicore OCaml fork
-      available for it.  This requires the [https://github.com/ocaml-multicore/multicore-opam]
+      available for it.  This requires the {{: https://github.com/ocaml-multicore/multicore-opam}}
       opam switch to be added before the package is available.
 
       Note that the multicore variants changed between 4.10 and 4.12, and this
@@ -448,7 +553,7 @@ module Configure_options : sig
   (** [to_string o] returns a compact representation of {!o} suitable for use in opam version strings. *)
 
   val of_string : string -> o option
-  (** [of_string s] will parse the output of {!to_string} back into an option {!o}. Returns {!None} if
+  (** [of_string s] will parse the output of {!to_string} back into an option {!o}. Returns [None] if
       the string input is unknown. *)
 
   val of_t : t -> (o list, [> `Msg of string ]) result
@@ -456,7 +561,7 @@ module Configure_options : sig
       represents. Unknown options in the extra field will result in an [Error] being returned. *)
 
   val to_t : t -> o list -> t
-  (* [to_t t ol] will replace the [extra] field of [t] with the list of options represented in [ol]. *)
+  (** [to_t t ol] will replace the [extra] field of [t] with the list of options represented in [ol]. *)
 
   val to_description : o -> string
   (** [to_description o] returns a human-readable representation of {!o}. *)
@@ -466,14 +571,14 @@ module Configure_options : sig
 
   val compare : t -> o -> o -> int
   (** [compare t a b] will return -1 if [a] is < [b], 0 if they are equal, or 1 if [a] > [b]. For backwards
-      compatibility reasons, {!`Frame_pointer} always comes first in comparisons before OCaml 4.12.0, and
+      compatibility reasons, [Frame_pointer] always comes first in comparisons before OCaml 4.12.0, and
       is lexically ordered after 4.12.0.  The [t] argument will determine which comparison function to use.  *)
 
   val equal : t -> o -> o -> bool
-  (** [equal t a b] will return {!true} if [a=b] for a given OCaml version [t]. *)
+  (** [equal t a b] will return [true] if [a=b] for a given OCaml version [t]. *)
 
   val is_multicore : t -> bool
-  (** [is_multicore t] is {!true} if this version is a multicore-capable release. *)
+  (** [is_multicore t] is [true] if this version is a multicore-capable release. *)
 end
 
 val compiler_variants : arch -> t -> t list

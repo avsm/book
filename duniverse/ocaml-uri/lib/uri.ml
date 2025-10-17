@@ -80,7 +80,7 @@ type safe_chars = bool array
 
 module type Scheme = sig
   val safe_chars_for_component : component -> safe_chars
-  val normalize_host : string option -> string option
+  val normalize_host : string -> string
   val canonicalize_port : int option -> int option
   val canonicalize_path : string list -> string list
 end
@@ -186,9 +186,7 @@ end
 module Http : Scheme = struct
   include Generic
 
-  let normalize_host = function
-    | Some hs -> Some (String.lowercase_ascii hs)
-    | None -> None
+  let normalize_host hs = String.lowercase_ascii hs
 
   let canonicalize_port = function
     | None -> None
@@ -212,11 +210,9 @@ end
 module File : Scheme = struct
   include Generic
 
-  let normalize_host = function
-    | Some hs ->
-      let hs = String.lowercase_ascii hs in
-      if hs="localhost" then Some "" else Some hs
-    | None -> None
+  let normalize_host hs =
+    let hs = String.lowercase_ascii hs in
+    if hs="localhost" then "" else hs
 end
 
 module Urn : Scheme = struct
@@ -542,7 +538,9 @@ let encoded_of_query ?scheme = Query.encoded_of_query ?scheme
 type t = {
   scheme: Pct.decoded option;
   userinfo: Userinfo.t option;
-  host: Pct.decoded option;
+  host: [ `Ipv4_literal of string
+        | `Ipv6_literal of string
+        | `Host of Pct.decoded] option ;
   port: int option;
   path: Path.t;
   query: Query.t;
@@ -561,8 +559,16 @@ let empty = {
 
 let compare_decoded = Pct.unlift_decoded2 String.compare
 let compare_decoded_opt = compare_opt compare_decoded
+let compare_host h1 h2 =
+  match h1, h2 with
+  | `Ipv4_literal ip1, `Ipv4_literal ip2 -> String.compare ip1 ip2
+  | `Ipv6_literal ip1, `Ipv6_literal ip2 -> String.compare ip1 ip2
+  | `Host h1, `Host h2 -> compare_decoded h1 h2
+  | _ -> -1
+let compare_host_opt = compare_opt compare_host
+
 let compare t t' =
-  (match compare_decoded_opt t.host t'.host with
+  (match compare_host_opt t.host t'.host with
   | 0 -> (match compare_decoded_opt t.scheme t'.scheme with
     | 0 -> (match compare_opt (fun p p' ->
       if p < p' then -1 else if p > p' then 1 else 0
@@ -584,10 +590,6 @@ let uncast_opt = function
   | Some h -> Some (Pct.uncast_decoded h)
   | None -> None
 
-let cast_opt = function
-  | Some h -> Some (Pct.cast_decoded h)
-  | None -> None
-
 let normalize schem uri =
   let module Scheme =
     (val (module_of_scheme (uncast_opt schem)) : Scheme) in
@@ -596,37 +598,15 @@ let normalize schem uri =
     | None -> None
   in {uri with
       scheme=dob String.lowercase_ascii uri.scheme;
-      host=cast_opt (Scheme.normalize_host (uncast_opt uri.host))
+      host= match uri.host with
+       | Some (`Ipv4_literal host) ->
+         Some (`Ipv4_literal (Scheme.normalize_host host))
+       | Some (`Ipv6_literal host) ->
+         Some (`Ipv6_literal (Scheme.normalize_host host))
+       | Some (`Host host) ->
+         Some (`Host (Pct.cast_decoded (Scheme.normalize_host (Pct.uncast_decoded host))))
+       | None -> None
      }
-
-(* Make a URI record. This is a bit more inefficient than it needs to be due to the
- * casting/uncasting (which isn't fully identity due to the option box), but it is
- * no big deal for now.
-*)
-let make ?scheme ?userinfo ?host ?port ?path ?query ?fragment () =
-  let decode = function
-    |Some x -> Some (Pct.cast_decoded x) |None -> None in
-  let host = match userinfo, host, port with
-    | _, Some _, _ | None, None, None -> host
-    | Some _, None, _ | _, None, Some _ -> Some ""
-  in
-  let userinfo = match userinfo with
-    | None -> None | Some u -> Some (userinfo_of_encoded u) in
-  let path = match path with
-    |None -> [] | Some p ->
-      let path = path_of_encoded p in
-      match host, path with
-      | None, _ | Some _, "/"::_ | Some _, [] -> path
-      | Some _, _  -> "/"::path
-  in
-  let query = match query with
-    | None -> Query.KV []
-    | Some p -> Query.KV p
-  in
-  let scheme = decode scheme in
-  normalize scheme
-    { scheme; userinfo;
-      host=decode host; port; path; query; fragment=decode fragment }
 
 (** Convert a URI structure into a percent-encoded string
     <http://tools.ietf.org/html/rfc3986#section-5.3>
@@ -659,8 +639,13 @@ let to_string ?(pct_encoder=pct_encoder ()) uri =
   );
   (match uri.host with
   |None -> ()
-  |Some host ->
+  |Some (`Host host) ->
     add_pct_string ~component:pct_encoder.host host;
+  |Some (`Ipv4_literal host) -> Buffer.add_string buf host
+  |Some (`Ipv6_literal host) ->
+      Buffer.add_char buf '[';
+      Buffer.add_string buf host;
+      Buffer.add_char buf ']'
   );
   (match uri.port with
   |None -> ()
@@ -707,11 +692,11 @@ let with_scheme uri =
   |Some scheme -> { uri with scheme=Some (Pct.cast_decoded scheme) }
   |None -> { uri with scheme=None }
 
-let host uri = get_decoded_opt uri.host
-let with_host uri =
-  function
-  |Some host -> { uri with host=Some (Pct.cast_decoded host) }
-  |None -> { uri with host=None }
+let host uri =
+  match uri.host with
+  | None -> None
+  | Some (`Ipv4_literal h | `Ipv6_literal h) -> Some h
+  | Some (`Host h) -> Some (Pct.uncast_decoded h)
 
 let host_with_default ?(default="localhost") uri =
   match host uri with
@@ -729,7 +714,7 @@ let with_userinfo uri userinfo =
     | None -> None
   in
   match host uri with
-  | None -> { uri with host=Some (Pct.cast_decoded ""); userinfo=userinfo }
+  | None -> { uri with host=Some (`Host (Pct.cast_decoded "")); userinfo=userinfo }
   | Some _ -> { uri with userinfo=userinfo }
 
 let user uri = match uri.userinfo with
@@ -741,7 +726,7 @@ let password uri = match uri.userinfo with
   | Some (_, Some pass) -> Some pass
 let with_password uri password =
   let result userinfo = match host uri with
-    | None -> { uri with host=Some (Pct.cast_decoded ""); userinfo=userinfo }
+    | None -> { uri with host=Some (`Host (Pct.cast_decoded "")); userinfo=userinfo }
     | Some _ -> { uri with userinfo=userinfo }
   in
   match uri.userinfo, password with
@@ -756,7 +741,7 @@ let with_port uri port =
   | None -> begin
      match port with
      | None -> { uri with host=None; port=None }
-     | Some _ -> { uri with host=Some (Pct.cast_decoded ""); port=port }
+     | Some _ -> { uri with host=Some (`Host (Pct.cast_decoded "")); port=port }
   end
 
 (* Return the path component *)
@@ -799,30 +784,6 @@ let add_query_params' uri ps =
 let remove_query_param uri k = Query.(
   { uri with query=KV (List.filter (fun (k',_) -> k<>k') (kv uri.query)) }
 )
-
-let with_uri ?scheme ?userinfo ?host ?port ?path ?query ?fragment uri =
-  let with_path_opt u o =
-    match o with
-    | None -> with_path u ""
-    | Some p -> with_path u p
-  in
-  let with_query_opt u o =
-    match o with
-    | None -> with_query u []
-    | Some q -> with_query u q
-  in
-  let with_ f o u =
-    match o with
-    | None -> u
-    | Some x -> f u x
-  in
-  with_ with_scheme scheme uri
-  |> with_ with_userinfo userinfo
-  |> with_ with_host host
-  |> with_ with_port port
-  |> with_ with_path_opt path
-  |> with_ with_query_opt query
-  |> with_ with_fragment fragment
 
 (* Construct encoded path and query components *)
 let path_and_query uri =
@@ -986,12 +947,7 @@ module Parser = struct
     lift format_addr (c_colon *> c_colon *> double_colon 0 <|> part 0)
 
   let ipv6_address =
-    lift3
-      (fun lb ip rb ->
-        String.concat "" [ string_of_char lb; ip; string_of_char rb ])
-      (char '[')
-      ipv6
-      (char ']')
+    (char '[') *> ipv6 <* (char ']')
 
   let pct_encoded =
     lift2
@@ -1025,10 +981,21 @@ module Parser = struct
             ]))
 
   let host =
-    lift
-      (fun s -> Pct.decode (Pct.cast_encoded s))
-      (choice
-         [ reg_name; ipv4_address; ipv6_address (* | ipv4_literal TODO *) ])
+    choice
+      [ ipv4_address >>| (fun h -> `Ipv4_literal h)
+      ; ipv6_address >>| (fun h -> `Ipv6_literal h)
+      ; reg_name >>| (fun s -> `Host (Pct.decode (Pct.cast_encoded s)))
+      (* TODO(dinosaure): According to RFC3986:
+
+         host        = IP-literal / IPv4address / reg-name
+         IP-literal  = "[" ( IPv6address / IPvFuture  ) "]"
+         IPvFuture   = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+
+         IPvFuture is not implemented. We should handle it:
+
+         IPvFuture   = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+       *)
+      ]
 
   let userinfo =
     lift
@@ -1057,7 +1024,8 @@ module Parser = struct
   let authority =
     string "//"
     *> lift3
-         (fun userinfo host port -> userinfo, Some host, port)
+         (fun userinfo host port ->
+           userinfo, Some host, port)
          userinfo
          host
          port
@@ -1102,6 +1070,78 @@ module Parser = struct
         empty
 end
 
+let decode_host host =
+  match Angstrom.parse_string ~consume:All Parser.host host with
+  | Ok parsed -> parsed
+  | Error _ ->
+    match Angstrom.parse_string ~consume:All Parser.ipv6 host with
+    | Ok parsed -> (`Ipv6_literal parsed)
+    | Error _ -> (`Host (Pct.cast_decoded host))
+
+(* Make a URI record. This is a bit more inefficient than it needs to be due to the
+ * casting/uncasting (which isn't fully identity due to the option box), but it is
+ * no big deal for now.
+*)
+let make ?scheme ?userinfo ?host ?port ?path ?query ?fragment () =
+  let decode = function
+    |Some x -> Some (Pct.cast_decoded x) |None -> None in
+  let host = match userinfo, host, port with
+    | _, Some _, _ | None, None, None -> host
+    | Some _, None, _ | _, None, Some _ -> Some ""
+  in
+  let userinfo = match userinfo with
+    | None -> None | Some u -> Some (userinfo_of_encoded u) in
+  let path = match path with
+    |None -> [] | Some p ->
+      let path = path_of_encoded p in
+      match host, path with
+      | None, _ | Some _, "/"::_ | Some _, [] -> path
+      | Some _, _  -> "/"::path
+  in
+  let query = match query with
+    | None -> Query.KV []
+    | Some p -> Query.KV p
+  in
+  let scheme = decode scheme in
+  normalize scheme
+    { scheme; userinfo;
+      host =
+        (match host with
+        | Some host -> Some (decode_host host)
+        | None -> None);
+      port; path; query; fragment=decode fragment }
+
+let with_host uri host =
+  { uri with
+    host = (match host with
+            | Some host -> Some (decode_host host)
+            | None -> None)
+  }
+
+let with_uri ?scheme ?userinfo ?host ?port ?path ?query ?fragment uri =
+  let with_path_opt u o =
+    match o with
+    | None -> with_path u ""
+    | Some p -> with_path u p
+  in
+  let with_query_opt u o =
+    match o with
+    | None -> with_query u []
+    | Some q -> with_query u q
+  in
+  let with_ f o u =
+    match o with
+    | None -> u
+    | Some x -> f u x
+  in
+  with_ with_scheme scheme uri
+  |> with_ with_userinfo userinfo
+  |> with_ with_host host
+  |> with_ with_port port
+  |> with_ with_path_opt path
+  |> with_ with_query_opt query
+  |> with_ with_fragment fragment
+
 let of_string s =
   (* To preserve the old regex parser's behavior, we only parse a prefix, and
    * stop whenever we can't parse more. *)
@@ -1110,3 +1150,99 @@ let of_string s =
   | Error _ ->
     (* Shouldn't really happen if the parser is forgiving. *)
     empty
+
+module Absolute_http = struct
+  type uri = t
+  type t =
+    { scheme : [ `Http | `Https ];
+      userinfo: Userinfo.t option;
+      host: [ `Ipv4_literal of string
+            | `Ipv6_literal of string
+            | `Host of Pct.decoded];
+      port : int option;
+      path : Path.t;
+      query : Query.t;
+      fragment : Pct.decoded option
+    }
+
+  let ( let* ) = Result.bind
+
+  let to_uri { scheme; userinfo; host; port; path; query; fragment } =
+    let scheme =
+      match scheme with
+      | `Http -> Pct.cast_decoded "http"
+      | `Https -> Pct.cast_decoded "https"
+    in
+    ({ scheme = Some scheme;
+       userinfo;
+       host = Some host;
+       port;
+       path;
+       query;
+       fragment } : uri)
+  ;;
+
+  let of_uri ({ scheme; userinfo; host; port; path; query; fragment }: uri) =
+    let* scheme =
+      match scheme with
+      | None -> Error (`Msg "No scheme present in URI")
+      | Some scheme ->
+        (match Pct.uncast_decoded scheme with
+         | "http" -> Ok `Http
+         | "https" -> Ok `Https
+         | unsupported_scheme ->
+           Error
+             (`Msg
+                (Printf.sprintf
+                   "Only http and https URIs are supported. %s is invalid."
+                   unsupported_scheme)))
+    in
+    let* host = Option.to_result ~none:(`Msg "host is required for HTTP(S) uris") host in
+    Ok { scheme; userinfo; host; port; path; query; fragment }
+  ;;
+
+  let of_string s = match of_string s |> of_uri with
+    | Ok t -> t
+    | Error (`Msg error) -> failwith error
+
+  let to_string ?pct_encoder t = to_uri t |> to_string ?pct_encoder
+
+  let normalize t =
+    { t with
+      host = match t.host with
+       | (`Ipv4_literal host) ->
+         (`Ipv4_literal (String.lowercase_ascii host))
+       | (`Ipv6_literal host) ->
+         (`Ipv6_literal (String.lowercase_ascii host))
+       | (`Host host) ->
+         (`Host (Pct.cast_decoded (String.lowercase_ascii (Pct.uncast_decoded host))))
+    }
+
+  let make ~scheme ~host ?userinfo ?port ?path ?query ?fragment () =
+    let decode = function
+      |Some x -> Some (Pct.cast_decoded x) |None -> None in
+    let userinfo = match userinfo with
+      | None -> None | Some u -> Some (userinfo_of_encoded u) in
+    let path = match path with
+      |None -> [] | Some p ->
+        let path = path_of_encoded p in
+        match path with
+        |  "/"::_ |  [] -> path
+        | _  -> "/"::path
+    in
+    let query = match query with
+      | None -> Query.KV []
+      | Some p -> Query.KV p
+    in
+    normalize
+      { scheme;
+        userinfo;
+        host= decode_host host; port; path; query; fragment=decode fragment }
+
+  let host t =
+    match t.host with
+    | (`Ipv4_literal h | `Ipv6_literal h) -> h
+    | (`Host h) -> (Pct.uncast_decoded h)
+
+  let scheme t = t.scheme
+end

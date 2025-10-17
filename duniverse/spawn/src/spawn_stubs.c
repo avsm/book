@@ -1,11 +1,28 @@
 #define _GNU_SOURCE
 
+/* Must come before any other caml/ headers are included */
+#define CAML_INTERNALS
+
+#ifdef _WIN32
+/* for [caml_win32_multi_byte_to_wide_char] */
+#include <caml/osdeps.h>
+
+/* Prior to OCaml 5.0, the function was called win_multi_byte_to_wide_char */
+#include <caml/version.h>
+#if OCAML_VERSION_MAJOR < 5
+#define caml_win32_multi_byte_to_wide_char win_multi_byte_to_wide_char
+#define caml_win32_maperr win32_maperr
+#endif
+#endif
+
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
 #include <caml/alloc.h>
 #include <caml/unixsupport.h>
-#include <caml/signals.h>
 #include <caml/fail.h>
+
+/* for [caml_convert_signal_number]; must come after public caml headers */
+#include <caml/signals.h>
 
 #include <errno.h>
 
@@ -29,7 +46,7 @@ CAMLprim value spawn_is_osx()
 
 #include <assert.h>
 #include <string.h>
-#if !defined(__CYGWIN__)
+#if !defined(__CYGWIN__) && !defined(__HAIKU__)
 #include <sys/syscall.h>
 #endif
 #include <sys/types.h>
@@ -44,7 +61,14 @@ CAMLprim value spawn_is_osx()
    | pipe2                                                           |
    +-----------------------------------------------------------------+ */
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__HAIKU__)
+
+/* vfork(2) is deprecated on macOS >= 12, so we use fork(2) instead. */
+# if defined(__MAC_OS_X_VERSION_MAX_ALLOWED)
+#  if __MAC_OS_X_VERSION_MAX_ALLOWED >= 120000
+#   define vfork fork
+#  endif
+# endif
 
 static int safe_pipe(int fd[2])
 {
@@ -164,13 +188,17 @@ static void subprocess_failure(int failure_fd,
   sigset_t sigset;
   ssize_t written;
 
+#ifdef PIPE_BUF
   CASSERT(sizeof(failure) < PIPE_BUF)
+#else
+  CASSERT(sizeof(failure) < _POSIX_PIPE_BUF)
+#endif
 
   set_error(&failure, errno, function, error_arg);
 
   /* Block all signals to avoid being interrupted in write.
      Although most of the call sites of [subprocess_failure] already block
-     signals, the one after the [exec] does not. */
+     signals, the one after the [exec] might not. */
   sigfillset(&sigset);
   pthread_sigmask(SIG_SETMASK, &sigset, NULL);
 
@@ -212,13 +240,13 @@ struct spawn_info {
   int std_fds[3];
   int set_pgid;
   pid_t pgid;
+  sigset_t child_sigmask;
 };
 
 static void subprocess(int failure_fd, struct spawn_info *info)
 {
   int i, fd, tmp_fds[3];
   struct sigaction sa;
-  sigset_t sigset;
 
   if (info->set_pgid) {
     if (setpgid(0, info->pgid) == -1) {
@@ -227,8 +255,9 @@ static void subprocess(int failure_fd, struct spawn_info *info)
     }
   }
 
-  /* Restore all signals to their default behavior before unblocking
-     them, to avoid invoking handlers from the parent */
+  /* Restore all signals to their default behavior before setting the
+     desired signal mask for the subprocess to avoid invoking handlers
+     from the parent */
   sa.sa_handler = SIG_DFL;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
@@ -264,8 +293,7 @@ static void subprocess(int failure_fd, struct spawn_info *info)
     close(tmp_fds[fd]);
   }
 
-  sigemptyset(&sigset);
-  pthread_sigmask(SIG_SETMASK, &sigset, NULL);
+  pthread_sigmask(SIG_SETMASK, &info->child_sigmask, NULL);
 
   execve(info->prog, info->argv, info->env);
   subprocess_failure(failure_fd, "execve", PROG);
@@ -353,6 +381,12 @@ static void free_spawn_info(struct spawn_info *info)
 
 extern char ** environ;
 
+enum caml_unix_sigprocmask_command {
+  CAML_SIG_SETMASK,
+  CAML_SIG_BLOCK,
+  CAML_SIG_UNBLOCK,
+};
+
 CAMLprim value spawn_unix(value v_env,
                           value v_cwd,
                           value v_prog,
@@ -361,7 +395,8 @@ CAMLprim value spawn_unix(value v_env,
                           value v_stdout,
                           value v_stderr,
                           value v_use_vfork,
-                          value v_setpgid)
+                          value v_setpgid,
+                          value v_sigprocmask)
 {
   CAMLparam4(v_env, v_cwd, v_prog, v_argv);
   pid_t ret;
@@ -431,10 +466,58 @@ CAMLprim value spawn_unix(value v_env,
 
      For instance:
      http://git.musl-libc.org/cgit/musl/tree/src/process/posix_spawn.c
+
+     On android, pthread_cancel is not implemented, it is typically
+     patched out or in certain cases reimplemented with atomic_flags
+     https://github.com/search?q=org%3Atermux+pthread_setcancelstate+language%3ADiff&type=code&l=Diff
   */
+
+  #if !defined(__ANDROID__)
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+  #endif
   sigfillset(&sigset);
   pthread_sigmask(SIG_SETMASK, &sigset, &saved_procmask);
+
+  if (v_sigprocmask == Val_long(0)) {
+    sigemptyset(&info.child_sigmask);
+  } else {
+    v_sigprocmask = Field(v_sigprocmask, 0);
+    value v_sigprocmask_command = Field(v_sigprocmask, 0);
+    enum caml_unix_sigprocmask_command sigprocmask_command = Long_val(v_sigprocmask_command);
+
+    switch (sigprocmask_command) {
+      case CAML_SIG_SETMASK:
+        sigemptyset(&info.child_sigmask);
+        break;
+
+      case CAML_SIG_BLOCK:
+      case CAML_SIG_UNBLOCK:
+        info.child_sigmask = saved_procmask;
+        break;
+
+      default:
+        caml_failwith("Unknown sigprocmask action");
+    }
+
+    value v_signals_list = Field(v_sigprocmask, 1);
+    for (; v_signals_list != Val_emptylist;
+         v_signals_list = Field(v_signals_list, 1)) {
+      int signal = caml_convert_signal_number(Long_val(Field(v_signals_list, 0)));
+      switch (sigprocmask_command) {
+        case CAML_SIG_SETMASK:
+        case CAML_SIG_BLOCK:
+          sigaddset(&info.child_sigmask, signal);
+          break;
+
+        case CAML_SIG_UNBLOCK:
+          sigdelset(&info.child_sigmask, signal);
+          break;
+
+        default:
+          assert(0);
+      }
+    }
+  }
 
   ret = Bool_val(v_use_vfork) ? vfork() : fork();
 
@@ -479,7 +562,9 @@ CAMLprim value spawn_unix(value v_env,
 
   close(result_pipe[0]);
   pthread_sigmask(SIG_SETMASK, &saved_procmask, NULL);
+  #if !defined(__ANDROID__)
   pthread_setcancelstate(cancel_state, NULL);
+  #endif
 
   caml_leave_blocking_section();
 
@@ -525,7 +610,8 @@ CAMLprim value spawn_unix(value v_env,
                           value v_stdout,
                           value v_stderr,
                           value v_use_vfork,
-                          value v_setpgid)
+                          value v_setpgid,
+                          value v_sigprocmask)
 {
   (void)v_env;
   (void)v_cwd;
@@ -536,6 +622,7 @@ CAMLprim value spawn_unix(value v_env,
   (void)v_stderr;
   (void)v_use_vfork;
   (void)v_setpgid;
+  (void)v_sigprocmask;
   unix_error(ENOSYS, "spawn_unix", Nothing);
 }
 
@@ -565,31 +652,51 @@ CAMLprim value spawn_windows(value v_env,
 {
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
+  WCHAR *prog;
+  WCHAR *cmdline;
+  WCHAR *env = NULL;
+  WCHAR *cwd = NULL;
+  BOOL result;
 
   ZeroMemory(&si, sizeof(si));
   ZeroMemory(&pi, sizeof(pi));
-  si.cb = sizeof(si);
-  si.dwFlags    = STARTF_USESTDHANDLES;
 
   if (!dup2_and_clear_close_on_exec(v_stdin , &si.hStdInput ) ||
       !dup2_and_clear_close_on_exec(v_stdout, &si.hStdOutput) ||
       !dup2_and_clear_close_on_exec(v_stderr, &si.hStdError )) {
-    win32_maperr(GetLastError());
+    caml_win32_maperr(GetLastError());
     close_std_handles(&si);
     uerror("DuplicateHandle", Nothing);
   }
 
-  if (!CreateProcess(String_val(v_prog),
-                     Bytes_val(v_cmdline),
-                     NULL,
-                     NULL,
-                     TRUE,
-                     0,
-                     Is_block(v_env) ? Bytes_val(Field(v_env, 0)) : NULL,
-                     Is_block(v_cwd) ? String_val(Field(v_cwd, 0)) : NULL,
-                     &si,
-                     &pi)) {
-    win32_maperr(GetLastError());
+  prog = caml_stat_strdup_to_utf16(String_val(v_prog));
+  cmdline = caml_stat_strdup_to_utf16(String_val(v_cmdline));
+
+  if (Is_block(v_env)) {
+    v_env = Field(v_env, 0);
+    mlsize_t len = caml_string_length(v_env);
+    int size = caml_win32_multi_byte_to_wide_char(String_val(v_env), len, NULL, 0);
+    env = caml_stat_alloc(size * sizeof(WCHAR));
+    caml_win32_multi_byte_to_wide_char(String_val(v_env), len, env, size);
+  }
+
+  if (Is_block(v_cwd))
+    cwd = caml_stat_strdup_to_utf16(String_val(Field(v_cwd, 0)));
+
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESTDHANDLES;
+
+  result =
+    CreateProcess(prog, cmdline, NULL, NULL, TRUE, CREATE_UNICODE_ENVIRONMENT,
+                  env, cwd, &si, &pi);
+
+  caml_stat_free(prog);
+  caml_stat_free(cmdline);
+  caml_stat_free(env);
+  caml_stat_free(cwd);
+
+  if (!result) {
+    caml_win32_maperr(GetLastError());
     close_std_handles(&si);
     uerror("CreateProcess", Nothing);
   }
@@ -617,7 +724,8 @@ CAMLprim value spawn_unix_byte(value * argv)
                     argv[5],
                     argv[6],
                     argv[7],
-                    argv[8]);
+                    argv[8],
+                    argv[9]);
 }
 
 CAMLprim value spawn_windows_byte(value * argv)

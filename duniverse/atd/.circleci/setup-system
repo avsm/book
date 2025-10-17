@@ -8,13 +8,15 @@ set -eu
 
 sudo apt-get update
 
+# Add repo to install a sufficiently-recent version of node (for atdts tests)
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+
 # This includes compilers and libraries to support the various target
 # languages of atd.
 #
 sudo apt-get install -y \
   default-jdk \
   nodejs \
-  npm \
   python3 \
   python3-pip \
   python-is-python3 \
@@ -22,6 +24,14 @@ sudo apt-get install -y \
 
 # For JSON Schema and atdpy testing
 pip install jsonschema pytest mypy flake8
+
+# For atdcpp testing
+sudo apt install -y \
+  rapidjson-dev
+
+# To get latest ldc version
+source $(curl https://dlang.org/install.sh | bash -s ldc -a)
+echo "source $(~/dlang/install.sh ldc -a)" >> "$BASH_ENV"
 
 ###### Sanity checks ######
 
@@ -49,5 +59,11 @@ python3 -m pytest --version
 echo 'check mypy'
 python3 -m mypy --version
 
-echo 'check js'
-js --version
+echo 'check Node.js'
+node --version
+
+echo 'check npm'
+npm --version
+
+echo 'check ldc2 (dlang)'
+ldc2 --version

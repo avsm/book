@@ -7,9 +7,25 @@
  (name runtest)
  (deps libs.ml))
 
+(alias
+ (name check)
+ (deps libs.ml))
+
 (executable
  (name duneboot)
+ (modules :standard \ configure bootstrap)
  (libraries unix))
+
+(executable
+ (name configure)
+ (preprocess
+  (action
+   (run tail -n +2 %{input-file})))
+ (modules configure))
+
+(executable
+ (name bootstrap)
+ (modules bootstrap))
 
 ;; For unused value warnings. We don't write a plain empty
 ;; duneboot.mli to simplify ../bootstrap.ml

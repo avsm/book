@@ -30,7 +30,7 @@ let prev = Span.prev
 let to_span_since_epoch t = t
 let of_span_since_epoch s = s
 let to_int63_ns_since_epoch t : Int63.t = Span.to_int63_ns (to_span_since_epoch t)
-let of_int63_ns_since_epoch i = of_span_since_epoch (Span.of_int63_ns i)
+let[@inline] of_int63_ns_since_epoch i = of_span_since_epoch (Span.of_int63_ns i)
 let[@cold] overflow () = raise_s [%message "Time_ns: overflow"]
 let is_earlier t1 ~than:t2 = t1 < t2
 let is_later t1 ~than:t2 = t1 > t2
@@ -308,14 +308,20 @@ module Alternate_sexp = struct
       Utc.of_date_and_span_since_start_of_day date ofday
     ;;
 
-    let t_sexp_grammar = Sexplib.Sexp_grammar.coerce String.t_sexp_grammar
-
     include Sexpable.Of_stringable (struct
         type nonrec t = t
 
         let to_string = to_string
         let of_string = of_string
       end)
+
+    let t_sexp_grammar =
+      let open Sexplib in
+      Sexp_grammar.tag
+        t_sexp_grammar
+        ~key:Sexp_grammar.type_name_tag
+        ~value:(Atom "Core.Time_ns.Alternate_sexp.t")
+    ;;
   end
 
   include T
@@ -328,13 +334,16 @@ module Alternate_sexp = struct
         (* see tests in lib/core/test/src/test_time_ns that ensure stability of this
            representation *)
         type nonrec t = t [@@deriving bin_io, compare, hash, sexp, sexp_grammar]
+
+        let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
+
         type nonrec comparator_witness = comparator_witness
 
         let comparator = comparator
       end
 
       include T
-      include Comparable.Stable.V1.Make (T)
+      include Comparable.Stable.V1.With_stable_witness.Make (T)
     end
   end
 end
@@ -985,9 +994,9 @@ let pause = `Use_Time_ns_unix
 let pause_forever = `Use_Time_ns_unix
 let pp = `Use_Time_ns_unix
 let set_sexp_zone = `Use_Time_ns_unix
-let sexp_of_t = `Use_Time_ns_unix
+let sexp_of_t = `Use_Time_ns_unix_or_Time_ns_alternate_sexp
 let sexp_of_t_abs = `Use_Time_ns_unix
-let t_of_sexp = `Use_Time_ns_unix
+let t_of_sexp = `Use_Time_ns_unix_or_Time_ns_alternate_sexp
 let t_of_sexp_abs = `Use_Time_ns_unix
 let to_date_ofday_zoned = `Use_Time_ns_unix
 let to_ofday_zoned = `Use_Time_ns_unix

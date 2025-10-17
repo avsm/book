@@ -1,3 +1,63 @@
+1.14.0 (16-Sep-2025)
+--------------------
+
+* Thread-safety with OCaml 5 (#574).
+
+* Introduce [Re.Pcre.get_named_substring_opt]. A non raising version of
+  [Re.Pcre.get_named_substring] (#525)
+
+* Introduce parsing functions in `Re.{Perl,Pcre,Emacs,Glob}` that return a
+  result instead of raising. (#542)
+
+* Introduce experimental streaming API `Re.Stream`. (#456)
+
+* Make [Re.Str] functions tail recursive (#539)
+
+* Fix [Re.Pcre.split]. Regression introduced in 1.12 and a previous bug with
+  [Re.Pcre.split] (#538).
+
+* Avoid parsing unnecessary patterns supported only by `Re.Emacs` in `Re.Str`
+  (#563)
+
+1.13.1 (30-Sep-2024)
+--------------------
+
+* Fix re on jsoo (#150)
+
+1.13.0 (30-Sep-2024)
+--------------------
+
+* Add non raising versions of all [Re.Group] functions (#414, fixes #150)
+
+* Add support for hex and octal of the form: `\o{...}` and `\x{...}` (#403)
+
+* Add support for octal characters using `\0dd` and `\ddd` (#402)
+
+* Add support for `\Q...\E` quoted expressions in Pcre and Perl syntax (#401)
+
+* Re.execp and related function raise [Invalid_argument "$function"] when [pos]
+  or [len] arguments are out of bounds. In 1.12.0, a regerssion was introduced
+  that raised [Invalid_argument _] from [String.get].
+
+1.12.0 (29-Aug-2024)
+--------------------
+
+* Add `Re.split_delim` (#233)
+* Fix handling of empty matches in splitting and substitution functions (#233)
+* Add support for character classes in `Re.Posix` (#263)
+
+1.11.0 (19-Aug-2023)
+--------------------
+
+* Add `Re.group_count` to get the number of groups in a compiled regex (#218)
+* Add `Re.exec_partial_detailed` to allow resuming searches from partial inputs
+  (#219)
+* Re-export `Re.Perl`'s `Parse_error` and `Not_supported` exceptions
+  in Pcre (#222)
+* Add support for `DOTALL` flag in `Re.Pcre.regexp` (#225)
+* Add support for named groups (#223)
+* Add support for some control characters in `Re.Perl` (#227)
+
 1.10.4 (27-Apr-2022)
 --------------------
 

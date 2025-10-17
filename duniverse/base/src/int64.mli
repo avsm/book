@@ -1,26 +1,34 @@
 (** 64-bit integers. *)
 
 open! Import
-include Int_intf.S with type t = int64
+
+type t = int64 [@@deriving_inline globalize]
+
+val globalize : (t[@ocaml.local]) -> t
+
+[@@@end]
+
+include Int_intf.S with type t := t
 
 module O : sig
-  (*_ Declared as externals so that the compiler skips the caml_apply_X wrapping even when
+  (*_ Declared as externals
+    so that the compiler skips the caml_apply_X wrapping even when
     compiling without cross library inlining. *)
-  external ( + ) : t -> t -> t = "%int64_add"
-  external ( - ) : t -> t -> t = "%int64_sub"
-  external ( * ) : t -> t -> t = "%int64_mul"
-  external ( / ) : t -> t -> t = "%int64_div"
-  external ( ~- ) : t -> t = "%int64_neg"
+  external ( + ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_add"
+  external ( - ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_sub"
+  external ( * ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_mul"
+  external ( / ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_div"
+  external ( ~- ) : (t[@local_opt]) -> (t[@local_opt]) = "%int64_neg"
   val ( ** ) : t -> t -> t
-  external ( = ) : t -> t -> bool = "%equal"
-  external ( <> ) : t -> t -> bool = "%notequal"
-  external ( < ) : t -> t -> bool = "%lessthan"
-  external ( > ) : t -> t -> bool = "%greaterthan"
-  external ( <= ) : t -> t -> bool = "%lessequal"
-  external ( >= ) : t -> t -> bool = "%greaterequal"
-  external ( land ) : t -> t -> t = "%int64_and"
-  external ( lor ) : t -> t -> t = "%int64_or"
-  external ( lxor ) : t -> t -> t = "%int64_xor"
+  external ( = ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%equal"
+  external ( <> ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%notequal"
+  external ( < ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%lessthan"
+  external ( > ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%greaterthan"
+  external ( <= ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%lessequal"
+  external ( >= ) : (t[@local_opt]) -> (t[@local_opt]) -> bool = "%greaterequal"
+  external ( land ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_and"
+  external ( lor ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_or"
+  external ( lxor ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt]) = "%int64_xor"
   val lnot : t -> t
   val abs : t -> t
   external neg : t -> t = "%int64_neg"
@@ -28,9 +36,24 @@ module O : sig
   val ( % ) : t -> t -> t
   val ( /% ) : t -> t -> t
   val ( // ) : t -> t -> float
-  external ( lsl ) : t -> int -> t = "%int64_lsl"
-  external ( asr ) : t -> int -> t = "%int64_asr"
-  external ( lsr ) : t -> int -> t = "%int64_lsr"
+
+  external ( lsl )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_lsl"
+
+  external ( asr )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_asr"
+
+  external ( lsr )
+    :  (t[@local_opt])
+    -> (int[@local_opt])
+    -> (t[@local_opt])
+    = "%int64_lsr"
 end
 
 include module type of O
@@ -39,9 +62,9 @@ include module type of O
 
 (*_ Declared as externals so that the compiler skips the caml_apply_X wrapping even when
   compiling without cross library inlining. *)
-external of_int : int -> t = "%int64_of_int"
-external of_int32 : int32 -> t = "%int64_of_int32"
-external of_int64 : t -> t = "%identity"
+external of_int : (int[@local_opt]) -> (t[@local_opt]) = "%int64_of_int"
+external of_int32 : (int32[@local_opt]) -> (t[@local_opt]) = "%int64_of_int32"
+external of_int64 : (t[@local_opt]) -> (t[@local_opt]) = "%identity"
 val to_int : t -> int option
 val to_int32 : t -> int32 option
 val of_nativeint : nativeint -> t
@@ -54,9 +77,13 @@ val to_nativeint : t -> nativeint option
 
 (*_ Declared as externals so that the compiler skips the caml_apply_X wrapping even when
   compiling without cross library inlining. *)
-external to_int_trunc : t -> int = "%int64_to_int"
-external to_int32_trunc : int64 -> int32 = "%int64_to_int32"
-external to_nativeint_trunc : int64 -> nativeint = "%int64_to_nativeint"
+external to_int_trunc : (t[@local_opt]) -> int = "%int64_to_int"
+external to_int32_trunc : (int64[@local_opt]) -> (int32[@local_opt]) = "%int64_to_int32"
+
+external to_nativeint_trunc
+  :  (int64[@local_opt])
+  -> (nativeint[@local_opt])
+  = "%int64_to_nativeint"
 
 (** {3 Low-level float conversions} *)
 
@@ -79,4 +106,4 @@ val bswap48 : t -> t
 
 (*_ Declared as an external so that the compiler skips the caml_apply_X wrapping even when
   compiling without cross library inlining. *)
-external bswap64 : t -> t = "%bswap_int64"
+external bswap64 : (t[@local_opt]) -> (t[@local_opt]) = "%bswap_int64"

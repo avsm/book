@@ -1,7 +1,7 @@
 open! Import
 
 module type Infix = Comparisons.Infix
-module type Polymorphic_compare = Comparisons.S
+module type Comparisons = Comparisons.S
 
 module Sign = Sign0 (** @canonical Base.Sign *)
 
@@ -26,6 +26,14 @@ module type With_compare = sig
       [reverse (>=)]. *)
   val reverse : ('a -> 'a -> 'result) -> 'a -> 'a -> 'result
 
+  (** {!reversed} is the identity type but its associated compare function is the same as
+      the {!reverse} function above. It allows you to get reversed comparisons with
+      [ppx_compare], writing, for example, [[%compare: string Comparable.reversed]] to
+      have strings ordered in the reverse order. *)
+  type 'a reversed = 'a
+
+  val compare_reversed : ('a -> 'a -> int) -> 'a reversed -> 'a reversed -> int
+
   (** The functions below are analogues of the type-specific functions exported by the
       [Comparable.S] interface. *)
 
@@ -47,7 +55,7 @@ module type With_zero = sig
 end
 
 module type S = sig
-  include Polymorphic_compare
+  include Comparisons
 
 
   (** [ascending] is identical to [compare]. [descending x y = ascending y x].  These are
@@ -137,13 +145,13 @@ module type Comparable = sig
 
   module type Infix = Infix
   module type S = S
-  module type Polymorphic_compare = Polymorphic_compare
+  module type Comparisons = Comparisons
   module type With_compare = With_compare
   module type With_zero = With_zero
 
   include With_compare
 
-  (** Derive [Infix] or [Polymorphic_compare] functions from just [[@@deriving compare]],
+  (** Derive [Infix] or [Comparisons] functions from just [[@@deriving compare]],
       without need for the [sexp_of_t] required by [Make*] (see below). *)
 
   module Infix (T : sig
@@ -154,13 +162,13 @@ module type Comparable = sig
       [@@@end]
     end) : Infix with type t := T.t
 
-  module Polymorphic_compare (T : sig
+  module Comparisons (T : sig
       type t [@@deriving_inline compare]
 
       include Ppx_compare_lib.Comparable.S with type t := t
 
       [@@@end]
-    end) : Polymorphic_compare with type t := T.t
+    end) : Comparisons with type t := T.t
 
   (** Inherit comparability from a component. *)
   module Inherit (C : sig

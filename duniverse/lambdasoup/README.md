@@ -1,7 +1,5 @@
-# Lambda Soup &nbsp; [![Travis status][travis-img]][travis] [![Coverage][coveralls-img]][coveralls]
+# Lambda Soup &nbsp; [![Coverage][coveralls-img]][coveralls]
 
-[travis]:      https://travis-ci.org/aantron/lambdasoup/branches
-[travis-img]:  https://img.shields.io/travis/aantron/lambdasoup/master.svg
 [coveralls]:     https://coveralls.io/github/aantron/lambdasoup?branch=master
 [coveralls-img]: https://img.shields.io/coveralls/aantron/lambdasoup/master.svg
 

@@ -1,3 +1,16 @@
+## v1.8.0 (2024-12-03)
+- [+ui] A scope, delimited by `#scope ... #endscope`,
+        limits the effect of `#define`, `#def ... #enddef`, and `#undef`.
+- [bug] Fix `cppo -version`, which used to print a blank line (#92).
+
+## v1.7.0 (2024-08-22)
+- [+ui] Multi-line macros, without line terminators `\`,
+        can now be defined using `#def` and `#enddef`.
+        These macro definitions can be nested.
+- [+ui] Higher-order macros:
+        a macro can now take a parameterized macro as a parameter.
+- [compat] Better locations for some syntax error messages.
+
 ## v1.6.9 (2022-05-19)
 - [bug] Fix multiline string support (#81)
 

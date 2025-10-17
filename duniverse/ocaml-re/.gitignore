@@ -9,3 +9,8 @@ setup.exe
 *.docdir
 .merlin
 *.install
+perf.data
+*.old
+*.ctf
+*.bench.sexp
+*.trace

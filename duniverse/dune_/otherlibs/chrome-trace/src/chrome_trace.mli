@@ -1,6 +1,4 @@
-[@@@alert
-unstable "The API of this library is not stable and may change without notice."]
-
+[@@@alert unstable "The API of this library is not stable and may change without notice."]
 [@@@alert "-unstable"]
 
 (** Output trace data to a file in Chrome's trace_event format. This format is
@@ -21,16 +19,17 @@ module Json : sig
     | `List of t list
     | `Bool of bool
     | `Assoc of (string * t) list
+    | `Null
     ]
 end
 
+module Id : sig
+  type t
+
+  val create : [ `String of string | `Int of int ] -> t
+end
+
 module Stack_frame : sig
-  module Id : sig
-    type t
-
-    val create : [ `String of string | `Int of int ] -> t
-  end
-
   module Raw : sig
     type t
 
@@ -49,28 +48,24 @@ module Event : sig
     type t
 
     val of_float_seconds : float -> t
-  end
-
-  module Id : sig
-    type t =
-      | Int of int
-      | String of string
+    val to_float_seconds : t -> float
   end
 
   type common_fields
 
-  val common_fields :
-       ?tts:Timestamp.t
+  val common_fields
+    :  ?tts:Timestamp.t
     -> ?cname:string
     -> ?cat:string list
     -> ?pid:int
     -> ?tid:int
-    -> ?stackframe:[ `Id of Stack_frame.Id.t | `Raw of Stack_frame.Raw.t ]
+    -> ?stackframe:[ `Id of Id.t | `Raw of Stack_frame.Raw.t ]
     -> ts:Timestamp.t
     -> name:string
     -> unit
     -> common_fields
 
+  val ts : common_fields -> Timestamp.t
   val set_ts : common_fields -> Timestamp.t -> common_fields
 
   type args = (string * Json.t) list
@@ -84,11 +79,18 @@ module Event : sig
     | End
 
   val async : ?scope:string -> ?args:args -> Id.t -> async -> common_fields -> t
-
-  val complete :
-    ?tdur:Timestamp.t -> ?args:args -> dur:Timestamp.t -> common_fields -> t
-
+  val complete : ?tdur:Timestamp.t -> ?args:args -> dur:Timestamp.t -> common_fields -> t
   val to_json : t -> Json.t
+
+  (** The scope of an instant event. The scopes below come from the standard
+      reference for this format *)
+  type scope =
+    | Global
+    | Process
+    | Thread
+
+  (** Create an instant event. *)
+  val instant : ?args:args -> ?scope:scope -> common_fields -> t
 end
 
 module Output_object : sig
@@ -96,10 +98,10 @@ module Output_object : sig
 
   type t
 
-  val create :
-       ?displayTimeUnit:[ `Ms | `Ns ]
+  val create
+    :  ?displayTimeUnit:[ `Ms | `Ns ]
     -> ?extra_fields:(string * Json.t) list
-    -> ?stackFrames:(Stack_frame.Id.t * Stack_frame.t) list
+    -> ?stackFrames:(Id.t * Stack_frame.t) list
     -> traceEvents:Event.t list
     -> unit
     -> t

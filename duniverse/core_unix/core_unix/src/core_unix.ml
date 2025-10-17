@@ -6,6 +6,7 @@
 
 open! Core
 open! Import
+open Stable_witness.Export
 
 module Time_ns = Core.Core_private.Time_ns_alternate_sexp
 
@@ -260,6 +261,8 @@ type sysconf =
   | AVPHYS_PAGES
   | IOV_MAX
   | CLK_TCK
+  | NPROCESSORS_CONF
+  | NPROCESSORS_ONLN
 [@@deriving sexp]
 
 external sysconf : sysconf -> int64 option = "core_unix_sysconf"
@@ -494,7 +497,7 @@ module Utsname = struct
           version: string;
           machine: string;
         }
-      [@@deriving fields, bin_io, sexp, compare]
+      [@@deriving fields, bin_io, sexp, compare, stable_witness]
     end
   end
   include Stable.V1
@@ -878,9 +881,12 @@ let fork () =
 (* Same as [Caml.exit] but does not run at_exit handlers *)
 external sys_exit : int -> 'a = "caml_sys_exit"
 
-let fork_exec ~prog ~argv ?use_path ?env () =
+let fork_exec ~prog ~argv ?preexec_fn ?use_path ?env () =
   match fork () with
   | `In_the_child ->
+    (match preexec_fn with
+     | Some preexec_fn -> preexec_fn ()
+     | None -> ());
     never_returns (
       try exec ~prog ~argv ?use_path ?env ()
       with _ -> sys_exit 127
@@ -1786,7 +1792,10 @@ let setpgid ~of_ ~to_ =
   setpgid (Pid.to_int of_) (Pid.to_int to_)
 
 let getpgid pid =
-  Pid.of_int (getpgid (Pid.to_int pid))
+  match getpgid (Pid.to_int pid) with
+  | 0 -> None
+  | pgid -> Some (Pid.of_int pgid)
+;;
 
 let symlink ~target ~link_name =
   improve (fun () -> Unix.symlink ?to_dir:None ~src:target ~dst:link_name)
@@ -1859,8 +1868,13 @@ module Clock = struct
      to be totally fine in a 31-bit int, but I don't want to find out not the hard way,
      and I don't see a lot of value in providing a 32-bit implementation, so it's easier to punt. *)
 
+  [%%ifdef JSC_CLOCK_GETCPUCLOCKID]
   external get_cpuclock_for : Pid.t -> underlying = "caml_clock_getcpuclockid"
   let get_cpuclock_for = Ok get_cpuclock_for
+  [%%else]
+  let get_cpuclock_for = Or_error.unimplemented "Unix.Clock.get_cpuclock_for"
+  [%%endif]
+
   [%%else]
   external getres : t -> Int63.t = "caml_clock_getres"
   external gettime : t -> Int63.t = "caml_clock_gettime"
@@ -1964,8 +1978,8 @@ let with_buffer_increased_on_ERANGE f =
   go 10000
 
 let make_by f make_exn =
-  let normal arg = try Some (f arg) with Not_found_s _ | Caml.Not_found -> None in
-  let exn arg = try f arg with Not_found_s _ | Caml.Not_found -> raise (make_exn arg) in
+  let normal arg = try Some (f arg) with Not_found_s _ | Stdlib.Not_found -> None in
+  let exn arg = try f arg with Not_found_s _ | Stdlib.Not_found -> raise (make_exn arg) in
   (normal, exn)
 ;;
 
@@ -2060,11 +2074,9 @@ module Passwd = struct
         Exn.protect
           ~f:(fun () ->
             let rec loop acc =
-              try
-                let ent = Low_level.getpwent_exn () in
-                loop (ent :: acc)
-              with
-              | End_of_file -> List.rev acc
+              match Low_level.getpwent_exn () with
+              | exception End_of_file -> List.rev acc
+              | ent -> loop (ent :: acc)
             in
             loop [])
           ~finally:(fun () -> Low_level.endpwent ())
@@ -2119,10 +2131,10 @@ module Group = struct
   ;;
 end
 
+let username () = (Passwd.getbyuid_exn (getuid ())).name
 (* The standard getlogin function goes through utmp which is unreliable,
    see the BUGS section of getlogin(3) *)
-let _getlogin_orig = Unix.getlogin
-let getlogin () = (Passwd.getbyuid_exn (getuid ())).name
+let getlogin = username
 
 module Protocol_family = struct
   type t = [ `Unix | `Inet | `Inet6 ]
@@ -2143,6 +2155,7 @@ module Inet_addr0 = struct
       module T0 = struct
         type t = Unix.inet_addr
 
+        let stable_witness = Stable_witness.assert_stable
         let of_string = Unix.inet_addr_of_string
         let to_string = Unix.string_of_inet_addr
 
@@ -2246,7 +2259,7 @@ module Host = struct
   let have_address_in_common h1 h2 =
     let addrs1 = Inet_addr0.Set.of_array h1.addresses in
     let addrs2 = Inet_addr0.Set.of_array h2.addresses in
-    not (Inet_addr0.Set.is_empty (Inet_addr0.Set.inter addrs1 addrs2))
+    not (Set.is_empty (Set.inter addrs1 addrs2))
   ;;
 end
 
@@ -2312,7 +2325,7 @@ module Cidr = struct
           { address : int32; (* IPv4 only *)
             bits    : int;
           }
-        [@@deriving fields, bin_io, compare, hash]
+        [@@deriving fields, bin_io, compare, hash, stable_witness]
 
         let normalized_address ~base ~bits =
           if bits = 0
@@ -2342,7 +2355,7 @@ module Cidr = struct
       end
       module T1 = Sexpable.Stable.Of_stringable.V1(T0)
       module T2 = Comparator.Stable.V1.Make(struct include T0 include T1 end)
-      module T3 = Comparable.Stable.V1.Make(struct include T0 include T1 include T2 end)
+      module T3 = Comparable.Stable.V1.With_stable_witness.Make(struct include T0 include T1 include T2 end)
       include T0
       include T1
       include T2
@@ -2447,7 +2460,7 @@ module Service = struct
 
   let getbyname_exn name ~protocol =
     try of_unix (Unix.getservbyname name ~protocol)
-    with Not_found_s _ | Caml.Not_found -> raise (Getbyname (name, protocol))
+    with Not_found_s _ | Stdlib.Not_found -> raise (Getbyname (name, protocol))
   ;;
 
   let getbyname name ~protocol =
@@ -2459,12 +2472,12 @@ module Service = struct
 
   let getbyport_exn num ~protocol =
     try of_unix (Unix.getservbyport num ~protocol)
-    with Not_found_s _ | Caml.Not_found -> raise (Getbyport (num, protocol))
+    with Not_found_s _ | Stdlib.Not_found -> raise (Getbyport (num, protocol))
   ;;
 
   let getbyport num ~protocol =
     try Some (of_unix (Unix.getservbyport num ~protocol))
-    with Not_found_s _ | Caml.Not_found -> None
+    with Not_found_s _ | Stdlib.Not_found -> None
   ;;
 end
 
@@ -2822,7 +2835,7 @@ type getnameinfo_option =
 let getnameinfo addr opts =
   improve (fun () ->
     try Unix.getnameinfo addr opts
-    with Caml.Not_found ->
+    with Stdlib.Not_found ->
       raise
         (Not_found_s
            [%message
@@ -2987,7 +3000,7 @@ module Ifaddr = struct
           let v = core_unix_iff_to_int t in
           match bitmask land v with
           | 0 -> flags
-          | _ -> Set.add flags t)
+          | _ -> Core.Set.add flags t)
     ;;
 
     module Private = struct
@@ -3091,6 +3104,8 @@ end
 let getifaddrs () =
   List.map (Ifaddr.core_unix_getifaddrs ()) ~f:Ifaddr.test_and_convert
 ;;
+
+external get_all_ifnames : unit -> string list = "core_unix_all_ifnames"
 
 module Stable = struct
   module Inet_addr = Inet_addr.Stable

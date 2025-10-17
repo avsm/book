@@ -1,3 +1,11 @@
+(executable
+ (name bench)
+ (enabled_if
+  (>= %{ocaml_version} "4.10.0"))
+ (libraries unix yojson))
+
 (alias
- (name DEFAULT)
- (deps %{workspace_root}/.ppx/ppx_jane/ppx.exe))
+ (name default)
+ (package ppxlib-bench)
+ (deps
+  (source_tree drivers)))

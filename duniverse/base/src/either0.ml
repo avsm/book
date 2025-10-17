@@ -9,7 +9,7 @@ let compare :
   'f 's. ('f -> 'f -> int) -> ('s -> 's -> int) -> ('f, 's) t -> ('f, 's) t -> int
   =
   fun _cmp__f _cmp__s a__001_ b__002_ ->
-  if Ppx_compare_lib.phys_equal a__001_ b__002_
+  if Stdlib.( == ) a__001_ b__002_
   then 0
   else (
     match a__001_, b__002_ with
@@ -80,8 +80,7 @@ let t_of_sexp :
         Sexplib0.Sexp_conv_error.nested_list_invalid_sum error_source__011_ sexp__010_
       | Sexplib0.Sexp.List [] as sexp__010_ ->
         Sexplib0.Sexp_conv_error.empty_list_invalid_sum error_source__011_ sexp__010_
-      | sexp__010_ ->
-        Sexplib0.Sexp_conv_error.unexpected_stag error_source__011_ sexp__010_
+      | sexp__010_ -> Sexplib0.Sexp_conv_error.unexpected_stag error_source__011_ sexp__010_
 ;;
 
 let sexp_of_t :
@@ -100,10 +99,11 @@ let sexp_of_t :
         Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Second"; res0__030_ ]
 ;;
 
-let (t_sexp_grammar :
-       'f Sexplib0.Sexp_grammar.t
-     -> 's Sexplib0.Sexp_grammar.t
-     -> ('f, 's) t Sexplib0.Sexp_grammar.t)
+let t_sexp_grammar :
+  'f 's.
+  'f Sexplib0.Sexp_grammar.t
+  -> 's Sexplib0.Sexp_grammar.t
+  -> ('f, 's) t Sexplib0.Sexp_grammar.t
   =
   fun _'f_sexp_grammar _'s_sexp_grammar ->
   { untyped =

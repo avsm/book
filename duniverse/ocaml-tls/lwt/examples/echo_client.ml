@@ -3,9 +3,10 @@ open Ex_common
 open Lwt
 
 let cached_session : Tls.Core.epoch_data =
-  let hex = Cstruct.of_hex in
+  let hex = Ohex.decode in
   {
-    Tls.Core.protocol_version = `TLS_1_3 ;
+    Tls.Core.side = `Client ;
+    protocol_version = `TLS_1_3 ;
     ciphersuite = `DHE_RSA_WITH_AES_128_GCM_SHA256 ;
     peer_random = hex "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ;
     peer_certificate = None ;
@@ -18,10 +19,12 @@ let cached_session : Tls.Core.epoch_data =
     own_private_key = None ;
     own_name = None ;
     master_secret = hex "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ;
-    session_id = Cstruct.create 0 ;
+    exporter_master_secret = "" ;
+    session_id = "" ;
     extended_ms = true ;
     alpn_protocol = None ;
     state = `Established ;
+    tls_unique = None ;
   }
 
 let echo_client ?ca hostname port =
@@ -31,7 +34,7 @@ let echo_client ?ca hostname port =
     ~cert:server_cert
     ~priv_key:server_key >>= fun certificate ->
   Tls_lwt.connect_ext
-    Tls.Config.(client ~authenticator ~cached_session ~certificates:(`Single certificate) ~ciphers:Ciphers.supported ())
+    (get_ok Tls.Config.(client ~authenticator ~cached_session ~certificates:(`Single certificate) ~ciphers:Ciphers.supported ()))
     (hostname, port) >>= fun (ic, oc) ->
   Lwt.join [
     lines ic    |> Lwt_stream.iter_s (printf "+ %s\n%!") ;
@@ -63,7 +66,7 @@ let trust =
 
 let cmd =
   let term = Term.(const jump $ setup_log $ port $ host $ trust)
-  and info = Cmd.info "server" ~version:"0.15.3"
+  and info = Cmd.info "echo_client" ~version:"2.0.3"
   in
   Cmd.v info term
 

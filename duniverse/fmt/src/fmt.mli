@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The fmt programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (** {!Format} pretty-printer combinators.
@@ -94,6 +94,9 @@ val using : ('a -> 'b) -> 'b t -> 'a t
 
 val const : 'a t -> 'a -> 'b t
 (** [const pp_v v] always formats [v] using [pp_v]. *)
+
+val if' : bool -> 'a t -> 'a t
+(** [if' bool pp] is [pp] if [bool] is [true] and {!nop} otherwise. *)
 
 val fmt : ('a, Format.formatter, unit) Stdlib.format -> Format.formatter -> 'a
 (** [fmt fmt ppf] is [pf ppf fmt]. If [fmt] is used with a single
@@ -545,6 +548,30 @@ val did_you_mean :
     %a%a." pre () kind pp_v v post ()]. If [hints] is empty no "did
     you mean" part is printed. *)
 
+val cardinal : ?zero:int t -> one:int t -> ?other:int t -> unit -> int t
+(** [cardinal ?zero ~one ?other ()] formats an integer by selecting a
+    formatter according to the cardinal english plural form of its absolute
+    value [n]:
+    {ul
+    {- [zero], if [n = 0]. Defaults to [other] (as per
+    {{:https://www.unicode.org/cldr/charts/47/supplemental/language_plural_rules.html#en}english rules}).}
+    {- [one], if [n = 1].}
+    {- [other], otherwise. Defaults to [one] followed by a ['s'] character.}} *)
+
+val ordinal :
+  ?zero:int t -> ?one:int t -> ?two:int t -> ?three:int t -> ?other:int t ->
+  unit -> int t
+(** [ordinal ?zero ?one ?two ?three ?other ()] formats an integer by selecting a
+    formatter according to the ordinal english plural form of its absolute
+    value [n]:
+    {ul
+    {- [zero], if [n = 0]. Defaults to [other] (as per
+    {{:https://www.unicode.org/cldr/charts/47/supplemental/language_plural_rules.html#en}english rules}).}
+    {- [one], if [n mod 10 = 1 && n mod 100 <> 11]. Defaults to ["%dst"].}
+    {- [two], if [n mod 10 = 2 && n mod 100 <> 12]. Defaults to ["%dnd"].}
+    {- [three], if [n mod 10 = 3 && n mod 100 <> 13]. Defaults to ["%drd"].}
+    {- [other] otherwise. Defaults to ["%dth"].}} *)
+
 (** {1:utf8_cond Conditional UTF-8 formatting}
 
     {b Note.} Since {!Format} is not UTF-8 aware using UTF-8 output
@@ -585,8 +612,8 @@ type style =
     {- [`Bold], [`Faint], [`Italic], [`Underline] and [`Reverse] are
        display attributes.}
     {- [`Fg _] is the foreground color or high-intensity color on [`Hi _].}
-    {- [`Bg _] is the foreground color or high-intensity color on [`Hi _].}
-    {- [#color] is the foreground colour, {b deprecated} use [`Fg
+    {- [`Bg _] is the background color or high-intensity color on [`Hi _].}
+    {- [#color] is the foreground color, {b deprecated} use [`Fg
        #color] instead.}} *)
 
 val styled : style -> 'a t -> 'a t
@@ -679,19 +706,3 @@ val styled_unit :
     For a type [ty] that is the main type of the module (the "[M.t]"
     convention) drop the suffix, that is simply use [M.pp] and
     [M.pp_dump]. *)
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2014 The fmt programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

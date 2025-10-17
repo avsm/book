@@ -24,17 +24,6 @@ Directory targets require an extension.
   > (using directory-targets 0.1)
   > EOF
 
-Directory targets are not allowed for non-sandboxed rules.
-
-  $ dune build output/x
-  File "dune", line 1, characters 0-56:
-  1 | (rule
-  2 |   (targets (dir output))
-  3 |   (action (bash "true")))
-  Error: Rules with directory targets must be sandboxed.
-  Hint: Add (sandbox always) to the (deps ) field of the rule.
-  [1]
-
 Ensure directory targets are produced.
 
   $ cat > dune <<EOF
@@ -45,7 +34,7 @@ Ensure directory targets are produced.
   > EOF
 
   $ dune build output/x
-  File "dune", line 1, characters 0-82:
+  File "dune", lines 1-4, characters 0-82:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir output))
@@ -53,7 +42,7 @@ Ensure directory targets are produced.
   Error: Rule failed to produce directory "output"
   [1]
 
-Error message when the matching directory target doesn't contain a requested path.
+Error message when the matching directory target is empty.
 
   $ cat > dune <<EOF
   > (rule
@@ -63,11 +52,30 @@ Error message when the matching directory target doesn't contain a requested pat
   > EOF
 
   $ dune build output/x
-  File "dune", line 1, characters 0-90:
+  File "dune", lines 1-4, characters 0-90:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir output))
   4 |   (action (bash "mkdir output")))
+  Error: Rule produced directory "output" that contains no files nor non-empty
+  subdirectories
+  [1]
+
+Error message when the matching directory target doesn't contain a requested path.
+
+  $ cat > dune <<EOF
+  > (rule
+  >   (deps (sandbox always))
+  >   (targets (dir output))
+  >   (action (bash "mkdir output && touch output/y")))
+  > EOF
+
+  $ dune build output/x
+  File "dune", lines 1-4, characters 0-108:
+  1 | (rule
+  2 |   (deps (sandbox always))
+  3 |   (targets (dir output))
+  4 |   (action (bash "mkdir output && touch output/y")))
   Error: This rule defines a directory target "output" that matches the
   requested path "output/x" but the rule's action didn't produce it
   [1]
@@ -122,9 +130,7 @@ Hints for directory targets.
   Hint: did you mean output?
   [1]
 
-Print rules: currently works only with Makefiles.
-
-# CR-someday amokhov: Add support for printing Dune rules.
+Print rules:
 
   $ dune rules -m output | tr '\t' ' '
   _build/default/output: _build/default/src_x
@@ -135,8 +141,13 @@ Print rules: currently works only with Makefiles.
      'mkdir output; cat src_x > output/x; echo y > output/y'
 
   $ dune rules output
-  Error: Printing rules with directory targets is currently not supported
-  [1]
+  ((deps ((File (In_build_dir _build/default/src_x))))
+   (targets ((files ()) (directories (_build/default/output))))
+   (context default)
+   (action
+    (chdir
+     _build/default
+     (bash "mkdir output; cat src_x > output/x; echo y > output/y"))))
 
 Error when requesting a missing subdirectory of a directory target.
 
@@ -148,7 +159,7 @@ Error when requesting a missing subdirectory of a directory target.
   > EOF
 
   $ dune build output/subdir
-  File "dune", line 1, characters 0-128:
+  File "dune", lines 1-4, characters 0-128:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir output))
@@ -175,7 +186,7 @@ directory target.
   > EOF
 
   $ dune build main
-  File "dune", line 1, characters 0-188:
+  File "dune", lines 1-7, characters 0-188:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir output))
@@ -331,14 +342,6 @@ since the produced directory has the same contents.
   b:
   new-b
 
-There is no shared cache support for directory targets at the moment, which is
-why we rerun the first action.
-
-  $ dune_cmd wait-for-fs-clock-to-advance
-  $ rm _build/default/output/a
-  $ dune build contents
-  running
-
 Check that Dune clears stale files from directory targets.
 
   $ cat > dune <<EOF
@@ -376,7 +379,7 @@ Directory target whose name conflicts with an internal directory used by Dune.
   > EOF
 
   $ dune build .dune/hello
-  File "dune", line 1, characters 0-114:
+  File "dune", lines 1-4, characters 0-114:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir .dune))
@@ -411,7 +414,7 @@ File and directory target with the same name.
   > EOF
 
   $ dune build output/x
-  File "dune", line 1, characters 0-135:
+  File "dune", lines 1-4, characters 0-135:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets output (dir output))
@@ -448,7 +451,7 @@ Conflict between a target directory and a source directory.
 
   $ mkdir output
   $ dune build output/x
-  File "dune", line 1, characters 0-128:
+  File "dune", lines 1-4, characters 0-128:
   1 | (rule
   2 |   (deps (sandbox always))
   3 |   (targets (dir output))

@@ -353,9 +353,11 @@ let%test_module "" =
     open Ifaddr.Flag
     open Ifaddr.Flag.Private
 
-    let int_of_set = Set.fold ~init:0 ~f:(fun acc t -> acc lor core_unix_iff_to_int t)
-    let to_int = core_unix_iff_to_int
+    let int_of_set =
+      Core.Set.fold ~init:0 ~f:(fun acc t -> acc lor core_unix_iff_to_int t)
+    ;;
 
+    let to_int = core_unix_iff_to_int
     let%test_unit _ = [%test_result: Set.t] (set_of_int 0) ~expect:Set.empty
 
     let%test_unit _ =
@@ -455,7 +457,7 @@ let%test_unit "PGID set by setpgid is inherited by child" =
     | `In_the_child ->
       let child_pid = getpid () in
       let oc = Out_channel.create temp_file in
-      Out_channel.output_string oc (Pid.to_string (getpgid child_pid));
+      Out_channel.output_string oc (getpgid child_pid |> Option.value_exn |> Pid.to_string);
       Out_channel.close oc;
       exit_immediately 0
     | `In_the_parent child_pid ->

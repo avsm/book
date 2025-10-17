@@ -1,5 +1,5 @@
 opam-version: "2.0"
-version: "v0.15.0"
+version: "v0.16.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/core_unix"
@@ -11,22 +11,24 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"                    {>= "4.08.0"}
-  "core"                     {>= "v0.15" & < "v0.16"}
-  "core_kernel"              {>= "v0.15" & < "v0.16"}
-  "expect_test_helpers_core" {>= "v0.15" & < "v0.16"}
-  "jane-street-headers"      {>= "v0.15" & < "v0.16"}
-  "jst-config"               {>= "v0.15" & < "v0.16"}
-  "ocaml_intrinsics"         {>= "v0.15" & < "v0.16"}
-  "ppx_jane"                 {>= "v0.15" & < "v0.16"}
-  "sexplib"                  {>= "v0.15" & < "v0.16"}
-  "timezone"                 {>= "v0.15" & < "v0.16"}
+  "ocaml"                    {>= "4.14.0"}
+  "core"                     {>= "v0.16" & < "v0.17"}
+  "core_kernel"              {>= "v0.16" & < "v0.17"}
+  "expect_test_helpers_core" {>= "v0.16" & < "v0.17"}
+  "jane-street-headers"      {>= "v0.16" & < "v0.17"}
+  "jst-config"               {>= "v0.16" & < "v0.17"}
+  "ocaml_intrinsics"         {>= "v0.16" & < "v0.17"}
+  "ppx_jane"                 {>= "v0.16" & < "v0.17"}
+  "ppx_optcomp"              {>= "v0.16" & < "v0.17"}
+  "sexplib"                  {>= "v0.16" & < "v0.17"}
+  "timezone"                 {>= "v0.16" & < "v0.17"}
   "base-threads"
   "dune"                     {>= "2.0.0"}
-  "spawn"                    {>= "v0.12"}
+  "spawn"                    {>= "v0.15"}
 ]
+available: arch != "arm32" & arch != "x86_32"
 synopsis: "Unix-specific portions of Core"
 description: "
 Unix-specific extensions to some of the modules defined in [core] and [core_kernel].
 "
-depexts: ["linux-headers"] {os-distribution = "alpine"}
+depexts: ["linux-headers"] {os-family = "alpine"}

@@ -8,7 +8,7 @@ type t [@@deriving sexp_of]
 
 include Invariant.S with type t := t
 
-type output_chars = bigstring -> len:int -> unit
+type output_chars := bigstring -> len:int -> unit
 
 val of_out_channel : Out_channel.t -> t
 val of_output_char : (char -> unit) -> t
@@ -24,7 +24,8 @@ val output_char : t -> char -> unit
 
 val output
   :  t
-  -> blit_to_bigstring:('a, Bigstring.t) Blit.blit
+  -> blit_to_bigstring:
+       (src:'a -> src_pos:int -> dst:Bigstring.t -> dst_pos:int -> len:int -> unit)
   -> src:'a
   -> src_len:int
   -> src_pos:int

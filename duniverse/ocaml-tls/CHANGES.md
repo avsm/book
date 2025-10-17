@@ -1,3 +1,156 @@
+## v2.0.3 (2025-09-26)
+
+* Provide an implementation which uses the Unix module (distributed with OCaml),
+  based on the miou-unix implementation
+  (#518 #443 @kit-ty-kate @dinosaure, fixes #517)
+
+## v2.0.2 (2025-08-22)
+
+* put CERTIFICATE_UNKNOWN alert back (#516 @copy)
+* improve README (#514 @dinosaure)
+
+## v2.0.1 (2025-04-14)
+
+* core, send_application_data: allocate much fewer data. previously, we
+  allocated a lot to split the data into chunks of 2^14 - and did not have
+  tail calls. the memory footprint, esp. for big amounts of data passed to
+  send_application_data has changed now (#515 @hannesm @reynir)
+
+## v2.0.0 (2025-02-05)
+
+* Use dune variants (mirage-ptime) instead of functorising over PCLOCK
+  (#513 @hannesm)
+
+## v1.0.4 (2024-10-28)
+
+* Removed links to nqsb (we're no longer in charge of that domain)
+  (23c0deef586df4a1732efbf8d8da006111ca76e0,
+  f6455e37513a74da63dc8819dfc8dd1aaebafb9a, fixes #512 reported by @msub2)
+
+## v1.0.3 (2024-09-29)
+
+* tls-miou-unix: fix recursive call in read_in (#511 @dinosaure)
+
+## v1.0.2 (2024-09-04)
+
+* tls-lwt: `read` now has an optional `?off:int` argument (#510 @hannesm)
+* Use the kdf package instead of hkdf (#509 @hannesm)
+
+## v1.0.1 (2024-08-25)
+
+* tls-miou-unix: fix file descriptor leak (#508 @dinosaure)
+* tls-miou-unix: fix fuzz test (#507 @dinosaure)
+
+## v1.0.0 (2024-08-21)
+
+* API breaking change: remove usage of Cstruct.t inside of TLS, use bytes
+  and string instead (#497 by @art-w, @hannesm, @dinosaure, @reynir)
+  Performance is up to 3x improved (bandwidth), 2x improvement for handshake/s
+  on an Intel Core(TM) i7-5600U CPU @ 2.60GHz
+* FEATURE: add tls-miou-unix package, which adds miou support for TLS
+  (#494 #503 @dinosaure)
+* FEATURE: tls-lwt and tls-async: allow TLS over an existing connection
+  `Tls_lwt.client_of_channels : Tls.Config.client -> ?host:[`host] Domain_name.t -> Lwt_io.input_channel * Lwt_io.output_channel -> t Lwt.t`
+  and
+  `Tls_lwt.server_of_channels : Tls.Config.server -> Lwt_io.input_channel * Lwt_io.output_channel -> t Lwt.t`
+  (#499 @art-w @MisterDA)
+* API breaking changes: revise errors - reduce the polymorphic variant
+  in size, align it with RFC specified errors, be in parts more precise
+  about errors, in other parts skip data (#505, @hannesm - fixes #491)
+  NB: if you relied on a specific error constructor, please open an issue
+* Remove unused constructors from Packet.{alert_type, compression_methods,
+  client_certificate_type, extension_type} (#505, @hannesm)
+  NB: if you relied on specific constructors, please open an issue
+* API breaking change: Tls.Config.{server,client} now return a result
+  type instead of raising an exception (#502, @hannesm, fixes #411)
+* FEATURE: add bench/speed.exe, a benchmark for bandwidth (for different
+  ciphersuites) and handshakes (different key exchanges and private keys)
+  (#500 @hannesm @dinosaure @reynir)
+* BUGFIX: tests/feedback.exe update with TLS 1.3 semantics, run as test
+  (#501, @hannesm - reported by @dinosaure)
+
+## v0.17.5 (2024-05-14)
+
+* tls: documentation: clarify send_application_data (#492 @reynir)
+* BUGFIX: tls: export_key_material was wrong for the server side on TLS 1.3,
+  reported in robur-coop/miragevpn#181 by @reynir, fix in #495 @hannesm
+* FEATURE: tls: add channel_binding (RFC 5929, RFC 9266) support (tls_unique,
+  tls_exporter, tls_server_endpoint), requested by @Neustradamus in #484, added
+  in #496 by @hannesm
+
+## v0.17.4 (2024-03-26)
+
+* tls: handle half-closed connection properly: a received CLOSE_NOTIFY does not
+  lead to a CLOSE_NOTIFY to be sent (a `send_close_notify` sends it explicitly)
+  (#488 @hannesm)
+* tls: modify return type of `handle_tls` - the Alert is now in the right hand
+  side, and `` `Eof `` is explicit in the second part of the tuple
+  (#488 @hannesm)
+* tls: remove `can_handle_appdata`, the function `handshake_in_progress` is
+  available (#488 @hannesm)
+* tls-mirage: avoid exceptions in reneg and rekey (#487 @hannesm)
+* tls: remove HEARTBEAT decoding - HEARTBEAT was never supported in this
+  library, the decoder was superfluous (#487 @hannesm)
+* tls-mirage: provide `underlying : flow -> FLOW.flow` (#487 @hannesm,
+  fixes #425 @dinosaure)
+* tls-mirage: implement mirage-flow 4 API (`val shutdown`) (#488 @hannesm)
+* tls-eio: adapt to half-closed connections (#488 @talex5)
+* tls-eio: implement Eio.Resource.Close (#489 @paurkedal, reviewed by @talex5)
+
+## v0.17.3 (2023-11-20)
+
+* tls: provide Engine.export_key_material, which implements RFC 5705 (and 8446)
+  TLS EKM (#482 @hannesm)
+* tls: fix protocol_version in Engine.epoch (TLS 1.3 always pretended TLS 1.0)
+  (#482 @hannesm)
+* tls: add the side (`` `Client `` or `` `Server ``) to epoch_data
+  (#482 @hannesm)
+* BREAKING tls: Engine.epoch - return result instead of custom variant
+  (#483 @hannesm)
+
+## v0.17.2 (2023-09-24)
+
+* tls-eio: update to eio 0.12 (#479 @talex5)
+
+## v0.17.1 (2023-07-03)
+
+* tls-async: update to 0.16 series (#476 @tmcgilchrist, review by @torinnd)
+* avoid Cstruct.copy (@hannesm)
+
+## v0.17.0 (2023-03-01)
+
+* tls-async: remove ocaml < 5.0.0 constraint (#471 #474 @hannesm)
+* remove dependency on ppx, especially ppx_cstruct and ppx_sexp_conv across
+  the libraries (#473 @hannesm, discussion in #472)
+
+## v0.16.0 (2023-02-14)
+
+* BREAKING: new opam package tls-lwt (formerly tls.lwt), in dune:
+  (libraries tls.lwt) should now be libraries (tls-lwt)
+  (#468 @hannesm, reported #449 by @mbacarella)
+* tls: update to mirage-crypto 0.11 API (#468 @hannesm)
+* tls: relax SignatureAlgorithms extension handling to allow OpenSSL
+  interoperability tests with TLS 1.0 and TLS 1.1 (#469 @hannesm)
+* tls: remove Utils.filter_map and and Utils.option, use Stdlib instead (#455
+  @hannesm)
+* tls: do not globally open Utils (#455 @hannesm)
+* tls: export log source of Tracing module (#461 @bikallem)
+* tls: remove unused ciphersuites to reduce binary size (#467 @hannesm)
+* tls-lwt: do not catch out of memory exception (#469 @hannesm)
+* tls-eio: add fuzz testing using crowbar (#456 #463 @talex5)
+* tls-eio: update to eio 0.7 (#456 @talex5)
+* tls-eio: fix test for develop with vendoring (#462 @bikallem)
+
+## v0.15.5 (2022-10-25)
+
+* tls-eio release only: fix end-of-file handling (#454 @talex5), avoid
+  deprecation warnings (#454 @hannesm)
+
+## v0.15.4 (2022-09-27)
+
+* New package tls-eio (#451 @talex5)
+* Tls_async: expose tls_handler (#448 @mbacarella, reviewed by @torinnd)
+
 ## v0.15.3 (2022-03-29)
 
 * Upgrade to v0.15 of Jane Street packages (#444 @bcc32)

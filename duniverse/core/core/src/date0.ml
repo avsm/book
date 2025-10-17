@@ -11,7 +11,8 @@ module Stable = struct
   module V1 = struct
     module Without_comparable = struct
       module T : sig
-        type t [@@immediate] [@@deriving bin_io, equal, hash, typerep]
+        type t
+        [@@immediate] [@@deriving bin_io, compare, equal, hash, typerep, stable_witness]
 
         val create_exn : y:int -> m:Month.Stable.V1.t -> d:int -> t
         val year : t -> int
@@ -20,6 +21,7 @@ module Stable = struct
         val days_in_month : year:int -> month:Month.t -> int
         val to_int : t -> int
         val of_int_exn : int -> t
+        val of_int_unchecked : int -> t
         val invalid_value__for_internal_use_only : t
       end = struct
         (* We used to store dates like this:
@@ -36,13 +38,19 @@ module Stable = struct
         *)
         type t = int
         [@@deriving
-          equal, hash, typerep, bin_shape ~basetype:"899ee3e0-490a-11e6-a10a-a3734f733566"]
+          compare
+        , equal
+        , hash
+        , typerep
+        , bin_shape ~basetype:"899ee3e0-490a-11e6-a10a-a3734f733566"
+        , stable_witness]
 
         let create0 ~year ~month ~day =
           (* create_exn's validation make sure that each value fits *)
           (year lsl 16) lor (Month.to_int month lsl 8) lor day
         ;;
 
+        let of_int_unchecked t = t
         let year t = t lsr 16
         let month t = Month.of_int_exn ((t lsr 8) land 0xff)
         let day t = t land 0xff
@@ -256,26 +264,22 @@ module Stable = struct
 
         let sexp_of_t t = Sexp.Atom (to_string t)
 
-        let t_sexp_grammar = Sexplib.Sexp_grammar.coerce Sexplib.Sexp.t_sexp_grammar
+        let t_sexp_grammar =
+          let open Sexplib in
+          Sexp_grammar.tag
+            (Sexp_grammar.coerce String.t_sexp_grammar : t Sexp_grammar.t)
+            ~key:Sexp_grammar.type_name_tag
+            ~value:(Atom "Core.Date.t")
+        ;;
       end
 
       include Sexpable
-
-      let compare t1 t2 =
-        let n = Int.compare (year t1) (year t2) in
-        if n <> 0
-        then n
-        else (
-          let n = Month.compare (month t1) (month t2) in
-          if n <> 0 then n else Int.compare (day t1) (day t2))
-      ;;
-
       include (val Comparator.Stable.V1.make ~compare ~sexp_of_t)
     end
 
     include Without_comparable
-    include Comparable.Stable.V1.Make (Without_comparable)
-    include Hashable.Stable.V1.Make (Without_comparable)
+    include Comparable.Stable.V1.With_stable_witness.Make (Without_comparable)
+    include Hashable.Stable.V1.With_stable_witness.Make (Without_comparable)
   end
 
   module Option = struct
@@ -286,14 +290,15 @@ module Stable = struct
       , bin_shape ~basetype:"826a3e79-3321-451a-9707-ed6c03b84e2f"
       , compare
       , hash
-      , typerep]
+      , typerep
+      , stable_witness]
 
       let none = V1.(to_int invalid_value__for_internal_use_only)
       let is_none t = t = none
       let is_some t = not (is_none t)
       let some_is_representable _ = true
       let some t = V1.to_int t
-      let unchecked_value = V1.of_int_exn
+      let unchecked_value = V1.of_int_unchecked
       let to_option t = if is_some t then Some (unchecked_value t) else None
 
       let of_option opt =
@@ -308,10 +313,18 @@ module Stable = struct
         else raise_s [%message [%here] "Date.Option.value_exn none"]
       ;;
 
-      let value t ~default = if is_some t then unchecked_value t else default
+      let value t ~default = Bool.select (is_none t) default (unchecked_value t)
       let sexp_of_t t = to_option t |> Option.sexp_of_t V1.sexp_of_t
       let t_of_sexp sexp = (Option.t_of_sexp V1.t_of_sexp) sexp |> of_option
       let t_sexp_grammar = Sexplib.Sexp_grammar.coerce [%sexp_grammar: V1.t Option.t]
+
+      let of_int_exn t =
+        (* Don't just blindly convert from an integer. Use [V1.of_int_exn] to validate the
+           date. *)
+        if t = none then none else some (V1.of_int_exn t)
+      ;;
+
+      let to_int t = t
     end
   end
 end

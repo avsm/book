@@ -1,7 +1,7 @@
 (* This module makes the command line interface for bench. *)
 open Core
 open Core_bench_internals
-module Time = Time_unix
+module Time = Time_float_unix
 
 type callback_bench =
   ?run_config:Run_config.t
@@ -114,6 +114,13 @@ let wrapper_param =
           "INT If given, just run the test function(s) N times; skip measurements and \
            regressions. Float lexemes like \"1e6\" are allowed."
       |> map ~f:(Option.map ~f:Float.to_int)
+    and max_name_length =
+      flag_optional_with_default_doc
+        "name-length-max"
+        int
+        [%sexp_of: int]
+        ~default:Defaults.max_name_length
+        ~doc:" max width of name column"
     and anon_columns = anon (sequence ("COLUMN" %: Bench_command_column.arg)) in
     fun ~main () ->
       let sanitize_name str =
@@ -192,6 +199,7 @@ let wrapper_param =
       let display_config =
         Display_config.create
           ~limit_width_to
+          ~max_name_length
           ~show_samples:(List.mem columns `Samples ~equal:Display_column.equal)
           ~show_percentage:(List.mem columns `Percentage ~equal:Display_column.equal)
           ~show_speedup:(List.mem columns `Speedup ~equal:Display_column.equal)
@@ -243,8 +251,8 @@ let readme () =
      flag \"-regression\" . It is worth noting that this feature requires\n\
      some understanding of both linear regression and how various quatities\n\
      relate to each other in the OCaml runtime.  To specify a regression\n\
-     one must specify the responder variable and a command separated list\n\
-     of predictor variables.\n\n\
+     one must specify the responder variable and a comma-separated list of\n\
+     predictor variables.\n\n\
      For example: +Time:Run,mjGC,Comp\n\n\
      which asks bench to estimate execution time using three predictors\n\
      namely the number of runs, major GCs and compaction stats and display\n\

@@ -1,5 +1,15 @@
 # Changes
 
+## 2024/07/15
+
+* Avoid the `future-coercion-class-field` warning.
+  (Contributed by Pierre Roux.)
+
+## 2023/12/31
+
+* Change certain proofs to avoid deprecation warnings with Coq 8.16.
+  (Contributed by Pierre Rousselin.)
+
 ## 2022/02/10
 
 * Remove `Makefile.coq` and use `coq_makefile` instead. The `.coq-native`

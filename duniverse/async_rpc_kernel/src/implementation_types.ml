@@ -33,26 +33,40 @@ module rec Implementation : sig
 
   module F : sig
     type (_, _) result_mode =
-      | Blocking : ('a, 'a) result_mode
-      | Deferred : ('a, 'a Deferred.t) result_mode
+      | Blocking : ('a, 'a Or_not_authorized.t) result_mode
+      | Deferred : ('a, 'a Or_not_authorized.t Deferred.t) result_mode
 
     type ('connection_state, 'query, 'init, 'update) streaming_impl =
       | Pipe of
           ('connection_state
            -> 'query
-           -> ('init * 'update Pipe.Reader.t, 'init) Result.t Deferred.t)
+           -> ('init * 'update Pipe.Reader.t, 'init) Result.t Or_not_authorized.t
+                Deferred.t)
       | Direct of
           ('connection_state
            -> 'query
            -> 'update Direct_stream_writer.t
-           -> ('init, 'init) Result.t Deferred.t)
+           -> ('init, 'init) Result.t Or_not_authorized.t Deferred.t)
+
+    type ('connection_state, 'query, 'init, 'update) streaming_rpc =
+      { bin_query_reader : 'query Bin_prot.Type_class.reader
+      ; bin_init_writer : 'init Bin_prot.Type_class.writer
+      ; bin_update_writer : 'update Bin_prot.Type_class.writer
+      (* 'init can be an error or an initial state *)
+      ; impl : ('connection_state, 'query, 'init, 'update) streaming_impl
+      }
 
     type 'connection_state t =
       | One_way :
-          'msg Bin_prot.Type_class.reader * ('connection_state -> 'msg -> unit)
+          'msg Bin_prot.Type_class.reader
+          * ('connection_state -> 'msg -> unit Or_not_authorized.t Deferred.t)
           -> 'connection_state t
       | One_way_expert :
-          ('connection_state -> Bigstring.t -> pos:int -> len:int -> unit)
+          ('connection_state
+           -> Bigstring.t
+           -> pos:int
+           -> len:int
+           -> unit Or_not_authorized.t Deferred.t)
           -> 'connection_state t
       | Rpc :
           'query Bin_prot.Type_class.reader
@@ -70,10 +84,7 @@ module rec Implementation : sig
           * (Expert.implementation_result, 'result) result_mode
           -> 'connection_state t
       | Streaming_rpc :
-          'query Bin_prot.Type_class.reader
-          * 'init Bin_prot.Type_class.writer
-          * 'update Bin_prot.Type_class.writer
-          * ('connection_state, 'query, 'init, 'update) streaming_impl
+          ('connection_state, 'query, 'init, 'update) streaming_rpc
           -> 'connection_state t
   end
 
@@ -81,7 +92,7 @@ module rec Implementation : sig
     { tag : Rpc_tag.t
     ; version : int
     ; f : 'connection_state F.t
-    ; shapes : Sexp.t Lazy.t
+    ; shapes : Rpc_shapes.t Lazy.t
     ; on_exception : On_exception.t
     }
 end =
@@ -128,7 +139,8 @@ and Implementations : sig
       ; connection_state : 'a
       ; connection_description : Info.t
       ; connection_close_started : Info.t Deferred.t
-      ; mutable last_dispatched_implementation :
+      ; mutable
+        last_dispatched_implementation :
           (Description.t * 'a Implementation.t) option
       ; packed_self : t
       }
@@ -159,7 +171,7 @@ and Direct_stream_writer : sig
     ; closed : unit Ivar.t
     ; instance : Implementations.Instance.t
     ; query_id : Query_id.t
-    ; stream_writer : 'a Cached_stream_writer.t
+    ; stream_writer : 'a Cached_bin_writer.t
     ; groups : 'a group_entry Bag.t
     }
 
@@ -189,11 +201,11 @@ and Direct_stream_writer : sig
 end =
   Direct_stream_writer
 
-and Cached_stream_writer : sig
+and Cached_bin_writer : sig
   type 'a t =
     { header_prefix : string (* Bin_protted constant prefix of the message *)
     ; mutable data_len : Nat0.t
     ; bin_writer : 'a Bin_prot.Type_class.writer
     }
 end =
-  Cached_stream_writer
+  Cached_bin_writer

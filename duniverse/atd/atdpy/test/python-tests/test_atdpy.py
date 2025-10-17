@@ -80,7 +80,15 @@ def test_everything_to_json() -> None:
             "h": 8,
         },
         nullables=[12, None, 34],
+        options=[56, None, 78],
         untyped_things=[[["hello"]], {}, None, 123],
+        parametrized_record=e.IntFloatParametrizedRecord(
+            field_a=42,
+            field_b=[9.9, 8.8],
+        ),
+        parametrized_tuple=e.KindParametrizedTuple(
+            (e.Kind(e.WOW()), e.Kind(e.WOW()), 100)
+        )
     )
     a_str = a_obj.to_json_string(indent=2)
     print(a_str)
@@ -97,10 +105,6 @@ def test_everything_to_json() -> None:
       1,
       2
     ]
-  ],
-  "extras": [
-    17,
-    53
   ],
   "aliased": [
     8,
@@ -159,6 +163,17 @@ def test_everything_to_json() -> None:
     null,
     34
   ],
+  "options": [
+    [
+      "Some",
+      56
+    ],
+    "None",
+    [
+      "Some",
+      78
+    ]
+  ],
   "untyped_things": [
     [
       [
@@ -168,6 +183,22 @@ def test_everything_to_json() -> None:
     {},
     null,
     123
+  ],
+  "parametrized_record": {
+    "field_a": 42,
+    "field_b": [
+      9.9,
+      8.8
+    ]
+  },
+  "parametrized_tuple": [
+    "wow",
+    "wow",
+    100
+  ],
+  "extras": [
+    17,
+    53
   ],
   "answer": 42
 }"""
@@ -223,6 +254,19 @@ def test_recursive_class() -> None:
 
     assert b_str == b_str2
     assert b_str2 == a_str
+
+
+def test_default_list() -> None:
+    a = e.DefaultList(items=[])
+    assert a.items == []
+    b = e.DefaultList()
+    assert b.items == []
+    c = e.DefaultList.from_json_string("{}")
+    assert c.items == []
+    # We could emit '{}' instead of '{"items": []}' but it's more complicated
+    # and not always desired.
+    j = b.to_json_string()
+    assert j == '{"items": []}'
 
 
 # print updated json

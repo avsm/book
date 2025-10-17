@@ -181,7 +181,7 @@ val of_bigarray: ?off:int -> ?len:int -> buffer -> t
     (default [Bigarray.Array1.dim b - off]). *)
 
 val to_bigarray: t -> buffer
-(** [to_bigarray t] converts a {!t} into a {!buffer} Bigarray, using
+(** [to_bigarray t] converts a {!t} into a {!type:buffer} Bigarray, using
     the Bigarray slicing to allocate a fresh array that preserves
     sharing of the underlying buffer. *)
 
@@ -282,13 +282,20 @@ val sub: t -> int -> int -> t
 (** [sub cstr off len] is [{ t with off = t.off + off; len }]
     @raise Invalid_argument if the offset exceeds cstruct length. *)
 
+val sub_copy: t -> int -> int -> t
+(** [sub_copy cstr off len] is a new copy of [sub cstr off len],
+    that does not share the underlying buffer of [cstr].
+    @raise Invalid_argument if the offset exceeds cstruct length. *)
+
 val shift: t -> int -> t
 (** [shift cstr len] is [{ cstr with off=t.off+len; len=t.len-len }]
     @raise Invalid_argument if the offset exceeds cstruct length. *)
 
 val copy: t -> int -> int -> string
+[@@ocaml.alert deprecated "this is just like [to_string] without defaults, were you looking for [sub_copy]?"]
 (** [copy cstr off len] is the string representation of the segment of
-    [t] starting at [off] of size [len].
+    [t] starting at [off] of size [len]. It is equivalent to
+    [Cstruct.to_string cstr ~off ~len].
     @raise Invalid_argument if [off] and [len] do not designate a
     valid segment of [t]. *)
 
@@ -344,37 +351,26 @@ val split: ?start:int -> t -> int -> t * t
 val to_string: ?off:int -> ?len:int -> t -> string
 (** [to_string ~off ~len t] will allocate a fresh OCaml [string] and copy the
     contents of the cstruct starting at offset [off] (default [0]) of length
-    [len] (default [Cstruct.len t - off]) into it, and return that string.
+    [len] (default [Cstruct.length t - off]) into it, and return that string.
 
     @raise Invalid_argument if [off] or [len] is negative, or
-    [Cstruct.len str - off] < [len]. *)
+    [Cstruct.length t - off] < [len]. *)
+
+val to_hex_string : ?off:int -> ?len:int -> t -> string
+(** [to_hex_string ~off ~len t] is a fresh OCaml [string] containing
+    the hex representation of [sub t off len]. It is therefore of length
+    [2 * len]. This string can be read back into a Cstruct using {!of_hex}.
+    @raise Invalid_argument if [off] or [len] is negative, or
+      if [Cstruct.length t - off < len].
+    @since 6.2 *)
 
 val to_bytes: ?off:int -> ?len:int -> t -> bytes
 (** [to_bytes ~off ~len t] will allocate a fresh OCaml [bytes] and copy the
     contents of the cstruct starting at offset [off] (default [0]) of length
-    [len] (default [Cstruct.len t - off]) into it, and return that bytes.
+    [len] (default [Cstruct.length t - off]) into it, and return that bytes.
 
     @raise Invalid_argument if [off] or [len] is negative, or
-    [Cstruct.len str - off] < [len]. *)
-
-(** {2 Debugging } *)
-
-val hexdump: t -> unit
-(** When the going gets tough, the tough hexdump their cstructs
-    and peer at it until the bug disappears.  This will directly
-    prettyprint the contents of the cstruct to the standard output. *)
-
-val hexdump_to_buffer: Buffer.t -> t -> unit
-(** [hexdump_to_buffer buf c] will append the pretty-printed hexdump
-    of the cstruct [c] to the buffer [buf]. *)
-
-val hexdump_pp: Format.formatter -> t -> unit
-(** [hexdump_pp f c] pretty-prints a hexdump of [c] to [f]. *)
-
-val debug: t -> string
-(** [debug t] will print out the internal details of a cstruct such
-    as its base offset and the length, and raise an assertion failure
-    if invariants have been violated.  Not intended for casual use. *)
+    [Cstruct.length str - off] < [len]. *)
 
 module BE : sig
 
@@ -486,6 +482,25 @@ module HE : sig
       unsigned integer [i] at offset [off] of [cstr].
       @raise Invalid_argument if the buffer is too small. *)
 end
+
+(** {2 Debugging } *)
+
+val hexdump: t -> unit
+(** When the going gets tough, the tough hexdump their cstructs
+    and peer at it until the bug disappears.  This will directly
+    prettyprint the contents of the cstruct to the standard output. *)
+
+val hexdump_to_buffer: Buffer.t -> t -> unit
+(** [hexdump_to_buffer buf c] will append the pretty-printed hexdump
+    of the cstruct [c] to the buffer [buf]. *)
+
+val hexdump_pp: Format.formatter -> t -> unit
+(** [hexdump_pp f c] pretty-prints a hexdump of [c] to [f]. *)
+
+val debug: t -> string
+(** [debug t] will print out the internal details of a cstruct such
+    as its base offset and the length, and raise an assertion failure
+    if invariants have been violated.  Not intended for casual use. *)
 
 (** {2 List of buffers} *)
 
@@ -606,7 +621,7 @@ val string : ?off:int -> ?len:int -> string -> t
 (** [string ~off ~len str] is the subbuffer of [str] that starts at position [off]
    (defaults to [0]) and stops at position [off + len] (defaults to
    [String.length str]). [str] is fully-replaced by an fresh allocated
-   {!Cstruct.buffer}.
+   {!type:buffer}.
 
     @raise Invalid_argument if [off] or [off + len] are not positions of [str].
 *)
@@ -621,10 +636,10 @@ val buffer : ?off:int -> ?len:int -> buffer -> t
    [buffer]. *)
 
 val start_pos : t -> int
-(** [start_pos cs] is [cs]'s start position in the base {!Cstruct.buffer}. *)
+(** [start_pos cs] is [cs]'s start position in the base {!type:buffer}. *)
 
 val stop_pos : t -> int
-(** [stop_pos cs] is [cs]'s stop position in the base {!Cstruct.buffer}. *)
+(** [stop_pos cs] is [cs]'s stop position in the base {!type:buffer}. *)
 
 val length : t -> int
 (** Returns the length of the current cstruct view.  Note that this

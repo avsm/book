@@ -19,7 +19,7 @@ Setting such options is not supported with older Dune:
   2 | (display short)
       ^^^^^^^^^^^^^^^
   Error: 'display' is only available since version 3.0 of the dune language.
-  Please update your dune-project file to have (lang dune 3.0).
+  Please update your dune config file to have (lang dune 3.0).
   [1]
 
 But is supported with Dune >= 3.0.0:
@@ -53,7 +53,9 @@ fields:
   > EOF
 
   $ dune init project foo
+  Entering directory 'foo'
   Success: initialized project component named foo
+  Leaving directory 'foo'
 
 But if we do the build we do get an error:
 

@@ -74,6 +74,9 @@ val unit : unit testable
 val list : 'a testable -> 'a list testable
 (** [list t] tests lists of [t]s. *)
 
+val seq : 'a testable -> 'a Seq.t testable
+(** [seq t] tests sequence of [t]s. *)
+
 val slist : 'a testable -> ('a -> 'a -> int) -> 'a list testable
 (** [slist t comp] tests sorted lists of [t]s. The list are sorted using [comp]. *)
 
@@ -107,6 +110,9 @@ val neg : 'a testable -> 'a testable
 (** [neg t] is [t]'s negation: it is [true] when [t] is [false] and it is
     [false] when [t] is [true]. *)
 
+val map : ('b -> 'a) -> 'a testable -> 'b testable
+(** [map f t] lift a ['a testable] to a ['b testable], converting ['b] to ['a]. *)
+
 (** {1 Assertion functions}
 
     Functions for asserting various properties within unit-tests. A failing
@@ -130,7 +136,12 @@ type 'a extra_info =
     descriptive error messages in the case of failure. *)
 
 val check : ('a testable -> string -> 'a -> 'a -> unit) extra_info
-(** Check that two values are equal. *)
+(** [check testable msg expected actual] checks that two values are equal.
+
+    [msg] is printed if the check fails.
+
+    If [check] isn't in a tail-call position, Alcotest may guess the location of
+    the check. Otherwise, use {!extra_info} to report the location. *)
 
 val check' :
   ('a testable -> msg:string -> expected:'a -> actual:'a -> unit) extra_info
@@ -144,3 +155,14 @@ val failf : (('a, Format.formatter, unit, 'b) format4 -> 'a) extra_info
 
 val check_raises : (string -> exn -> (unit -> unit) -> unit) extra_info
 (** Check that an exception is raised. *)
+
+val match_raises :
+  (string -> (exn -> bool) -> (unit -> unit) -> unit) extra_info
+(** [match_raises msg exception_is_expected f] Runs [f ()], and passes the
+    raised exception to [exception_is_expected]. The check fails when no
+    exception is raised, or [exception_is_expected] returns false. *)
+
+val skip : unit -> 'a
+(** Skip the current test case.
+
+    @since 1.7.0 *)

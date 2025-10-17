@@ -11,13 +11,13 @@
 open Cmly_format
 open Cmly_api
 
-(* ------------------------------------------------------------------------ *)
-
-(* Reading a .cmly file. *)
-
 exception Error of string
 
-let read (ic : in_channel) : grammar =
+(* ------------------------------------------------------------------------ *)
+
+(* Reading a .cmly file from a channel. *)
+
+let read_channel (ic : in_channel) : grammar =
   (* .cmly file format: CMLY ++ version string ++ grammar *)
   let magic = "CMLY" ^ Version.version in
   try
@@ -32,15 +32,37 @@ let read (ic : in_channel) : grammar =
   | Failure _ -> (* [input_value] *)
       raise (Error (Printf.sprintf "Invalid or damaged .cmly file."))
 
+(* Reading a .cmly file based on its filename. *)
+
 let read (filename : string) : grammar =
   let ic = open_in_bin filename in
-  match read ic with
+  match read_channel ic with
   | x ->
       close_in_noerr ic;
       x
   | exception exn ->
       close_in_noerr ic;
       raise exn
+
+(* ------------------------------------------------------------------------ *)
+
+(* Reading a .cmly file whose content is stored in a string. *)
+
+let starts_with prefix s =
+  String.(length prefix <= length s && prefix = sub s 0 (length prefix))
+
+let from_string (content : string) : grammar =
+  (* .cmly file format: CMLY ++ version string ++ grammar *)
+  let magic = "CMLY" ^ Version.version in
+  if starts_with magic content then
+    try
+      Marshal.from_string content (String.length magic)
+    with Failure _ ->
+      raise (Error (Printf.sprintf "Invalid or damaged .cmly file."))
+  else
+    let m = String.(sub content 0 (min (length magic) (length content))) in
+    raise (Error (Printf.sprintf "Invalid magic string in .cmly file.\n\
+               Expecting %S, but got %S." magic m))
 
 (* ------------------------------------------------------------------------ *)
 
@@ -62,6 +84,12 @@ end)
     else invalid_arg (P.name ^ ".of_int: index out of bounds")
 
   let to_int n = n
+
+  let hash n = n
+
+  let equal (i : int) (j : int) = i = j
+
+  let compare (i : int) (j : int) = i - j (* OK for integers of small magnitude *)
 
   let iter f =
     for i = 0 to count - 1 do
@@ -86,7 +114,7 @@ end
 (* Packaging a data structure of type [Cmly_format.grammar] as a module
    of type [Cmly_api.GRAMMAR]. *)
 
-module Make (G : sig val grammar : grammar end) : GRAMMAR = struct
+module Lift (G : sig val grammar : grammar end) : GRAMMAR = struct
   open G
 
   type terminal    = int
@@ -178,6 +206,20 @@ module Make (G : sig val grammar : grammar end) : GRAMMAR = struct
         if mangled then Nonterminal.mangled_name n
         else Nonterminal.name n
 
+  module Symbol = struct
+
+    type t = symbol =
+      | T of terminal
+      | N of nonterminal
+
+    let hash = function T t -> t | N nt -> nt (* [t] and [nt] are integers *)
+    let equal = (=) (* OK to use polymorphic equality *)
+    let compare = compare (* OK to use polymorphic comparison *)
+
+    let name = symbol_name
+
+  end
+
   type identifier = string
 
   module Action = struct
@@ -214,11 +256,15 @@ module Make (G : sig val grammar : grammar end) : GRAMMAR = struct
     let table = grammar.g_lr1_states
     let lr0         i = table.(i).lr1_lr0
     let transitions i = table.(i).lr1_transitions
-    let reductions  i = table.(i).lr1_reductions
+    let get_reductions i = table.(i).lr1_reductions
+    let default_reduction i = table.(i).lr1_default_reduction
     include Index(struct
       let name = "Lr1"
       let count = Array.length table
     end)
+    let reductions i =
+      List.map (fun (s, p) -> (s, [p]))
+	table.(i).lr1_reductions
   end
 
   module Print = struct
@@ -333,5 +379,12 @@ module Make (G : sig val grammar : grammar end) : GRAMMAR = struct
 
 end
 
+(* ------------------------------------------------------------------------ *)
+
+(* High-level views of the low-level functions [read] and [from_string]. *)
+
 module Read (X : sig val filename : string end) =
-  Make (struct let grammar = read X.filename end)
+  Lift (struct let grammar = read X.filename end)
+
+module FromString (X : sig val content : string end) =
+  Lift (struct let grammar = from_string X.content end)

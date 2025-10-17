@@ -82,13 +82,19 @@ val get_opt_len : t -> pos:int -> int option -> int
 (** {2 Accessors} *)
 
 (** [length bstr] @return the length of bigstring [bstr]. *)
-val length : t -> int
+val length : (t[@local]) -> int
 
 (** [get t pos] returns the character at [pos] *)
 external get : t -> int -> char = "%caml_ba_ref_1"
 
+(** [unsafe_get t pos] returns the character at [pos], without bounds checks. *)
+external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
+
 (** [set t pos] sets the character at [pos] *)
 external set : t -> int -> char -> unit = "%caml_ba_set_1"
+
+(** [unsafe_set t pos] sets the character at [pos], without bounds checks. *)
+external unsafe_set : t -> int -> char -> unit = "%caml_ba_unsafe_set_1"
 
 (** [is_mmapped bstr] @return whether the bigstring [bstr] is
     memory-mapped. *)
@@ -150,6 +156,29 @@ val find : ?pos:int -> ?len:int -> char -> t -> int option
 external unsafe_find : t -> char -> pos:int -> len:int -> int = "bigstring_find"
 [@@noalloc]
 
+(** Search for the position of (a substring of) [needle] in (a substring of) [haystack]. *)
+val memmem
+  :  haystack:t
+  -> needle:t
+  -> ?haystack_pos:int
+  -> ?haystack_len:int
+  -> ?needle_pos:int
+  -> ?needle_len:int
+  -> unit
+  -> int option
+
+(** As [unsafe_find] for [memmem]. *)
+external unsafe_memmem
+  :  haystack:t
+  -> needle:t
+  -> haystack_pos:int
+  -> haystack_len:int
+  -> needle_pos:int
+  -> needle_len:int
+  -> int
+  = "bigstring_memmem_bytecode" "bigstring_memmem"
+[@@noalloc]
+
 
 (** {2 Accessors for parsing binary values, analogous to [Binary_packing]}
 
@@ -180,7 +209,7 @@ val set_int8_exn : t -> pos:int -> int -> unit
 val get_uint8 : t -> pos:int -> int
 val set_uint8_exn : t -> pos:int -> int -> unit
 val unsafe_get_int8 : t -> pos:int -> int
-val unsafe_set_int8 : t -> pos:int -> int -> unit
+val unsafe_set_int8 : (t[@local]) -> pos:int -> int -> unit
 val unsafe_get_uint8 : t -> pos:int -> int
 val unsafe_set_uint8 : t -> pos:int -> int -> unit
 
@@ -192,8 +221,8 @@ val set_int16_le_exn : t -> pos:int -> int -> unit
 val set_int16_be_exn : t -> pos:int -> int -> unit
 val unsafe_get_int16_le : t -> pos:int -> int
 val unsafe_get_int16_be : t -> pos:int -> int
-val unsafe_set_int16_le : t -> pos:int -> int -> unit
-val unsafe_set_int16_be : t -> pos:int -> int -> unit
+val unsafe_set_int16_le : (t[@local]) -> pos:int -> int -> unit
+val unsafe_set_int16_be : (t[@local]) -> pos:int -> int -> unit
 val get_uint16_le : t -> pos:int -> int
 val get_uint16_be : t -> pos:int -> int
 val set_uint16_le_exn : t -> pos:int -> int -> unit
@@ -211,8 +240,8 @@ val set_int32_le_exn : t -> pos:int -> int -> unit
 val set_int32_be_exn : t -> pos:int -> int -> unit
 val unsafe_get_int32_le : t -> pos:int -> int
 val unsafe_get_int32_be : t -> pos:int -> int
-val unsafe_set_int32_le : t -> pos:int -> int -> unit
-val unsafe_set_int32_be : t -> pos:int -> int -> unit
+val unsafe_set_int32_le : (t[@local]) -> pos:int -> int -> unit
+val unsafe_set_int32_be : (t[@local]) -> pos:int -> int -> unit
 val get_uint32_le : t -> pos:int -> int
 val get_uint32_be : t -> pos:int -> int
 val set_uint32_le_exn : t -> pos:int -> int -> unit
@@ -269,12 +298,19 @@ val unsafe_set_int32_t_be : t -> pos:int -> Int32.t -> unit
 
 val get_int64_t_le : t -> pos:int -> Int64.t
 val get_int64_t_be : t -> pos:int -> Int64.t
-val set_int64_t_le : t -> pos:int -> Int64.t -> unit
-val set_int64_t_be : t -> pos:int -> Int64.t -> unit
+val set_int64_t_le : t -> pos:int -> (Int64.t[@local]) -> unit
+val set_int64_t_be : t -> pos:int -> (Int64.t[@local]) -> unit
 val unsafe_get_int64_t_le : t -> pos:int -> Int64.t
 val unsafe_get_int64_t_be : t -> pos:int -> Int64.t
-val unsafe_set_int64_t_le : t -> pos:int -> Int64.t -> unit
-val unsafe_set_int64_t_be : t -> pos:int -> Int64.t -> unit
+val unsafe_set_int64_t_le : t -> pos:int -> (Int64.t[@local]) -> unit
+val unsafe_set_int64_t_be : t -> pos:int -> (Int64.t[@local]) -> unit
+
+module Local : sig
+  val get_int64_t_le : t -> pos:int -> (Int64.t[@local])
+  val get_int64_t_be : t -> pos:int -> (Int64.t[@local])
+  val unsafe_get_int64_t_le : t -> pos:int -> (Int64.t[@local])
+  val unsafe_get_int64_t_be : t -> pos:int -> (Int64.t[@local])
+end
 
 module Int_repr : sig
   include Int_repr.Get with type t := t

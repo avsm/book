@@ -1,6 +1,9 @@
 #include "mirage_crypto.h"
 
-#ifdef ARCH_64BIT
+/* Microsoft compiler does not support 128-bit integers. Drop down to
+ * 32-bit for MSVC.
+ */
+#if defined(ARCH_64BIT) && !defined(_MSC_VER)
 #include "curve25519_64.h"
 #define WORD uint64_t
 #define LIMBS 5
@@ -13,8 +16,8 @@
 #include <assert.h>
 typedef WORD fe_limb_t;
 
-/* following code is from c47bfce06 of boringssl (crypto/curve25519)
-   internal.h curve25519.c */
+/* following code is from c47bfce06 and 0fc57bef18 of boringssl
+   (crypto/curve25519) internal.h curve25519.c */
 
 /* Copyright (c) 2020, Google Inc.
  *
@@ -497,27 +500,21 @@ static void ge_p3_tobytes(uint8_t s[32], const ge_p3 *h) {
 static int x25519_ge_frombytes_vartime(ge_p3 *h, const uint8_t s[32]) {
   fe u;
   fe_loose v;
-  fe v3;
+  fe w;
   fe vxx;
   fe_loose check;
 
   fe_frombytes(&h->Y, s);
   fe_1(&h->Z);
-  fe_sq_tt(&v3, &h->Y);
-  fe_mul_ttt(&vxx, &v3, &d);
-  fe_sub(&v, &v3, &h->Z);  // u = y^2-1
+  fe_sq_tt(&w, &h->Y);
+  fe_mul_ttt(&vxx, &w, &d);
+  fe_sub(&v, &w, &h->Z);  // u = y^2-1
   fe_carry(&u, &v);
   fe_add(&v, &vxx, &h->Z);  // v = dy^2+1
 
-  fe_sq_tl(&v3, &v);
-  fe_mul_ttl(&v3, &v3, &v);  // v3 = v^3
-  fe_sq_tt(&h->X, &v3);
-  fe_mul_ttl(&h->X, &h->X, &v);
-  fe_mul_ttt(&h->X, &h->X, &u);  // x = uv^7
-
-  fe_pow22523(&h->X, &h->X);  // x = (uv^7)^((q-5)/8)
-  fe_mul_ttt(&h->X, &h->X, &v3);
-  fe_mul_ttt(&h->X, &h->X, &u);  // x = uv^3(uv^7)^((q-5)/8)
+  fe_mul_ttl(&w, &u, &v);  // w = u*v
+  fe_pow22523(&h->X, &w);  // x = w^((q-5)/8)
+  fe_mul_ttt(&h->X, &h->X, &u);  // x = u*w^((q-5)/8)
 
   fe_sq_tt(&vxx, &h->X);
   fe_mul_ttl(&vxx, &vxx, &v);
@@ -1804,10 +1801,10 @@ static void sc_muladd(uint8_t *s, const uint8_t *a, const uint8_t *b,
 
 #include <caml/memory.h>
 
-CAMLprim value mc_x25519_scalar_mult_generic(value out, value scalar, value soff, value point, value poff)
+CAMLprim value mc_x25519_scalar_mult_generic(value out, value scalar, value point)
 {
-  CAMLparam5(out, scalar, soff, point, poff);
-  x25519_scalar_mult_generic(Caml_ba_data_val(out), _ba_uint8_off(scalar, soff), _ba_uint8_off(point, poff));
+  CAMLparam3(out, scalar, point);
+  x25519_scalar_mult_generic(Bytes_val(out), _st_uint8(scalar), _st_uint8(point));
   CAMLreturn(Val_unit);
 }
 
@@ -1816,39 +1813,39 @@ CAMLprim value mc_25519_scalar_mult_base(value out, value hash)
   CAMLparam2(out, hash);
   ge_p3 A;
   ge_p3_0(&A);
-  x25519_ge_scalarmult_base(&A, Caml_ba_data_val(hash));
-  ge_p3_tobytes(Caml_ba_data_val(out), &A);
+  x25519_ge_scalarmult_base(&A, _st_uint8(hash));
+  ge_p3_tobytes(Bytes_val(out), &A);
   CAMLreturn(Val_unit);
 }
 
 CAMLprim value mc_25519_reduce_l(value buf)
 {
   CAMLparam1(buf);
-  x25519_sc_reduce(Caml_ba_data_val(buf));
+  x25519_sc_reduce(Bytes_val(buf));
   CAMLreturn(Val_unit);
 }
 
 CAMLprim value mc_25519_muladd(value out, value a, value b, value c)
 {
   CAMLparam4(out, a, b, c);
-  sc_muladd(Caml_ba_data_val(out), Caml_ba_data_val(a), Caml_ba_data_val(b), Caml_ba_data_val(c));
+  sc_muladd(Bytes_val(out), _st_uint8(a), _st_uint8(b), _st_uint8(c));
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value mc_25519_double_scalar_mult(value out, value k, value key, value c, value coff)
+CAMLprim value mc_25519_double_scalar_mult(value out, value k, value key, value c)
 {
-  CAMLparam5(out, k, key, c, coff);
+  CAMLparam4(out, k, key, c);
   ge_p2 R;
   ge_p3 B;
   fe_loose t;
   int success = 0;
-  success = x25519_ge_frombytes_vartime(&B, Caml_ba_data_val(key));
+  success = x25519_ge_frombytes_vartime(&B, _st_uint8(key));
   fe_neg(&t, &B.X);
   fe_carry(&B.X, &t);
   fe_neg(&t, &B.T);
   fe_carry(&B.T, &t);
-  ge_double_scalarmult_vartime(&R, Caml_ba_data_val(k), &B, _ba_uint8_off(c, coff));
-  x25519_ge_tobytes(Caml_ba_data_val(out), &R);
+  ge_double_scalarmult_vartime(&R, _st_uint8(k), &B, _st_uint8(c));
+  x25519_ge_tobytes(Bytes_val(out), &R);
   CAMLreturn(Val_bool(success));
 }
 
@@ -1857,6 +1854,6 @@ CAMLprim value mc_25519_pub_ok(value key)
   CAMLparam1(key);
   int success = 0;
   ge_p3 B;
-  success = x25519_ge_frombytes_vartime(&B, Caml_ba_data_val(key));
+  success = x25519_ge_frombytes_vartime(&B, _st_uint8(key));
   CAMLreturn(Val_bool(success));
 }

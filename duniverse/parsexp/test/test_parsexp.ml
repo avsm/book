@@ -1,3 +1,6 @@
+[@@@alert "-deprecated"]
+
+
 open! Import
 
 let test s =
@@ -251,7 +254,7 @@ let%expect_test "regression test (we counted comments as sexps for the purpose o
         (message "no s-expression found in input")))) |}]
 ;;
 
-module Stream = Caml.Stream
+module Stream = Stdlib.Stream
 module P = Eager
 
 let rec hot_loop state stream stack =
@@ -297,7 +300,7 @@ let%expect_test "eager parser raise" =
     match fetch_sexp stream with
     | None -> assert (Option.is_none (Stream.peek stream))
     | Some sexp ->
-      Caml.Format.printf "got: %a@." Sexp.pp_hum sexp;
+      Stdlib.Format.printf "got: %a@." Sexp.pp_hum sexp;
       loop stream
   in
   loop stream;
@@ -420,14 +423,13 @@ let%expect_test "eager parser semantics" =
                (exn : int * Exn.t)
                (result_from_many : Sexp.t list)]
        | Error _bad -> ())
-    | exception bad_thing ->
-      print_s [%message "Bad" (input : string) (bad_thing : Exn.t)]);
+    | exception bad_thing -> print_s [%message "Bad" (input : string) (bad_thing : Exn.t)]);
   [%expect {| testing 111151 inputs |}]
 ;;
 
 let%expect_test "eager parser continue" =
   let stream = Stream.of_string input in
-  iter_sexps stream ~f:(Caml.Format.printf "got: %a@." Sexp.pp_hum);
+  iter_sexps stream ~f:(Stdlib.Format.printf "got: %a@." Sexp.pp_hum);
   [%expect
     {|
     got: (Hello World)
@@ -450,10 +452,10 @@ let%expect_test "eager parser incorrect mutation" =
 
 let%expect_test "eager parser feed after raise without reset" =
   let stream = Stream.of_string input in
-  let got_sexp _state _sexp = raise Caml.Exit in
+  let got_sexp _state _sexp = raise Stdlib.Exit in
   let state = P.State.create got_sexp in
   (try hot_loop state stream P.Stack.empty with
-   | Caml.Exit -> ());
+   | Stdlib.Exit -> ());
   show_raise (fun () -> hot_loop state stream P.Stack.empty);
   [%expect {|
     (raised (Failure "Parsexp.Parser_automaton: parser is dead"))

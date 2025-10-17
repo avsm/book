@@ -44,51 +44,17 @@ doc-api-html: build
 doc-api-wiki: build
 	$(MAKE) -C docs api/wiki/index.wiki
 
-# Packaging tests. These are run with Lwt installed by OPAM, typically during
-# CI. To run locally, run the install-for-packaging-test target first.
-.PHONY: packaging-test
-packaging-test:
-	ocamlfind query lwt
-	for TEST in `ls -d test/packaging/*/*` ; \
-	do \
-	    $(MAKE) -wC $$TEST || exit 1 ; \
-		echo ; \
-		echo ; \
-	done
-
-.PHONY: install-for-packaging-test
-install-for-packaging-test: clean
-	opam pin add --yes --no-action lwt .
-	opam pin add --yes --no-action lwt_ppx .
-	opam pin add --yes --no-action lwt_react .
-	opam reinstall --yes lwt lwt_ppx lwt_react
-
-.PHONY: uninstall-after-packaging-test
-uninstall-after-packaging-test:
-	opam remove --yes lwt lwt_ppx lwt_react
-	opam pin remove --yes lwt
-	opam pin remove --yes lwt_ppx
-	opam pin remove --yes lwt_react
-
 # ppx_let integration test.
 .PHONY : ppx_let-test
 ppx_let-test :
 	dune build test/ppx_let/test.exe
 	dune exec test/ppx_let/test.exe
 
-.PHONY : ppx_let-test-deps
-ppx_let-test-deps :
-	opam install --yes --unset-root ppx_let
-
 .PHONY: clean
 clean :
 	dune clean
 	rm -fr docs/api
 	rm -f src/unix/discover_arguments
-	for TEST in `ls -d test/packaging/*/*` ; \
-	do \
-	    $(MAKE) -wC $$TEST clean ; \
-	done
 	rm -rf _coverage/
 
 EXPECTED_FILES := \
@@ -102,10 +68,7 @@ EXPECTED_FILES := \
 
 .PHONY: coverage
 coverage :
-	rm -rf _build/default/test/ppx_expect
-	find _build -name '*.coverage' | xargs rm -f
-	BISECT_ENABLE=yes dune runtest --force
-	BISECT_ENABLE=yes dune build @runtest_libuv --force
+	dune runtest --instrument-with bisect_ppx --force
 	bisect-ppx-report html $(EXPECTED_FILES)
 	bisect-ppx-report summary
 	@echo See _coverage/index.html

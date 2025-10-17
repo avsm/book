@@ -11,19 +11,23 @@
 (* This module compresses a two-dimensional table, where some values
    are considered insignificant, via row displacement. *)
 
-(* A compressed table is represented as a pair of arrays. The
-   displacement array is an array of offsets into the data array. *)
+(* A compressed table is represented as a pair of arrays. The displacement
+   array contains nonnegative integers, which, once decoded in a certain
+   way, represent (possibly negative) offsets into the data array. *)
+
+type displacement =
+  int
 
 type 'a table =
-    int array * (* displacement *)
-     'a array   (* data *)
+  displacement array * (* displacement *)
+            'a array   (* data *)
 
 (* [compress equal insignificant dummy m n t] turns the two-dimensional table
    [t] into a compressed table. The parameter [equal] is equality of data
-   values. The parameter [wildcard] tells which data values are insignificant,
-   and can thus be overwritten with other values. The parameter [dummy] is
-   used to fill holes in the data array. [m] and [n] are the integer
-   dimensions of the table [t]. *)
+   values. The parameter [insignificant] determines which data values are
+   insignificant, and can thus be overwritten with other values. The parameter
+   [dummy] is used to fill holes in the data array. [m] and [n] are the
+   integer dimensions of the table [t]. *)
 
 val compress:
   ('a -> 'a -> bool) ->
@@ -57,3 +61,8 @@ val getget:
   int -> int ->
   'a
 
+(* In order to guarantee that all displacements are nonnegative, an encoding
+   of negative numbers is used. It is implemented by the functions [encode]
+   and [decode]. These functions are in principle internal. We expose [encode]
+   because it is used by [FastDisplacement]. *)
+val encode: int -> displacement

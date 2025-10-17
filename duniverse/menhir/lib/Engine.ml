@@ -501,10 +501,10 @@ module Make (T : TABLE) = struct
      checkpoint of the form [InputNeeded env]. It checks that [checkpoint] is
      indeed of this form, and invokes [discard]. *)
 
-  (* [resume checkpoint] is invoked by the user in response to a checkpoint of
-     the form [AboutToReduce (env, prod)] or [HandlingError env]. It checks
-     that [checkpoint] is indeed of this form, and invokes [reduce] or
-     [error], as appropriate. *)
+  (* [resume checkpoint] is invoked by the user in response to a checkpoint
+     of the form [Shifting _], [AboutToReduce _], or [HandlingError env]. It
+     checks that [checkpoint] is indeed of this form, and invokes [reduce]
+     or [error], as appropriate. *)
 
   (* In reality, [offer] and [resume] accept an argument of type
      [semantic_value checkpoint] and produce a checkpoint of the same type.
@@ -562,9 +562,12 @@ module Make (T : TABLE) = struct
       (lexbuf : Lexing.lexbuf)
   : supplier =
     fun () ->
+      (* Read one token from the lexer. *)
       let token = lexer lexbuf in
+      (* Read this token's start and end positions. *)
       let startp = lexbuf.Lexing.lex_start_p
       and endp = lexbuf.Lexing.lex_curr_p in
+      (* Construct and return a triple. *)
       token, startp, endp
 
   (* ------------------------------------------------------------------------ *)

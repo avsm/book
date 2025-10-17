@@ -1,4 +1,4 @@
-{0 Cmdliner {%html: <span class="version">v1.1.1</span>%}}
+{0 Cmdliner {%html: <span class="version">v1.3.0+dune</span>%}}
 
 [Cmdliner] provides a simple and compositional mechanism
 to convert command line arguments to OCaml values and pass them to

@@ -18,7 +18,7 @@
 
 (** A library for manipulation of IP address representations.
 
-    {e v5.3.1 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
+    {e v5.6.1 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
 
 exception Parse_error of string * string
 (** [Parse_error (err,packet)] is raised when parsing of the IP address syntax
@@ -36,7 +36,7 @@ val scope_of_string : string -> (scope, [> `Msg of string ]) result
     Valid string values for [s] can be obtained via {!string_of_scope}. *)
 
 val pp_scope : Format.formatter -> scope -> unit
-  [@@ocaml.toplevel_printer]
+[@@ocaml.toplevel_printer]
 (** [pp_scope fmt scope] outputs a human-readable representation of {!scope} to
     the [fmt] formatter. *)
 
@@ -59,7 +59,7 @@ module V4 : sig
 
   val of_string_exn : string -> t
   (** [of_string_exn s] is the address {!t} represented as a human-readable IPv4
-      address [s]. Raises {!Parse_error} if [s] is not exactly 4 bytes long. *)
+      address [s]. Raises {!Parse_error} if [s] is invalid or truncated. *)
 
   val of_string_raw : string -> int ref -> t
   (** [of_string_raw s off] acts as {!of_string_exn} but takes as an extra
@@ -82,7 +82,7 @@ module V4 : sig
       buffer [buf]. *)
 
   val pp : Format.formatter -> t -> unit
-    [@@ocaml.toplevel_printer]
+  [@@ocaml.toplevel_printer]
   (** [pp f ipv4] outputs a human-readable representation of [ipv4] to the
       formatter [f]. *)
 
@@ -93,16 +93,15 @@ module V4 : sig
       human-readable [192.168.1.2] address. *)
 
   val of_octets : ?off:int -> string -> (t, [> `Msg of string ]) result
-  (** [of_octets ?off s] is the address {!t} represented by the IPv4 octets
-      represented by [s] starting from offset [off] within the string. [s] must
-      be at least [off+4] bytes long. Returns a human-readable error string if
-      parsing fails. [off] defaults to 0. *)
+  (** [of_octets ?off s] is the IPv4 address {!t} represented by the octets in
+      [s] starting from offset [off] within the string. Returns a human-readable
+      error string if [s] is not at least [off+4] bytes long. [off] defaults to
+      0. *)
 
   val of_octets_exn : ?off:int -> string -> t
   (** [of_octets_exn ipv4_octets] is the IPv4 address represented by
-      [ipv4_octets] starting from offset [off] within the string. Raises
-      {!Parse_error} if [ipv4_octets] is not at least [off+4] bytes long. [off]
-      defaults to 0. *)
+      [ipv4_octets] starting from offset [off]. Raises {!Parse_error} if
+      [ipv4_octets] is not at least [off+4] bytes long. [off] defaults to 0. *)
 
   val write_octets :
     ?off:int -> t -> bytes -> (unit, [> `Msg of string ]) result
@@ -219,7 +218,7 @@ module V4 : sig
         i.e. [XXX.XX.X.XXX/XX]. *)
 
     val pp : Format.formatter -> t -> unit
-      [@@ocaml.toplevel_printer]
+    [@@ocaml.toplevel_printer]
     (** [pp f cidr] outputs a human-readable representation of [cidr] to the
         formatter [f]. *)
 
@@ -296,6 +295,15 @@ module V4 : sig
     val last : t -> addr
     (** [last cidr] is last valid unicast address in this [cidr]. *)
 
+    val hosts : ?usable:bool -> t -> addr Seq.t
+    (** [hosts cidr] is the sequence of host addresses in this [cidr]. By
+        default, network and broadcast addresses are omitted. This can be
+        changed by setting [usable] to false. *)
+
+    val subnets : int -> t -> t Seq.t
+    (** [subnets n cidr] is the sequence of subnets of [cidr] with a prefix
+        length of [n]. *)
+
     include Map.OrderedType with type t := t
   end
 
@@ -329,14 +337,15 @@ module V6 : sig
 
   (** {3 Text string conversion} *)
 
-  val of_string_exn : string -> t
-  (** [of_string_exn ipv6_string] is the address represented by [ipv6_string].
-      Raises {!Parse_error} if [ipv6_string] is not a valid representation of an
-      IPv6 address. *)
-
   val of_string : string -> (t, [> `Msg of string ]) result
-  (** Same as [of_string_exn] but returns an option type instead of raising an
-      exception. *)
+  (** [of_string ipv6_string] is the address represented by the human-readable
+      IPv6 address [ipv6_string]. Returns a human-readable error string if
+      parsing failed. *)
+
+  val of_string_exn : string -> t
+  (** [of_string_exn ipv6_string] is the address represented by the
+      human-readable IPv6 address [ipv6_string]. Raises {!Parse_error} if
+      [ipv6_string] is invalid or truncated. *)
 
   val with_port_of_string :
     default:int -> string -> (t * int, [> `Msg of string ]) result
@@ -350,7 +359,9 @@ module V6 : sig
 
   val of_string_raw : string -> int ref -> t
   (** Same as [of_string_exn] but takes as an extra argument the offset into the
-      string for reading. *)
+      string for reading. [off] will be mutated to an unspecified value during
+      the function call. Raises {!Parse_error} if it is an invalid or truncated
+      IP address. *)
 
   val to_string : t -> string
   (** [to_string ipv6] is the string representation of [ipv6], i.e.
@@ -361,20 +372,22 @@ module V6 : sig
       buffer [buf]. *)
 
   val pp : Format.formatter -> t -> unit
-    [@@ocaml.toplevel_printer]
+  [@@ocaml.toplevel_printer]
   (** [pp f ipv6] outputs a human-readable representation of [ipv6] to the
       formatter [f]. *)
 
   (** {3 Octets conversion} *)
 
-  val of_octets_exn : ?off:int -> string -> t
-  (** [of_octets_exn ?off ipv6_octets] is the address represented by
-      [ipv6_octets], starting from offset [off]. Raises {!Parse_error} if
-      [ipv6_octets] is not a valid representation of an IPv6 address. *)
-
   val of_octets : ?off:int -> string -> (t, [> `Msg of string ]) result
-  (** Same as {!of_octets_exn} but returns an result type instead of raising an
-      exception. *)
+  (** [of_octets ?off s] is the IPv6 address {!t} represented by the octets [s]
+      starting from offset [off] within the string. Returns a human-readable
+      error string if [s] is not at least [off+16] bytes long. [off] defaults to
+      0. *)
+
+  val of_octets_exn : ?off:int -> string -> t
+  (** [of_octets_exn ?off ipv6_octets] is the IPv6 address represented by
+      [ipv6_octets], starting from offset [off]. Raises {!Parse_error} if
+      [ipv6_octets] is not at least [off+16] bytes long. [off] defaults to 0. *)
 
   val write_octets_exn : ?off:int -> t -> bytes -> unit
   (** [write_octets_exn ?off ipv6 b] writes 16 bytes that encode [ipv6] into [b]
@@ -500,7 +513,7 @@ module V6 : sig
         i.e. XXX:XX:X::XXX/XX. *)
 
     val pp : Format.formatter -> t -> unit
-      [@@ocaml.toplevel_printer]
+    [@@ocaml.toplevel_printer]
     (** [pp f cidr] outputs a human-readable representation of [cidr] to the
         formatter [f]. *)
 
@@ -568,6 +581,15 @@ module V6 : sig
     val last : t -> addr
     (** [last subnet] is last valid unicast address in this [subnet]. *)
 
+    val hosts : ?usable:bool -> t -> addr Seq.t
+    (** [hosts subnet] is the sequence of host addresses in this [subnet]. By
+        default the Subnet-Router anycast address is omitted. This can be
+        changed by setting [usable] to false. *)
+
+    val subnets : int -> t -> t Seq.t
+    (** [subnets n subnet] is the sequence of subnets of [subnet] with a prefix
+        length of [n]. *)
+
     include Map.OrderedType with type t := t
   end
 
@@ -612,7 +634,7 @@ val to_buffer : Buffer.t -> t -> unit
     [buf]. *)
 
 val pp : Format.formatter -> t -> unit
-  [@@ocaml.toplevel_printer]
+[@@ocaml.toplevel_printer]
 (** [pp f ip] outputs a human-readable representation of [ip] to the formatter
     [f]. *)
 
@@ -637,6 +659,19 @@ val with_port_of_string :
 
     - [::1:8080] returns the IPv6 [::1:8080] with the [default] port
     - [0:0:0:0:0:0:0:1:8080] returns [::1] with the port [8080]. *)
+
+val of_octets_exn : string -> t
+(** [of_octets_exn octets] is the address {!t} represented by [octets]. The
+    [octets] must be 4 bytes long for a {!V4} or 16 if a {!V6}. Raises
+    {!Parse_error} if [octets] is not a valid representation of an address. *)
+
+val of_octets : string -> (t, [> `Msg of string ]) result
+(** Same as {!of_octets_exn} but returns a result type instead of raising an
+    exception. *)
+
+val to_octets : t -> string
+(** [to_octets addr] returns the bytes representing the [addr] octets, which
+    will be 4 bytes long if addr is a {!V4} or 16 if a {!V6}. *)
 
 val v4_of_v6 : V6.t -> V4.t option
 (** [v4_of_v6 ipv6] is the IPv4 representation of the IPv6 address [ipv6]. If
@@ -700,7 +735,7 @@ module Prefix : sig
       into [buf]. *)
 
   val pp : Format.formatter -> t -> unit
-    [@@ocaml.toplevel_printer]
+  [@@ocaml.toplevel_printer]
   (** [pp f subnet] outputs a human-readable representation of [subnet] to the
       formatter [f]. *)
 
@@ -746,11 +781,27 @@ module Prefix : sig
   val netmask : t -> addr
   (** [netmask subnet] is the netmask for [subnet]. *)
 
+  val address : t -> addr
+  (** [address cidr] is the address for [cidr]. *)
+
+  val bits : t -> int
+  (** [bits cidr] is the bit size of the [cidr] prefix. *)
+
   val first : t -> addr
   (** [first subnet] is first valid unicast address in this [subnet]. *)
 
   val last : t -> addr
   (** [last subnet] is last valid unicast address in this [subnet]. *)
+
+  val hosts : ?usable:bool -> t -> (V4.t Seq.t, V6.t Seq.t) v4v6
+  (** [hosts cidr] is the sequence of host addresses in this [cidr]. By default,
+      the network and broadcast addresses are omitted for IPv4. In the case of
+      IPv6, the Subnet-Router anycast address is omitted by default. This can be
+      changed by setting [usable] to false. *)
+
+  val subnets : int -> t -> (V4.Prefix.t Seq.t, V6.Prefix.t Seq.t) v4v6
+  (** [subnets n cidr] is the sequence of subnets of [cidr] with a prefix length
+      of [n]. *)
 
   include Map.OrderedType with type t := t
 end

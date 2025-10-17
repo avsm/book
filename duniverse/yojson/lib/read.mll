@@ -22,11 +22,8 @@
       result
   end
 
-  open Printf
-  open Lexing
-
   (* see description in common.mli *)
-  type lexer_state = Lexer_state.t = {
+  type lexer_state = Common.Lexer_state.t = {
     buf : Buffer.t;
     mutable lnum : int;
     mutable bol : int;
@@ -43,7 +40,7 @@
       | 'A'..'F' -> int_of_char c - int_of_char 'A' + 10
       | _ -> assert false
 
-  let custom_error descr v lexbuf =
+  let custom_error descr v (lexbuf : Lexing.lexbuf) =
     let offs = lexbuf.lex_abs_pos - 1 in
     let bol = v.bol in
     let pos1 = offs + lexbuf.lex_start_pos - bol - 1 in
@@ -52,30 +49,31 @@
       match v.fname with
           None -> "Line"
         | Some s ->
-            sprintf "File %s, line" s
+            Printf.sprintf "File %s, line" s
     in
     let bytes =
       if pos1 = pos2 then
-        sprintf "byte %i" (pos1+1)
+        Printf.sprintf "byte %i" (pos1+1)
       else
-        sprintf "bytes %i-%i" (pos1+1) (pos2+1)
+        Printf.sprintf "bytes %i-%i" (pos1+1) (pos2+1)
     in
-    let msg = sprintf "%s %i, %s:\n%s" file_line v.lnum bytes descr in
-    json_error msg
+    let msg = Printf.sprintf "%s %i, %s:\n%s" file_line v.lnum bytes descr in
+    Common.json_error msg
 
 
   let lexer_error descr v lexbuf =
     custom_error
-      (sprintf "%s '%s'" descr (Lexing.lexeme lexbuf))
+      (Printf.sprintf "%s '%s'" descr (Lexing.lexeme lexbuf))
       v lexbuf
-
-  let read_junk = ref (fun _ -> assert false)
 
   let long_error descr v lexbuf =
     let junk = Lexing.lexeme lexbuf in
-    let extra_junk = !read_junk lexbuf in
+    let buf_size = 32 in
+    let buf = Buffer.create buf_size in
+    let () = Lexer_utils.read_junk_without_positions buf buf_size lexbuf in
+    let extra_junk = Buffer.contents buf in
     custom_error
-      (sprintf "%s '%s%s'" descr junk extra_junk)
+      (Printf.sprintf "%s '%s%s'" descr junk extra_junk)
       v lexbuf
 
   let min10 = min_int / 10 - (if min_int mod 10 = 0 then 0 else 1)
@@ -83,7 +81,7 @@
 
   exception Int_overflow
 
-  let extract_positive_int lexbuf =
+  let extract_positive_int (lexbuf : Lexing.lexbuf) =
     let start = lexbuf.lex_start_pos in
     let stop = lexbuf.lex_curr_pos in
     let s = lexbuf.lex_buffer in
@@ -105,12 +103,12 @@
       with Int_overflow ->
     #endif
       #ifdef INTLIT
-        `Intlit (lexeme lexbuf)
+        `Intlit (Lexing.lexeme lexbuf)
       #else
         lexer_error "Int overflow" v lexbuf
       #endif
 
-  let extract_negative_int lexbuf =
+  let extract_negative_int (lexbuf : Lexing.lexbuf)  =
     let start = lexbuf.lex_start_pos + 1 in
     let stop = lexbuf.lex_curr_pos in
     let s = lexbuf.lex_buffer in
@@ -132,29 +130,24 @@
       with Int_overflow ->
     #endif
       #ifdef INTLIT
-        `Intlit (lexeme lexbuf)
+        `Intlit (Lexing.lexeme lexbuf)
       #else
         lexer_error "Int overflow" v lexbuf
       #endif
 
-
-  let set_file_name v fname =
-    v.fname <- fname
-
-  let newline v lexbuf =
+  let newline v (lexbuf : Lexing.lexbuf) =
     v.lnum <- v.lnum + 1;
     v.bol <- lexbuf.lex_abs_pos + lexbuf.lex_curr_pos
 
-  let add_lexeme buf lexbuf =
+  let add_lexeme buf (lexbuf : Lexing.lexbuf) =
     let len = lexbuf.lex_curr_pos - lexbuf.lex_start_pos in
     Buffer.add_subbytes buf lexbuf.lex_buffer lexbuf.lex_start_pos len
 
-  let map_lexeme f lexbuf =
+  let map_lexeme f (lexbuf : Lexing.lexbuf) =
     let len = lexbuf.lex_curr_pos - lexbuf.lex_start_pos in
     f (Bytes.sub_string lexbuf.lex_buffer lexbuf.lex_start_pos len) 0 len
 
   type variant_kind = [ `Edgy_bracket | `Square_bracket | `Double_quote ]
-  type tuple_kind = [ `Parenthesis | `Square_bracket ]
 }
 
 let space = [' ' '\t' '\r']+
@@ -173,16 +166,6 @@ let number = '-'? positive_int (frac | exp | frac exp)?
 let hex = [ '0'-'9' 'a'-'f' 'A'-'F' ]
 
 let ident = ['a'-'z' 'A'-'Z' '_']['a'-'z' 'A'-'Z' '_' '0'-'9']*
-
-let optjunk4 = (eof | _ (eof | _ (eof | _ (eof | _))))
-let optjunk8 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk4)))))
-let optjunk12 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk8)))))
-let optjunk16 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk12)))))
-let optjunk20 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk16)))))
-let optjunk24 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk20)))))
-let optjunk28 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk24)))))
-let optjunk32 = (eof | _ (eof | _ (eof | _ (eof | _ (eof | optjunk28)))))
-let junk = optjunk32
 
 rule read_json v = parse
   | "true"      { `Bool true }
@@ -221,9 +204,9 @@ rule read_json v = parse
   | '-' positive_int     { make_negative_int v lexbuf }
   | float       {
                   #ifdef FLOAT
-                    `Float (float_of_string (lexeme lexbuf))
+                    `Float (float_of_string (Lexing.lexeme lexbuf))
                   #elif defined FLOATLIT
-                    `Floatlit (lexeme lexbuf)
+                    `Floatlit (Lexing.lexeme lexbuf)
                   #endif
                  }
 
@@ -247,7 +230,7 @@ rule read_json v = parse
                        acc := (field_name, read_json v lexbuf) :: !acc;
                      done;
                      assert false
-                   with End_of_object ->
+                   with Common.End_of_object ->
                      `Assoc (List.rev !acc)
                  }
 
@@ -263,7 +246,7 @@ rule read_json v = parse
                        acc := read_json v lexbuf :: !acc;
                      done;
                      assert false
-                   with End_of_array ->
+                   with Common.End_of_array ->
                      `List (List.rev !acc)
                  }
 
@@ -281,7 +264,7 @@ rule read_json v = parse
                          acc := read_json v lexbuf :: !acc;
                        done;
                        assert false
-                     with End_of_tuple ->
+                     with Common.End_of_tuple ->
                        `Tuple (List.rev !acc)
                    #else
                      long_error "Invalid token" v lexbuf
@@ -340,7 +323,8 @@ and finish_escaped_char v = parse
            if x >= 0xD800 && x <= 0xDBFF then
              finish_surrogate_pair v x lexbuf
            else
-             utf8_of_code v.buf x
+             Codec.utf8_of_code v.buf x
+
          }
   | _    { long_error "Invalid escape sequence" v lexbuf }
   | eof  { custom_error "Unexpected end of input" v lexbuf }
@@ -351,7 +335,7 @@ and finish_surrogate_pair v x = parse
              (hex a lsl 12) lor (hex b lsl 8) lor (hex c lsl 4) lor hex d
            in
            if y >= 0xDC00 && y <= 0xDFFF then
-             utf8_of_surrogate_pair v.buf x y
+             Codec.utf8_of_surrogate_pair v.buf x y
            else
              long_error "Invalid low surrogate for code point beyond U+FFFF"
                v lexbuf
@@ -516,7 +500,7 @@ and read_number v = parse
   | "NaN"       { nan }
   | "Infinity"  { infinity }
   | "-Infinity" { neg_infinity }
-  | number      { float_of_string (lexeme lexbuf) }
+  | number      { float_of_string (Lexing.lexeme lexbuf) }
   | '"'         { Buffer.clear v.buf;
                   let s = finish_string v lexbuf in
                   try
@@ -573,7 +557,7 @@ and read_sequence read_cell init_acc v = parse
                    acc := read_cell !acc v lexbuf;
                  done;
                  assert false
-               with End_of_array ->
+               with Common.End_of_array ->
                  !acc
              }
   | _        { long_error "Expected '[' but found" v lexbuf }
@@ -592,19 +576,19 @@ and read_list_rev read_cell v = parse
                    acc := read_cell v lexbuf :: !acc;
                  done;
                  assert false
-               with End_of_array ->
+               with Common.End_of_array ->
                  !acc
              }
   | _        { long_error "Expected '[' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
 and read_array_end = parse
-    ']'      { raise End_of_array }
+    ']'      { raise Common.End_of_array }
   | ""       { () }
 
 and read_array_sep v = parse
     ','      { () }
-  | ']'      { raise End_of_array }
+  | ']'      { raise Common.End_of_array }
   | _        { long_error "Expected ',' or ']' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
@@ -627,7 +611,7 @@ and read_tuple read_cell init_acc v = parse
                          incr pos;
                        done;
                        assert false
-                     with End_of_tuple ->
+                     with Common.End_of_tuple ->
                        !acc
                    #else
                      long_error "Invalid token" v lexbuf
@@ -637,23 +621,23 @@ and read_tuple read_cell init_acc v = parse
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
 and read_tuple_end = parse
-    ')'      { raise End_of_tuple }
+    ')'      { raise Common.End_of_tuple }
   | ""       { () }
 
 and read_tuple_end2 v std = parse
     ')'      { if std then
                  long_error "Expected ')' or '' but found" v lexbuf
                else
-                 raise End_of_tuple }
+                 raise Common.End_of_tuple }
   | ']'      { if std then
-                 raise End_of_tuple
+                 raise Common.End_of_tuple
                else
                  long_error "Expected ']' or '' but found" v lexbuf }
   | ""       { () }
 
 and read_tuple_sep v = parse
     ','      { () }
-  | ')'      { raise End_of_tuple }
+  | ')'      { raise Common.End_of_tuple }
   | _        { long_error "Expected ',' or ')' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
@@ -662,9 +646,9 @@ and read_tuple_sep2 v std = parse
   | ')'      { if std then
                  long_error "Expected ',' or ']' but found" v lexbuf
                else
-                 raise End_of_tuple }
+                 raise Common.End_of_tuple }
   | ']'      { if std then
-                 raise End_of_tuple
+                 raise Common.End_of_tuple
                else
                  long_error "Expected ',' or ')' but found" v lexbuf }
   | _        { long_error "Expected ',' or ')' but found" v lexbuf }
@@ -692,7 +676,7 @@ and read_abstract_fields read_key read_field init_acc v = parse
                    acc := read_field !acc field_name v lexbuf;
                  done;
                  assert false
-               with End_of_object ->
+               with Common.End_of_object ->
                  !acc
              }
   | _        { long_error "Expected '{' but found" v lexbuf }
@@ -704,12 +688,12 @@ and read_lcurl v = parse
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
 and read_object_end = parse
-    '}'      { raise End_of_object }
+    '}'      { raise Common.End_of_object }
   | ""       { () }
 
 and read_object_sep v = parse
     ','      { () }
-  | '}'      { raise End_of_object }
+  | '}'      { raise Common.End_of_object }
   | _        { long_error "Expected ',' or '}' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
@@ -777,7 +761,7 @@ and skip_json v = parse
                        skip_json v lexbuf;
                      done;
                      assert false
-                   with End_of_object ->
+                   with Common.End_of_object ->
                      ()
                  }
 
@@ -792,7 +776,7 @@ and skip_json v = parse
                        skip_json v lexbuf;
                      done;
                      assert false
-                   with End_of_array ->
+                   with Common.End_of_array ->
                      ()
                  }
 
@@ -809,7 +793,7 @@ and skip_json v = parse
                          skip_json v lexbuf;
                        done;
                        assert false
-                     with End_of_tuple ->
+                     with Common.End_of_tuple ->
                        ()
                    #else
                      long_error "Invalid token" v lexbuf
@@ -890,7 +874,7 @@ and buffer_json v = parse
                        buffer_json v lexbuf;
                      done;
                      assert false
-                   with End_of_object ->
+                   with Common.End_of_object ->
                      ()
                  }
 
@@ -906,7 +890,7 @@ and buffer_json v = parse
                        buffer_json v lexbuf;
                      done;
                      assert false
-                   with End_of_array ->
+                   with Common.End_of_array ->
                      ()
                  }
 
@@ -924,7 +908,7 @@ and buffer_json v = parse
                          buffer_json v lexbuf;
                        done;
                        assert false
-                     with End_of_tuple ->
+                     with Common.End_of_tuple ->
                        ()
                    #else
                      long_error "Invalid token" v lexbuf
@@ -1000,34 +984,34 @@ and buffer_space v = parse
 and buffer_object_end v = parse
     '}'      {
       Buffer.add_char v.buf '}';
-      raise End_of_object }
+      raise Common.End_of_object }
   | ""       { () }
 
 and buffer_object_sep v = parse
     ','      { Buffer.add_char v.buf ',' }
-  | '}'      { Buffer.add_char v.buf '}'; raise End_of_object }
+  | '}'      { Buffer.add_char v.buf '}'; raise Common.End_of_object }
   | _        { long_error "Expected ',' or '}' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
 and buffer_array_end v = parse
-    ']'      { Buffer.add_char v.buf ']'; raise End_of_array }
+    ']'      { Buffer.add_char v.buf ']'; raise Common.End_of_array }
   | ""       { () }
 
 and buffer_array_sep v = parse
     ','      { Buffer.add_char v.buf ',' }
-  | ']'      { Buffer.add_char v.buf ']'; raise End_of_array }
+  | ']'      { Buffer.add_char v.buf ']'; raise Common.End_of_array }
   | _        { long_error "Expected ',' or ']' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
 and buffer_tuple_end v = parse
     ')'      {
       Buffer.add_char v.buf ')';
-      raise End_of_tuple }
+      raise Common.End_of_tuple }
   | ""       { () }
 
 and buffer_tuple_sep v = parse
     ','      { Buffer.add_char v.buf ',' }
-  | ')'      { Buffer.add_char v.buf ')'; raise End_of_tuple }
+  | ')'      { Buffer.add_char v.buf ')'; raise Common.End_of_tuple }
   | _        { long_error "Expected ',' or ')' but found" v lexbuf }
   | eof      { custom_error "Unexpected end of input" v lexbuf }
 
@@ -1049,16 +1033,10 @@ and finish_buffer_comment v = parse
            finish_buffer_comment v lexbuf }
   | _    { add_lexeme v.buf lexbuf; finish_buffer_comment v lexbuf }
 
-and junk = parse
-    junk     { Lexing.lexeme lexbuf }
-
 {
   let _ = (read_json : lexer_state -> Lexing.lexbuf -> t)
 
   let read_t = read_json
-
-  let () =
-    read_junk := junk
 
   let read_int8 v lexbuf =
     let n = read_int v lexbuf in
@@ -1097,14 +1075,14 @@ and junk = parse
     if not (read_eof lexbuf) then
       long_error "Junk after end of JSON value:" v lexbuf
 
-  let init_lexer = init_lexer
+  let init_lexer = Common.init_lexer
 
   let from_lexbuf v ?(stream = false) lexbuf =
     read_space v lexbuf;
 
     let x =
       if read_eof lexbuf then
-        raise End_of_input
+        raise Common.End_of_input
       else
         read_json v lexbuf
     in
@@ -1120,16 +1098,16 @@ and junk = parse
       let lexbuf = Lexing.from_string s in
       let v = init_lexer ?buf ?fname ?lnum () in
       from_lexbuf v lexbuf
-    with End_of_input ->
-      json_error "Blank input data"
+    with Common.End_of_input ->
+      Common.json_error "Blank input data"
 
   let from_channel ?buf ?fname ?lnum ic =
     try
       let lexbuf = Lexing.from_channel ic in
       let v = init_lexer ?buf ?fname ?lnum () in
       from_lexbuf v lexbuf
-    with End_of_input ->
-      json_error "Blank input data"
+    with Common.End_of_input ->
+      Common.json_error "Blank input data"
 
   let from_file ?buf ?fname ?lnum file =
     let ic = open_in file in
@@ -1148,7 +1126,7 @@ and junk = parse
     let rec f () =
       try Seq.Cons (from_lexbuf v ?stream lexbuf, f)
       with
-          End_of_input ->
+          Common.End_of_input ->
             fin ();
             Seq.Nil
         | e ->
@@ -1210,6 +1188,6 @@ and junk = parse
   let prettify ?std s =
     pretty_to_string ?std (from_string s)
 
-  let compact ?std s =
+  let compact ?std:_ s =
     to_string (from_string s)
 }

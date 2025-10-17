@@ -1,3 +1,92 @@
+2.16.0 (2025-01-22)
+-------------------
+
+* atdgen: Breaking change, migrate from Bucklescript to Melange (#375)
+* atdd: Workaround d compiler bug regarding declaration order when using aliases (#393)
+        Algebraic data types (SumType) now uses `alias this` syntax.
+* atdgen: Add support for `<json open_enum>` in Melange (#401)
+* atdcpp: Initial Release (#404)
+* atdcpp: Use `double` c++ type as default floating point type (#411)
+* atdgen: Fix JSON I/O for inline records (#419)
+* atdgen: The deprecated `atdgen` library is no longer available.
+          Use `atdgen-runtime` instead (#421)
+* atddiff: To ensure that all the intended types are checked when new
+           type definitions are added to an ATD file, an `--ignore`
+           option is now available. It makes atddiff fail if some types
+           are neither selected via `--types` nor ignored via `--ignore`.
+
+2.15.0 (2023-10-26)
+-------------------
+
+* atddiff: Breaking changes in the JSON output format of atddiff (#382)
+* atddiff: Fix `atddiff --version` output (#379)
+* atddiff: New experimental option `--no-locations` aimed at
+           producing more stable results that allow diffing successive
+           atddiff reports to spot new findings and ignore old ones (#377)
+
+2.14.1 (2023-10-20)
+-------------------
+
+* atddiff: Fixed reports for new variant cases. They are now correctly 
+  reported as forward incompatibilities (#373)
+
+2.14.0 (2023-10-19)
+-------------------
+
+* atdd: Fix various issues with the interoperability of user defined types,
+  used in or outside of records (#355)
+* atdd: Generated `.d` files now have the suffix `_atd.d` (#355)
+* atddiff now supports options for filtering the findings based on the 
+  direction of the incompatibility (`--backward`, `--forward`) or based on the  
+  name of the affected types (`--types`) (#365)
+* atddiff: new option `--output-format json` for exporting the results to
+  JSON (#360)
+
+2.13.0 (2023-10-15)
+-------------------
+
+* atdts: Stop compiler errors on generated typescript (#348)
+* atdts: Don't fail on `wrap` constructs (#353)
+* atdcat: New option `-remove-wraps` which pretty-prints the type
+  definitions without `wrap` constructs (#353)
+* atdd: Add `dlang` backend to generate D code from ATD definitions (#349)
+* new tool: atddiff. Compares two versions of an ATD file and reports
+  possible incompatibilities in the JSON data. Atddiff ships as part of the 
+  `atd` package together with `atdcat` (#352, #358)
+
+2.12.0 (2023-05-12)
+-------------------
+
+* atdgen: Annotate generated code with types to disambiguate OCaml
+  classic variants (#331)
+* atdpy: Support the option type more correctly so that it follows
+  ATD's convention for JSON encoding. This allows compatibility with
+  JSON produced by other tools of the ATD suite. The Python type,
+  however, is still a nullable (`Optional`) to make things simpler for
+  Python programmers. This prevents distinguishing `["Some", "None"]`
+  from `"None"` which both translate to `None` in Python. (#332)
+* (BREAKING) atdgen: revert default encoding of int64 values as string (#330)
+* atdgen: Support `<json repr="string">` for `int` values (#330)
+* atdpy: Treat default field values as expressions to evaluate each time
+  they're assigned to a field. This allows the use of mutable defaults such as
+  lists (#339)
+
+2.11.0 (2023-02-08)
+-------------------
+
+* atdpy: Support parametrized type definitions (#303)
+* atdpy: Support options approximately by treating them as nullables (#320)
+* atdts: Support parametrized type definitions (#303)
+* atdts: Fix incorrect type for TypeScript readers/writers generated
+         for type `abstract`.
+* atdts: Fix incorrect type for TypeScript writers of optional fields.
+         It was working only in special cases such as `foo?: int`.
+* atdts: Eliminate the type alias `type Int = number` since it was
+         more confusing than helpful. Occurrences of `Int` are replaced
+         by `number /*int*/`.
+* atdts: Disable all tslint and eslint rules in generated code so as
+         to play well with all tslint and eslint configurations.
+
 2.10.0 (2022-08-09)
 -------------------
 

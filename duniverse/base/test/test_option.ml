@@ -2,7 +2,6 @@ open! Import
 open! Option
 
 let f = ( + )
-
 let%test _ = [%compare.equal: int t] (merge None None ~f) None
 let%test _ = [%compare.equal: int t] (merge (Some 3) None ~f) (Some 3)
 let%test _ = [%compare.equal: int t] (merge None (Some 3) ~f) (Some 3)
@@ -31,4 +30,19 @@ let%expect_test "[value_or_thunk]" =
   [%expect {|
     THUNK!
     0 |}]
+;;
+
+let%expect_test "map2" =
+  let m t1 t2 =
+    let result = Option.map2 ~f:(fun x y -> x + y) t1 t2 in
+    print_s [%sexp (result : int Option.t)]
+  in
+  m None None;
+  [%expect {| () |}];
+  m (Some 1) (Some 2);
+  [%expect {| (3) |}];
+  m None (Some 1);
+  [%expect {| () |}];
+  m (Some 1) None;
+  [%expect {| () |}]
 ;;

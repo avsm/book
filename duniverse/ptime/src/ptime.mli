@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2015 The ptime programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (** POSIX time values.
@@ -308,6 +308,8 @@ type time = (int * int * int) * tz_offset_s
     A [time] value is said to be {e valid} iff the values [(hh, mm, ss)]
     are in the ranges mentioned above. *)
 
+(** {2:datetimes Date and time} *)
+
 val of_date_time : date * time -> t option
 (** [of_date_time dt] is the POSIX timestamp corresponding to
     date-time [dt] or [None] if [dt] has an {{!date}invalid date},
@@ -348,20 +350,37 @@ val to_date_time : ?tz_offset_s:tz_offset_s -> t -> date * time
     are floored, i.e. the date-time always has the second mentioned in
     the timestamp. *)
 
-val of_date : date -> t option
-(** [of_date d] is [of_date_time (d, ((00, 00, 00), 0 (* UTC *)))]. *)
+(** {2:dates Date} *)
 
-val to_date : t -> date
-(** [to_date t] is [fst (to_date_time t)]. *)
+val of_date : ?tz_offset_s:tz_offset_s -> date -> t option
+(** [of_date d] is
+    [of_date_time (d, ((00, 00, 00), tz_offset_s))]. [tz_offset_s]
+    defaults to 0, i.e. UTC. *)
 
-val weekday :
-  ?tz_offset_s:tz_offset_s -> t ->
-  [ `Mon | `Tue | `Wed | `Thu | `Fri | `Sat | `Sun ]
+val to_date : ?tz_offset_s:tz_offset_s -> t -> date
+(** [to_date t] is [fst (to_date_time ?tz_offset_s t)]. *)
+
+(** {2:years Year} *)
+
+val of_year : ?tz_offset_s:tz_offset_s -> int -> t option
+(** [of_year y] is [of_date ?tz_offset_s (y, 01, 01)]. *)
+
+val to_year : ?tz_offset_s:tz_offset_s -> t -> int
+(** [to_year t] is the first component of [(to_date ?tz_offset_s t))] but
+    more efficient. *)
+
+(** {2:weekdays Week days} *)
+
+type weekday = [ `Sun | `Mon | `Tue | `Wed | `Thu | `Fri | `Sat ]
+(** The type for the days of the 7-day week. *)
+
+val weekday : ?tz_offset_s:tz_offset_s -> t -> weekday
 (** [weekday ~tz_offset_s t] is the day in the 7-day week of timestamp [t]
-    expressed in the time zone offset [ts_offset_s] (defaults to [0]).
+    expressed in the time zone offset [ts_offset_s] (defaults to [0]). *)
 
-    This can be used with the time zone offset result of {!to_date_time}
-    to convert timestamps to denormalized timestamp formats. *)
+val weekday_num : ?tz_offset_s:tz_offset_s -> t -> int
+(** [weekday_num] is like {!weekday} but returns a weekday number, 0
+    is sunday, 1 is monday, …, 6 is saturday etc. *)
 
 (** {1:rfc3339 RFC 3339 timestamp conversions} *)
 
@@ -387,6 +406,11 @@ val rfc3339_error_to_msg : ('a, [`RFC3339 of error_range * rfc3339_error])
 (** [rfc3339_error_to_msg r] converts RFC 3339 parse errors to error
     messages. *)
 
+val rfc3339_string_error :
+  ('a, [`RFC3339 of error_range * rfc3339_error]) result -> ('a, string) result
+(** [rfc3339_string_error r] converts RFC 3339 parse errors errors to
+    string errors. *)
+
 val of_rfc3339 : ?strict:bool -> ?sub:bool -> ?start:int -> string ->
   ((t * tz_offset_s option * int),
    [> `RFC3339 of error_range * rfc3339_error]) result
@@ -404,10 +428,12 @@ val of_rfc3339 : ?strict:bool -> ?sub:bool -> ?start:int -> string ->
        timestamp. If [sub] is [false] (default) this is always
        [String.length s - start] and [Error `Trailing_input] is returned
        if there are still bytes in [s] after the date-time was parsed. Use
-       [~sub:true] for allowing trailing input to exist.}}
-    If [strict] is [true] (defaults to [false]) the parsing function
-    errors on timestamps with lowercase ['T'] or ['Z'] characters or
-    space separated date and times.
+       [~sub:true] for allowing trailing input to exist.}
+    {- [strict] if [false] (default) the pasring function does
+       not error on timestamp with lowercase ['T'] or ['Z'] characters, or
+       space separated date and times, and `hhmm` and `hh` timezone
+       offsets (strict mandates [hh:mm]). This allows to parse a slightly
+       larger subset of ISO 8601 than what RFC 3339 allows}}
 
     {b Notes and limitations.}
     {ul
@@ -584,20 +610,3 @@ let () = assert (Ptime.equal (get @@ Ptime.add_span t0 one_s) t2)
           measure time spans in a single program run use a monotonic
           time source (e.g. {!Mtime}).}}}}
 *)
-
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2015 The ptime programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

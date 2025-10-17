@@ -89,14 +89,15 @@ module Infix (T : sig
   let ( = ) a b = equal T.compare a b
   let ( <> ) a b = not_equal T.compare a b
 end
+[@@inline always]
 
-module Polymorphic_compare (T : sig
+module Comparisons (T : sig
     type t [@@deriving_inline compare]
 
     include Ppx_compare_lib.Comparable.S with type t := t
 
     [@@@end]
-  end) : Polymorphic_compare with type t := T.t = struct
+  end) : Comparisons with type t := T.t = struct
   include Infix (T)
 
   let compare = T.compare
@@ -104,6 +105,7 @@ module Polymorphic_compare (T : sig
   let min t t' = min compare t t'
   let max t t' = max compare t t'
 end
+[@@inline always]
 
 module Make_using_comparator (T : sig
     type t [@@deriving_inline sexp_of]
@@ -121,7 +123,7 @@ module Make_using_comparator (T : sig
   end
 
   include T
-  module Replace_polymorphic_compare = Polymorphic_compare (T)
+  module Replace_polymorphic_compare = Comparisons (T)
   include Replace_polymorphic_compare
 
   let ascending = compare
@@ -154,7 +156,7 @@ module Make (T : sig
 
     [@@@end]
   end) =
-  Make_using_comparator (struct
+  Make_using_comparator [@inlined hint] (struct
     include T
     include Comparator.Make (T)
   end)
@@ -197,3 +199,7 @@ let lexicographic cmps x y =
 
 let lift cmp ~f x y = cmp (f x) (f y)
 let reverse cmp x y = cmp y x
+
+type 'a reversed = 'a
+
+let compare_reversed cmp x y = cmp y x

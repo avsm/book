@@ -57,8 +57,8 @@ val group_by :
   compare:('a -> 'a -> int) -> group:('a -> 'a list -> 'b) ->
   'a list -> 'b list
 
-(** [find_map f xs] applies [f] to elements of [xs] in order and the returns
-    the first result of the form [Some y], or [None]. *)
+(** [find_map f xs] applies [f] to the elements of [xs] in order and returns
+    the first result of the form [Some y], if there is one, or [None]. *)
 val find_map : ('a -> 'b option) -> 'a list -> 'b option
 
 (** [partition_map f xs] classifies elements of list [xs] in a left and a right
@@ -66,6 +66,22 @@ val find_map : ('a -> 'b option) -> 'a list -> 'b option
 val partition_map :
   ('a -> [< `L of 'l | `R of 'r ]) -> 'a list -> 'l list * 'r list
 
-(** [compare f l1 l2] compares two list according to the lexicographic
-    ordering. Elements are compared using the [f] argument. *)
+(** [compare f l1 l2] compares two lists according to the lexicographic
+    ordering. Elements are compared using the argument [f]. *)
 val compare : ('a -> 'b -> int) -> 'a list -> 'b list -> int
+
+(**[extract p xs] searches the list [xs] for an element [x] such that [p x] is
+   true. It returns a pair of this element (if it exists) and a list of the
+   remaining elements. *)
+val extract : ('a -> bool) -> 'a list -> 'a option * 'a list
+
+(** [merge_uniq cmp l1 l2] merges two sorted lists (without duplicate
+    elements) and produces a sorted list (without duplicate elements). *)
+val merge_uniq : ('a -> 'a -> int) -> 'a list -> 'a list -> 'a list
+
+(** [reduce e f l] reduces the list [xs] using the associative binary
+    operation [f], whose unit (neutral element) is [e].
+
+    The reduction is performed in a balanced fashion.
+    For example, [reduce f [a; b; c; d]] is [f (f a b) (f c d)]. *)
+val reduce : 'a -> ('a -> 'a -> 'a) -> 'a list -> 'a

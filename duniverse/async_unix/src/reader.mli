@@ -38,8 +38,10 @@ type t [@@deriving sexp_of]
 
 include Invariant.S with type t := t
 
-(** Overall IO statistics for all readers. *)
-val io_stats : Io_stats.t
+(** [bytes_read t] returns how many bytes have been read by this reader
+    from the underlying file descriptor. This includes bytes that have not been read
+    by the user from the reader yet (sitting in the internal buffer).  *)
+val bytes_read : t -> Int63.t
 
 (** Returns time of the most recent [read] system call that returned data. *)
 val last_read_time : t -> Time.t
@@ -164,7 +166,7 @@ type 'a read_one_chunk_at_a_time_result =
   (** [`Eof_with_unconsumed_data s] means that [handle_chunk] returned [`Consumed (c, _)]
       and left data in the reader's buffer (i.e., [c < len]), and that the reader reached
       EOF without reading any more data into the buffer; hence the data in the buffer was
-      never consumed (and never will be, since the reader is at EOF). *)
+      never consumed. The unconsumed data is left on the reader. *)
   | `Eof_with_unconsumed_data of string
   ]
 [@@deriving sexp_of]
@@ -287,7 +289,7 @@ val read_line : t -> string Read_result.t Deferred.t
     operation is retried.  If the descriptor is closed, [None] will be returned. *)
 val really_read_line : wait_time:Time.Span.t -> t -> string option Deferred.t
 
-type 'a read = ?parse_pos:Sexp.Parse_pos.t -> 'a
+type 'a read := ?parse_pos:Sexp.Parse_pos.t -> 'a
 
 (** [read_sexp t] reads the next sexp. *)
 val read_sexp : (t -> Sexp.t Read_result.t Deferred.t) read
@@ -304,7 +306,7 @@ val read_annotated_sexps : (t -> Sexp.Annotated.t Pipe.Reader.t) read
     protocol", in which the length of the data is prefixed as a 64-bit integer to the
     data.  This is the format that [Writer.write_bin_prot] writes.
 
-    For higher performance, consider [Unpack_sequence.unpack_bin_prot_from_reader]. *)
+    For higher performance, consider [iter_bin_prot] or [read_bin_prot_into_pipe]. *)
 val read_bin_prot
   :  ?max_len:int
   -> t
@@ -317,6 +319,29 @@ val peek_bin_prot
   -> t
   -> 'a Bin_prot.Type_class.reader
   -> 'a Read_result.t Deferred.t
+
+(** [iter_bin_prot t bp_reader ~f] reads all size-prefixed binary protocol messages in [t]
+    using binary protocol reader [bp_reader], calling [f] for each message. Closes [t]
+    after reaching EOF or an error. *)
+val iter_bin_prot
+  :  t
+  -> 'a Bin_prot.Type_class.reader
+  -> f:('a -> unit Deferred.t)
+  -> unit Deferred.Or_error.t
+
+val iter_bin_prot_exn
+  :  t
+  -> 'a Bin_prot.Type_class.reader
+  -> f:('a -> unit Deferred.t)
+  -> unit Deferred.t
+
+(** Similar to [iter_bin_prot], but returns messages as a pipe. The reader will be closed
+    when EOF is reached or when the pipe is closed. *)
+val read_bin_prot_into_pipe
+  :  t
+  -> 'a Bin_prot.Type_class.reader
+  -> f:('a -> 'b Deferred.t)
+  -> 'b Pipe.Reader.t
 
 (** [read_marshal_raw] reads and returns a buffer containing one marshaled value, but
     doesn't unmarshal it.  You can just call [Marshal.from_string] on the string, and cast
@@ -333,9 +358,17 @@ val read_marshal : t -> _ Read_result.t Deferred.t
 val recv : t -> Bytes.t Read_result.t Deferred.t
 
 (** [read_all t read_one] returns a pipe that receives all values read from [t] by
-    repeatedly using [read_one t].  When the reader reaches EOF, it closes the reader,
-    and then after the reader close is finished, closes the pipe. *)
-val read_all : t -> (t -> 'a Read_result.t Deferred.t) -> 'a Pipe.Reader.t
+    repeatedly using [read_one t].
+
+    When [close_when_finished] is [true], the reader is automatically closed when it
+    reaches EOF. Otherwise, the caller is responsible for closing the reader.
+
+    The returned pipe is closed when the reader reaches EOF. *)
+val read_all
+  :  ?close_when_finished:bool (** default: true *)
+  -> t
+  -> (t -> 'a Read_result.t Deferred.t)
+  -> 'a Pipe.Reader.t
 
 (** [lseek t offset ~mode] clears [t]'s buffer and calls [Unix.lseek] on [t]'s file
     descriptor.  The [`Cur] mode is not exposed because seeking relative to the current
@@ -372,7 +405,7 @@ val file_lines : string -> string list Deferred.t
 
     [load_sexps] is similar, but converts a sequence of sexps. *)
 
-type ('sexp, 'a, 'b) load =
+type ('sexp, 'a, 'b) load :=
   ?exclusive:bool (** default is [false] *) -> string -> ('sexp -> 'a) -> 'b Deferred.t
 
 val load_sexp : (Sexp.t, 'a, 'a Or_error.t) load
@@ -384,9 +417,12 @@ val load_annotated_sexp_exn : (Sexp.Annotated.t, 'a, 'a) load
 val load_annotated_sexps : (Sexp.Annotated.t, 'a, 'a list Or_error.t) load
 val load_annotated_sexps_exn : (Sexp.Annotated.t, 'a, 'a list) load
 
-type ('a, 'b) load_bin_prot =
+type ('a, 'b) load_bin_prot :=
   ?exclusive:bool (** default is [false] *)
   -> ?max_len:int
+  (** default is 100 MiB. This is only used to save you from accidentally loading a giant
+      file and is not used to size any internal buffers. So it's safe to pass a
+      arbitrarily large number if you're loading large files. *)
   -> string
   -> 'a Bin_prot.Type_class.reader
   -> 'b Deferred.t

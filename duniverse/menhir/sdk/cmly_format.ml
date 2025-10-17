@@ -81,6 +81,9 @@ type production_def = {
   p_positions: range list;
   p_action: action option;
   p_attributes: attributes;
+    (* Before 2023/08/02, these were the attributes of the left-hand
+       side of the production. Now, these are the attributes of the
+       production itself. *)
 }
 
 type lr0_state_def = {
@@ -91,7 +94,8 @@ type lr0_state_def = {
 type lr1_state_def = {
   lr1_lr0: lr0;
   lr1_transitions: (symbol * lr1) list;
-  lr1_reductions: (terminal * production list) list;
+  lr1_reductions: (terminal * production) list;
+  lr1_default_reduction: production option;
 }
 
 type grammar = {

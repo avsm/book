@@ -134,7 +134,7 @@ module Stable = struct
       | Not of 'a t
       | If of 'a t * 'a t * 'a t
       | Base of 'a
-    [@@deriving bin_io, compare, equal, hash, sexp, sexp_grammar]
+    [@@deriving bin_io, stable_witness, compare, equal, hash, sexp, sexp_grammar]
 
     (* the remainder of this signature consists of functions used in the definitions
        of sexp conversions that are also useful more generally *)
@@ -152,6 +152,11 @@ module Stable = struct
       | Not of 'a t
       | If of 'a t * 'a t * 'a t
       | Base of 'a
+
+    (* This type is assumed to be stable if the 'a is stable (see big comment above). *)
+    let stable_witness (_ : 'a Stable_witness.t) : 'a t Stable_witness.t =
+      Stable_witness.assert_stable
+    ;;
 
     include (
       T :
@@ -252,7 +257,7 @@ module Stable = struct
 
     let t_sexp_grammar : 'a. 'a Sexplib.Sexp_grammar.t -> 'a t Sexplib.Sexp_grammar.t =
       let defns : Sexplib.Sexp_grammar.defn list =
-        let blang : Sexplib.Sexp_grammar.grammar = Tycon ("blang", [ Tyvar "a" ]) in
+        let blang : Sexplib.Sexp_grammar.grammar = Recursive ("blang", [ Tyvar "a" ]) in
         [ { tycon = "blang"
           ; tyvars = [ "a" ]
           ; grammar =
@@ -288,8 +293,7 @@ module Stable = struct
           }
         ]
       in
-      fun base_grammar ->
-        { untyped = Recursive (Tycon ("blang", [ base_grammar.untyped ]), defns) }
+      fun base_grammar -> { untyped = Tycon ("blang", [ base_grammar.untyped ], defns) }
     ;;
   end
 end
@@ -357,7 +361,7 @@ module C = Container.Make (struct
         | [] -> acc
         | t :: ts -> loop acc t ts
       in
-      loop init t []
+      loop init t [] [@nontail]
     ;;
 
     let iter = `Define_using_fold
@@ -382,37 +386,29 @@ let max_elt = C.max_elt
 let fold_result = C.fold_result
 let fold_until = C.fold_until
 
-include Monad.Make (struct
-    type 'a t = 'a T.t
-
-    let return = base
-
-    let rec bind t ~f:k =
-      match t with
-      | Base v -> k v
-      | True -> true_
-      | False -> false_
-      | Not t1 -> not_ (bind t1 ~f:k)
-      (* Unfortunately we need to duplicate some of the short-circuiting from [andalso] and
-         friends here. In principle we could do something involving [Lazy.t] but the
-         overhead probably wouldn't be worth it. *)
-      | And (t1, t2) ->
-        (match bind t1 ~f:k with
-         | False -> false_
-         | other -> andalso other (bind t2 ~f:k))
-      | Or (t1, t2) ->
-        (match bind t1 ~f:k with
-         | True -> true_
-         | other -> orelse other (bind t2 ~f:k))
-      | If (t1, t2, t3) ->
-        (match bind t1 ~f:k with
-         | True -> bind t2 ~f:k
-         | False -> bind t3 ~f:k
-         | other -> if_ other (bind t2 ~f:k) (bind t3 ~f:k))
-    ;;
-
-    let map = `Define_using_bind
-  end)
+let rec bind t ~f:k =
+  match t with
+  | Base v -> k v
+  | True -> true_
+  | False -> false_
+  | Not t1 -> not_ (bind t1 ~f:k)
+  (* Unfortunately we need to duplicate some of the short-circuiting from [andalso] and
+     friends here. In principle we could do something involving [Lazy.t] but the
+     overhead probably wouldn't be worth it. *)
+  | And (t1, t2) ->
+    (match bind t1 ~f:k with
+     | False -> false_
+     | other -> andalso other (bind t2 ~f:k))
+  | Or (t1, t2) ->
+    (match bind t1 ~f:k with
+     | True -> true_
+     | other -> orelse other (bind t2 ~f:k))
+  | If (t1, t2, t3) ->
+    (match bind t1 ~f:k with
+     | True -> bind t2 ~f:k
+     | False -> bind t3 ~f:k
+     | other -> if_ other (bind t2 ~f:k) (bind t3 ~f:k))
+;;
 
 (* semantics *)
 
@@ -431,10 +427,10 @@ let specialize t f =
   bind t ~f:(fun v ->
     match f v with
     | `Known c -> constant c
-    | `Unknown -> base v)
+    | `Unknown -> base v) [@nontail]
 ;;
 
-let eval_set ~universe:all set_of_base =
+let eval_set ~universe:all set_of_base t =
   let rec aux (b : _ t) =
     match b with
     | True -> force all
@@ -447,8 +443,16 @@ let eval_set ~universe:all set_of_base =
       let cond = aux cond in
       Set.union (Set.inter cond (aux a)) (Set.inter (Set.diff (force all) cond) (aux b))
   in
-  aux
+  aux t [@nontail]
 ;;
+
+include Monad.Make (struct
+    type 'a t = 'a T.t
+
+    let return = base
+    let bind = bind
+    let map = `Define_using_bind
+  end)
 
 module type Monadic = sig
   module M : Monad.S

@@ -1,7 +1,6 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2011 Daniel C. Bünzli. All rights reserved.
+   Copyright (c) 2011 The cmdliner programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
-   cmdliner v1.0.4-31-gb5d6161
   ---------------------------------------------------------------------------*)
 
 (** Manpages.
@@ -38,6 +37,7 @@ val s_bugs : string
 val s_examples : string
 val s_authors : string
 val s_see_also : string
+val s_none : string
 
 (** {1 Section maps}
 
@@ -70,21 +70,21 @@ val subst_vars :
   string -> string
 (** [subst b ~subst s], using [b], substitutes in [s] variables of the form
     "$(doc)" by their [subst] definition. This leaves escapes and markup
-    directives $(markup,...) intact.
+    directives $(markup,…) intact.
 
     @raise Invalid_argument in case of illegal syntax. *)
 
 val doc_to_plain :
   errs:Format.formatter -> subst:(string -> string option) -> Buffer.t ->
   string -> string
-(** [doc_to_plain b ~subst s] using [b], subsitutes in [s] variables by
+(** [doc_to_plain b ~subst s] using [b], substitutes in [s] variables by
     their [subst] definition and renders cmdliner directives to plain
     text.
 
     @raise Invalid_argument in case of illegal syntax. *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2011 Daniel C. Bünzli
+   Copyright (c) 2011 The cmdliner programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

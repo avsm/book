@@ -30,20 +30,11 @@ module type S = sig
 end
 
 (** Provides a DNS-enabled {!Resolver_lwt} given a network stack. *)
-module Make
-    (R : Mirage_random.S)
-    (T : Mirage_time.S)
-    (C : Mirage_clock.MCLOCK)
-    (P : Mirage_clock.PCLOCK)
-    (S : Tcpip.Stack.V4V6) : sig
+module Make (S : Tcpip.Stack.V4V6) : sig
   include S
 
   val v :
-    ?nameservers:
-      [ `Plaintext of Ipaddr.t * int
-      | `Tls of Tls.Config.client * Ipaddr.t * int ]
-      list ->
-    S.t ->
-    t
-  (** [v ~nameservers stack ()] TODO *)
+    ?nameservers:string list -> S.t -> (t, [> `Msg of string ]) result Lwt.t
+  (** [v ~nameservers stack ()] TODO. An error is returned if any of the
+      nameserver specifications do not parse. *)
 end

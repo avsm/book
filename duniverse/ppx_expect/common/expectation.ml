@@ -30,7 +30,7 @@ module Body = struct
 
   let compare : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int =
     fun _cmp__a a__007_ b__008_ ->
-    if Ppx_compare_lib.phys_equal a__007_ b__008_
+    if Stdlib.( == ) a__007_ b__008_
     then 0
     else (
       match a__007_, b__008_ with
@@ -50,7 +50,7 @@ module Body = struct
 
   let equal : 'a. ('a -> 'a -> bool) -> 'a t -> 'a t -> bool =
     fun _cmp__a a__013_ b__014_ ->
-    if Ppx_compare_lib.phys_equal a__013_ b__014_
+    if Stdlib.( == ) a__013_ b__014_
     then true
     else (
       match a__013_, b__014_ with
@@ -94,22 +94,26 @@ let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
     ; extid_location = extid_location__025_
     ; body_location = body_location__027_
     } ->
-    let bnds__020_ = [] in
+    let bnds__020_ = ([] : _ Stdlib.List.t) in
     let bnds__020_ =
       let arg__028_ = File.Location.sexp_of_t body_location__027_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "body_location"; arg__028_ ] :: bnds__020_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "body_location"; arg__028_ ] :: bnds__020_
+       : _ Stdlib.List.t)
     in
     let bnds__020_ =
       let arg__026_ = File.Location.sexp_of_t extid_location__025_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "extid_location"; arg__026_ ] :: bnds__020_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "extid_location"; arg__026_ ] :: bnds__020_
+       : _ Stdlib.List.t)
     in
     let bnds__020_ =
       let arg__024_ = Body.sexp_of_t _of_a__019_ body__023_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "body"; arg__024_ ] :: bnds__020_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "body"; arg__024_ ] :: bnds__020_
+       : _ Stdlib.List.t)
     in
     let bnds__020_ =
       let arg__022_ = sexp_of_option sexp_of_string tag__021_ in
-      Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "tag"; arg__022_ ] :: bnds__020_
+      (Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "tag"; arg__022_ ] :: bnds__020_
+       : _ Stdlib.List.t)
     in
     Sexplib0.Sexp.List bnds__020_
 ;;
@@ -118,7 +122,7 @@ let _ = sexp_of_t
 
 let compare : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int =
   fun _cmp__a a__029_ b__030_ ->
-  if Ppx_compare_lib.phys_equal a__029_ b__030_
+  if Stdlib.( == ) a__029_ b__030_
   then 0
   else (
     match compare_option compare_string a__029_.tag b__030_.tag with
@@ -136,14 +140,14 @@ let _ = compare
 
 let equal : 'a. ('a -> 'a -> bool) -> 'a t -> 'a t -> bool =
   fun _cmp__a a__035_ b__036_ ->
-  if Ppx_compare_lib.phys_equal a__035_ b__036_
+  if Stdlib.( == ) a__035_ b__036_
   then true
   else
-    Ppx_compare_lib.( && )
+    Stdlib.( && )
       (equal_option equal_string a__035_.tag b__036_.tag)
-      (Ppx_compare_lib.( && )
+      (Stdlib.( && )
          (Body.equal _cmp__a a__035_.body b__036_.body)
-         (Ppx_compare_lib.( && )
+         (Stdlib.( && )
             (File.Location.equal a__035_.extid_location b__036_.extid_location)
             (File.Location.equal a__035_.body_location b__036_.body_location)))
 ;;

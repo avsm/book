@@ -67,11 +67,11 @@ end
 val build_info : string
 
 val build_info_as_sexp : Sexp.t
-val reprint_build_info : (Time.t -> Sexp.t) -> string
+val reprint_build_info : (Time_float.t -> Sexp.t) -> string
 val username : string option
 val hostname : string option
 val kernel : string option
-val build_time : Time.t option
+val build_time : Time_float.t option
 val x_library_inlining : bool
 val dynlinkable_code : bool
 val compiled_for_speed : bool
@@ -93,19 +93,41 @@ end
     The value is [false] in tests at the moment. *)
 val build_system_supports_version_util : bool
 
+(** When you read the words "version util" below, try adding the word "info" to
+    them: "version util info" makes a little more sense. *)
 module Expert : sig
+  (** Gets the version util if it exists.
+
+      Since 2022-11, this function is guaranteed to be bidirectionally compatible
+      if we ever change the version util format. We guarantee that:
+
+      - New versions of this function will always be able to parse the version
+        util out of all binaries built after 2022-11.
+
+      - Versions of this function which are less than one month old will always
+        be able to parse the version util out of new binaries. Older versions of 
+        this function may not be able to parse the version util out of new binaries.
+
+      If you care about performance, consider using lib/fast_get_version_util_from_file.
+      It is around 10-20x faster than this function, which can take a small number of
+      seconds for several hundred megabyte binaries. *)
+  val get_version_util : contents_of_exe:string -> string option
+
   (** Inserts the given version util into the executable text given. Returns None if this
       could not happen (maybe this is an executable that doesn't link in the current
-      library, maybe it already has version util). *)
+      library). *)
   val insert_version_util : contents_of_exe:string -> Version.t list -> string option
 
-  (** Undoes the operation above. Note that as currently implemented, this only removes
-      version util added by [insert_version_util]. It does not remove version added when
-      building with [VERSION_UTIL_SUPPORT=true]. The point of this operation is to make it
+  (** Removes the version util from a file. The point of this operation is to make it
       possible to compare executables up to version util. *)
   val remove_version_util : contents_of_exe:string -> string option
 
   module For_tests : sig
     val count_pattern_occurrences : contents_of_exe:string -> int
   end
+end
+
+module Private__For_fast_get_version_util_from_file : sig
+  val version_util_start_marker : string
+  val parse_generated_hg_version : string -> string list
 end

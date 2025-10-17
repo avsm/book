@@ -30,7 +30,7 @@ type 'a t
    does not require a trailing dot.
 
 
-    {e v0.4.0 - {{:https://github.com/hannesm/domain-name }homepage}} *)
+    {e v0.4.1 - {{:https://github.com/hannesm/domain-name }homepage}} *)
 
 (** {2 Constructor} *)
 

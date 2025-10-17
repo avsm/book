@@ -53,6 +53,13 @@ val fake_io : Unix.file_descr -> unit
 val fork : unit -> unit
   (** Called internally by Lwt_unix.fork to make sure we don't get strange behaviour *)
 
+val forwards_signal : int -> bool
+(** [forwards_signal signum] is [true] if the engine will call {!Lwt_unix.handle_signal}
+    when signal [signum] occurs. In this case, Lwt will not install its own signal handler.
+
+    Normally, this just returns [false], but when Lwt is used in combination
+    with other IO libraries, this allows sharing e.g. the SIGCHLD handler. *)
+
 (** {2 Engines} *)
 
 (** An engine represents a set of functions used to register different
@@ -82,6 +89,7 @@ class virtual abstract : object
   method readable_count : int
   method writable_count : int
   method timer_count : int
+  method forwards_signal : int -> bool
 
   (** {2 Backend methods} *)
 
@@ -127,6 +135,8 @@ sig
   val devpoll : t
   val port : t
 
+  val equal : t -> t -> bool
+
   val pp : Format.formatter -> t -> unit
 end
 
@@ -136,6 +146,9 @@ end
     creation of the class will raise {!Lwt_sys.Not_available}. *)
 class libev : ?backend:Ev_backend.t -> unit -> object
   inherit t
+
+  method backend : Ev_backend.t
+    (** The backend picked by libev. *)
 
   val loop : ev_loop
     (** The libev loop used for this engine. *)
@@ -200,6 +213,7 @@ sig
   class libev_1 : object
     inherit t
     val loop : ev_loop
+    method backend : Ev_backend.t
     method loop : ev_loop
   end
   [@@ocaml.deprecated
@@ -214,6 +228,7 @@ sig
   class libev_2 : ?backend:Ev_backend.t -> unit -> object
     inherit t
     val loop : ev_loop
+    method backend : Ev_backend.t
     method loop : ev_loop
   end
   [@@ocaml.deprecated

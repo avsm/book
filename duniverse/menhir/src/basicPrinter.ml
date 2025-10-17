@@ -10,6 +10,7 @@
 
 open Printf
 open Positions
+open Attribute
 open Syntax
 open Stretch
 open BasicSyntax
@@ -228,11 +229,10 @@ let print_parameters f g =
 
 (* Printing attributes. *)
 
-let print_attribute f ((name, payload) : attribute) =
+let print_attribute f { key; payload; origin } =
+  ignore origin;
   if attributes_printed then
-    fprintf f " [@%s %s]"
-      (Positions.value name)
-      payload.stretch_raw_content
+    fprintf f " [@%s %s]" key payload
 
 let print_attributes f attrs =
   List.iter (print_attribute f) attrs
@@ -324,11 +324,14 @@ let print_branch f g branch =
   (* Print the %prec annotation, if there is one. *)
   Option.iter (fun x ->
     fprintf f " %%prec %s" x.value
-  ) branch.branch_prec_annotation;
+  ) branch.prec_annotation;
   (* Newline, indentation, semantic action. *)
   fprintf f "\n    {";
   print_semantic_action f g branch;
-  fprintf f "}\n"
+  fprintf f "}";
+  (* The branch attributes follow the semantic action. *)
+  print_attributes f branch.br_attributes;
+  fprintf f "\n"
 
 (* Because the resolution of reduce/reduce conflicts is implicitly dictated by
    the order in which productions appear in the grammar, the printer should be
@@ -347,7 +350,7 @@ let compare_branch_production_levels bpl bpl' =
       compare_pairs InputFile.compare_input_files Generic.compare (m, l) (m', l')
 
 let compare_branches (b : branch) (b' : branch) =
-  compare_branch_production_levels b.branch_production_level b'.branch_production_level
+  compare_branch_production_levels b.production_level b'.production_level
 
 let compare_rules (_nt, (r : rule)) (_nt', (r' : rule)) =
   match r.branches, r'.branches with
@@ -409,11 +412,10 @@ let print_on_error_reduce_declarations f g =
 
 (* Printing %attribute declarations. *)
 
-let print_grammar_attribute f ((name, payload) : attribute) =
+let print_grammar_attribute f { key; payload; origin } =
+  ignore origin;
   if attributes_printed then
-    fprintf f "%%[@%s %s]\n"
-      (Positions.value name)
-      payload.stretch_raw_content
+    fprintf f "%%[@%s %s]\n" key payload
 
 let print_grammar_attributes f g =
   List.iter (print_grammar_attribute f) g.gr_attributes

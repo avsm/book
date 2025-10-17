@@ -1,4 +1,4 @@
-version: "1.0.0+dune2"
+version: "1.2.0+dune"
 opam-version: "2.0"
 name: "ptime"
 synopsis: "POSIX time for OCaml"
@@ -20,15 +20,15 @@ under the ISC license.
 
 [rfc3339]: http://tools.ietf.org/html/rfc3339
 
-Home page: http://erratique.ch/software/ptime"""
+Home page: <http://erratique.ch/software/ptime>"""
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
 authors: ["The ptime programmers"]
 license: "ISC"
-tags: [ "time" "posix" "system" "org:erratique" ]
+tags: ["time" "posix" "system" "org:erratique"]
 homepage: "https://github.com/dune-universe/ptime"
 bug-reports: "https://github.com/dbuenzli/ptime/issues"
 depends: [
-  "dune"
+  "dune" {>= "2.0"}
   "ocaml" {>= "4.08.0"}
 ]
 build: [ "dune" "build" "-p" name "-j" jobs "@install" "@runtest" {with-test} ]

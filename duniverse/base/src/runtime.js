@@ -149,3 +149,26 @@ function Base_hash_double(d) {
 function Base_am_testing(x) {
   return 0;
 }
+
+//Provides: caml_csel_value
+function caml_csel_value(v_cond, v_true, v_false) {
+    if (v_cond)
+        return v_true;
+    else
+        return v_false;
+}
+
+//Provides: Base_unsafe_create_local_bytes
+//Requires: caml_create_bytes
+function Base_unsafe_create_local_bytes(v_len) {
+    // This does a redundant bounds check and (since this is
+    // javascript) doesn't allocate locally, but that's fine.
+    return caml_create_bytes(v_len);
+}
+
+//Provides: caml_make_local_vect
+//Requires: caml_make_vect
+function caml_make_local_vect(v_len, v_elt) {
+    // In javascript there's no local allocation.
+    return caml_make_vect (v_len, v_elt);
+}

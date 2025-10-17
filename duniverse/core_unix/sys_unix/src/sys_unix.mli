@@ -45,9 +45,13 @@ val is_file_exn : ?follow_symlinks:bool (** defaults to true *) -> string -> boo
 val remove : string -> unit
 
 
-(** Rename a file. The first argument is the old name and the second is the new
-    name. If there is already another file under the new name, [rename] may
-    replace it, or raise an exception, depending on your operating system. *)
+(** Rename a file.  [rename oldpath newpath] renames the file
+    called [oldpath], giving it [newpath] as its new name,
+    moving it between directories if needed.  If [newpath] already
+    exists, its contents will be replaced with those of [oldpath].
+    Depending on the operating system, the metadata (permissions,
+    owner, etc) of [newpath] can either be preserved or be replaced by
+    those of [oldpath]. *)
 val rename : string -> string -> unit
 
 (** Return the value associated to a variable in the process environment.
@@ -115,6 +119,13 @@ exception Break
     program on user interrupt.
 *)
 val catch_break : bool -> unit
+
+(** [with_async_exns f] runs [f] and returns its result, in addition to
+    causing any asynchronous [Break] or [Stack_overflow] exceptions
+    (e.g. from finalisers, signal handlers or the GC) to be raised from the
+    call site of [with_async_exns].
+*)
+val with_async_exns : (unit -> 'a) -> 'a
 
 
 (** [execution_mode] tests whether the code being executed was compiled natively

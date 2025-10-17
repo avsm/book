@@ -19,15 +19,24 @@ module As_binary_string = struct
       let sexp_of_t x = String.sexp_of_t (T.to_binary x)
       let t_of_sexp x = T.of_binary_exn (String.t_of_sexp x)
       let t_sexp_grammar = Sexplib.Sexp_grammar.coerce String.t_sexp_grammar
+      let to_binable = T.to_binary
+      let of_binable = T.of_binary_exn
 
       include Bin_prot.Utils.Make_binable_without_uuid [@alert "-legacy"] (struct
-          module Binable = String
+          module Binable = String.Stable.V1
 
           type t = Bin_prot.Md5.t
 
-          let to_binable = T.to_binary
-          let of_binable = T.of_binary_exn
+          let to_binable = to_binable
+          let of_binable = of_binable
         end)
+
+      let stable_witness : t Stable_witness.t =
+        Stable_witness.of_serializable
+          String.Stable.V1.stable_witness
+          of_binable
+          to_binable
+      ;;
     end
   end
 
@@ -42,15 +51,24 @@ module Stable = struct
 
     let hash_fold_t = hash_fold_t
     let hash = hash
+    let to_binable = Fn.id
+    let of_binable = Fn.id
 
     include Bin_prot.Utils.Make_binable_without_uuid [@alert "-legacy"] (struct
-        module Binable = Bin_prot.Md5
+        module Binable = Bin_prot.Md5.Stable.V1
 
         type t = Bin_prot.Md5.t
 
-        let to_binable = Fn.id
-        let of_binable = Fn.id
+        let to_binable = to_binable
+        let of_binable = of_binable
       end)
+
+    let stable_witness : t Stable_witness.t =
+      Stable_witness.of_serializable
+        Bin_prot.Md5.Stable.V1.stable_witness
+        of_binable
+        to_binable
+    ;;
   end
 
   let digest_string s = Md5_lib.string s
@@ -71,7 +89,7 @@ let digest_bytes = Md5_lib.bytes
 
 external caml_sys_open
   :  string
-  -> Caml.open_flag list
+  -> Stdlib.open_flag list
   -> perm:int
   -> int
   = "caml_sys_open"
@@ -90,16 +108,16 @@ let digest_file_blocking path =
 let file = digest_file_blocking
 
 let digest_channel_blocking_without_releasing_runtime_lock channel ~len =
-  of_binary_exn (Caml.Digest.channel channel len)
+  of_binary_exn (Stdlib.Digest.channel channel len)
 ;;
 
 let channel channel len =
   digest_channel_blocking_without_releasing_runtime_lock channel ~len
 ;;
 
-let output_blocking t oc = Caml.Digest.output oc (to_binary t)
+let output_blocking t oc = Stdlib.Digest.output oc (to_binary t)
 let output oc t = output_blocking t oc
-let input_blocking ic = of_binary_exn (Caml.Digest.input ic)
+let input_blocking ic = of_binary_exn (Stdlib.Digest.input ic)
 let input = input_blocking
 let digest_subbytes = Md5_lib.subbytes
 let string = digest_string

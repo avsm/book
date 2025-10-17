@@ -27,19 +27,6 @@ struct
       in
       let suffix_length = measure_suffix 0 in
       String.sub s 0 (String.length s - suffix_length)
-
-  (* Convert multiple deprecation warnings into one warning. This function can
-     be removed from the module if/when Lambda Soup supports only
-     OCaml >= 4.03. *)
-  let lowercase_ascii = lowercase [@ocaml.warning "-3"]
-end
-
-module Char =
-struct
-  include Char
-
-  (* See comment by String.lowercase_ascii above. *)
-  let lowercase_ascii = lowercase [@ocaml.warning "-3"]
 end
 
 type element = unit
@@ -113,7 +100,10 @@ let from_signals' ~map_attributes signals =
     ~element:(fun name attributes children ->
       let attributes =
         attributes
-        |> List.map (fun ((_, n), v) -> n, v)
+        |> List.map (fun ((ns, n), v) ->
+          match ns with
+          | "" -> (n, v)
+          | _ -> (ns ^ ":" ^ n, v))
         |> map_attributes name in
       create_element (snd name) attributes children)
     s)
@@ -141,7 +131,7 @@ let parse text =
         List.fold_left (fun attributes (n, v) ->
           match List.mem_assoc n attributes with
           | true -> attributes
-          | false -> (n, v) :: attributes
+          | false -> (n, v)::attributes
         ) attributes !body_attributes
       | _ -> attributes)
 
@@ -155,6 +145,12 @@ let is_element node =
   match node.values with
   | `Element _ -> true
   | `Text _ -> false
+  | `Document _ -> false
+
+let is_text node =
+  match node.values with
+  | `Text _ -> true
+  | `Element _ -> false
   | `Document _ -> false
 
 let element node =
@@ -492,6 +488,7 @@ struct
     | OnlyOfType
     | Empty
     | Content of string
+    | Has of simple_selector
     | Not of simple_selector
 
   and simple_selector =
@@ -602,6 +599,12 @@ struct
     | OnlyOfType -> element_count_with_name (name node) node = 1
     | Empty -> no_children node
     | Content s -> texts node |> String.concat "" |> has_substring s
+    | Has selector ->
+      descendants node
+      |> filter (fun descendant -> not (is_text descendant))
+      |> filter (fun descendant -> matches_simple_selector descendant selector)
+      |> count
+      |> fun count -> count > 0
     | Not selector -> not (matches_simple_selector node selector)
 
   and matches_simple_selector node = function
@@ -730,7 +733,7 @@ struct
     begin match Stream.peek stream with
     | Some '\\' -> ()
     | Some c when is_identifier_char c -> ()
-    | _ -> parse_error "expected an identifier"
+    | _ -> (parse_error [@coverage off]) "expected an identifier"
     end;
     let rec loop () =
       match Stream.peek stream with
@@ -928,6 +931,9 @@ struct
       let s = parse_parenthesized_value parse_quoted_string stream in
       Content s
     | "empty" -> Empty
+    | "has" ->
+      let selector = parse_parenthesized_value parse_simple_selector stream in
+      Has selector
     | "not" ->
       let selector = parse_parenthesized_value parse_simple_selector stream in
       Not selector
@@ -1193,6 +1199,11 @@ let unwrap node =
 let append_root document node =
   delete node;
   mutate_child_list (fun f -> f @ [forget_type node]) document;
+  node.parent <- Some document
+
+let prepend_root document node =
+  delete node;
+  mutate_child_list (fun f -> (forget_type node)::f) document;
   node.parent <- Some document
 
 let set_name new_name = function

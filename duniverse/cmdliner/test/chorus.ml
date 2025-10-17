@@ -28,7 +28,7 @@ let cmd =
     `S Manpage.s_bugs;
     `P "Email bug reports to <bugs@example.org>." ]
   in
-  let info = Cmd.info "chorus" ~version:"v1.1.1" ~doc ~man in
+  let info = Cmd.info "chorus" ~version:"v1.3.0+dune" ~doc ~man in
   Cmd.v info chorus_t
 
 let main () = exit (Cmd.eval cmd)

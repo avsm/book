@@ -1,11 +1,15 @@
-module Config = Config
 module Log = Log
 module Persistent = Persistent
 module Report_error = Report_error
 module Stringlike = Stringlike
-module Stringlike_intf = Stringlike_intf
-module Value = Value
+
+module type Stringlike = Stringlike_intf.S
+
 module Build_path_prefix_map = Build_path_prefix_map0
+module Global_lock = Global_lock
+module Action = Action
+module Alias_name = Alias_name
+module Gc = Gc
 open Stdune
 
 let xdg =
@@ -13,10 +17,18 @@ let xdg =
     (let env_map =
        Env.update Env.initial ~var:"HOME" ~f:(function
          | Some _ as s -> s
-         | None -> (
+         | None ->
            let uid = Unix.getuid () in
-           match Unix.getpwuid uid with
-           | exception Not_found -> None
-           | s -> Some s.pw_dir))
+           (match Unix.getpwuid uid with
+            | exception Not_found -> None
+            | s -> Some s.pw_dir))
      in
      Xdg.create ~env:(Env.get env_map) ())
+;;
+
+let frames_per_second () =
+  match Dune_config.Config.(get threaded_console_frames_per_second) with
+  | `Custom fps -> fps
+  | `Default when Stdune.Execution_env.inside_emacs -> 15
+  | `Default -> 60
+;;

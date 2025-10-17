@@ -10,6 +10,8 @@ DUNE ?= dune
 .PHONY: all
 all:
 	$(MAKE) -C atdpy clean-for-dune
+	$(MAKE) -C atdd clean-for-dune
+	$(MAKE) -C atdcpp clean-for-dune
 	$(MAKE) -C atdts clean-for-dune
 	$(DUNE) build
 
@@ -43,17 +45,20 @@ docker-build:
 # to support all the target languages.
 .PHONY: test
 test:
-	$(MAKE) test-ts
 	$(MAKE) test-ocaml
 	$(MAKE) test-scala
 	$(MAKE) test-java
 	$(MAKE) test-python
 	$(MAKE) test-ts
+	$(MAKE) test-d
+	$(MAKE) test-cpp
+
 
 # Test the OCaml code used by all the backends
 test-common:
 	$(MAKE) -C atd test
 	$(MAKE) -C atdcat test
+	$(MAKE) -C atddiff test
 
 # Test only the OCaml backends
 .PHONY: test-ocaml
@@ -85,6 +90,16 @@ test-python:
 test-ts:
 	$(MAKE) test-common
 	$(MAKE) -C atdts test
+
+.PHONY: test-d
+test-d:
+	$(MAKE) test-common
+	$(MAKE) -C atdd test
+
+.PHONY: test-cpp
+test-cpp:
+	$(MAKE) test-common
+	$(MAKE) -C atdcpp test
 
 ############################################################################
 

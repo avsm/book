@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xft/Xft.h>
+#include <X11/extensions/Xrender.h>
 #include <caml/mlvalues.h>
 #include <caml/misc.h>
 
@@ -37,9 +39,10 @@ extern Bool caml_gr_display_modeflag;     /* Display-mode flag */
 extern Bool caml_gr_remember_modeflag;    /* Remember-mode flag */
 extern int caml_gr_x, caml_gr_y;      /* Coordinates of the current point */
 extern int caml_gr_color;        /* Current *CAML* drawing color (can be -1) */
-extern XFontStruct * caml_gr_font;    /* Current font */
+extern XftFont * caml_gr_font;    /* Current font */
 extern long caml_gr_selected_events;  /* Events we are interested in */
 extern Bool caml_gr_ignore_sigio;     /* Whether to consume events on sigio */
+extern Atom caml_wm_delete_window;    /* "WM_DELETE_WINDOW" atom */
 
 extern Bool caml_gr_direct_rgb;
 extern int caml_gr_byte_order;
@@ -53,8 +56,8 @@ extern int caml_gr_bits_per_pixel;
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
-#define DEFAULT_SCREEN_WIDTH 600
-#define DEFAULT_SCREEN_HEIGHT 450
+#define DEFAULT_SCREEN_WIDTH 1024
+#define DEFAULT_SCREEN_HEIGHT 768
 #define BORDER_WIDTH 2
 #define DEFAULT_WINDOW_NAME "OCaml graphics"
 #define DEFAULT_SELECTED_EVENTS \
@@ -87,3 +90,4 @@ extern void caml_gr_handle_event(XEvent *e);
 extern void caml_gr_init_color_cache(void);
 extern void caml_gr_init_direct_rgb_to_pixel(void);
 extern value caml_gr_id_of_window( Window w );
+extern value caml_gr_close_graph(void);

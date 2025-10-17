@@ -41,8 +41,13 @@ val fail : Error.t -> _ t
 (** These functions are direct analogs of the corresponding [Core.Or_error] functions. *)
 val ok_exn : 'a t -> 'a Deferred.t
 
-val of_exn : exn -> _ t
-val of_exn_result : ('a, exn) Result.t Deferred.t -> 'a t
+val of_exn : ?backtrace:[ `Get | `This of string ] -> exn -> _ t
+
+val of_exn_result
+  :  ?backtrace:[ `Get | `This of string ]
+  -> ('a, exn) Result.t Deferred.t
+  -> 'a t
+
 val error : string -> 'a -> ('a -> Sexp.t) -> _ t
 val error_s : Sexp.t -> _ t
 val error_string : string -> _ t
@@ -71,8 +76,8 @@ val ok_unit : unit t
     [try_with f >>| Result.join].
 
     The option [extract_exn] is passed along to [Monitor.try_with ?extract_exn] and
-    specifies whether or not the monitor exn wrapper should be skipped ([extract_exn:true]
-    or kept ([extract_exn:false]).
+    specifies whether or not the monitor exn wrapper should be skipped
+    ([extract_exn:true]) or kept ([extract_exn:false]).
 
     The [~rest] argument controls how exceptions are handled after the [try_with] deferred
     becomes determined. They may be logged, raised, or passed to a callback.

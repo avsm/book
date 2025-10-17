@@ -16,7 +16,11 @@
  * !LARGE_TABLES -> 8K per key, ~3x slower. */
 #define __MC_GHASH_LARGE_TABLES
 
-#ifdef ARCH_64BIT
+/* 64-bit Windows sets ARCH_64BIT but 128-bit integers are not supported
+ * by the Microsoft compiler. Drop down to 32-bit for MSVC;
+ * ghash_ctmul.c will implement ghash for MSVC.
+ */
+#if defined(ARCH_64BIT) && !defined(_MSC_VER)
 
 #define __set_uint128_t(w1, w0) (((__uint128_t) w1 << 64) | w0)
 
@@ -91,15 +95,15 @@ CAMLprim value mc_ghash_key_size_generic (__unit ()) {
   return Val_int (sizeof (__uint128_t) * __t_size);
 }
 
-CAMLprim value mc_ghash_init_key_generic (value key, value off, value m) {
-  __derive ((uint64_t *) _ba_uint8_off (key, off), (__uint128_t *) Bp_val (m));
+CAMLprim value mc_ghash_init_key_generic (value key, value m) {
+  __derive ((uint64_t *) _st_uint8 (key), (__uint128_t *) Bp_val (m));
   return Val_unit;
 }
 
 CAMLprim value
 mc_ghash_generic (value m, value hash, value src, value off, value len) {
   __ghash ((__uint128_t *) Bp_val (m), (uint64_t *) Bp_val (hash),
-           _ba_uint8_off (src, off), Int_val (len) );
+           _st_uint8_off (src, off), Int_val (len) );
   return Val_unit;
 }
 
