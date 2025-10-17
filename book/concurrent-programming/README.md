@@ -330,13 +330,13 @@ Here's a signature that captures this idea:
 ```ocaml env=main
 # module type Delayer_intf = sig
     type t
-    val create : Time.Span.t -> t
+    val create : Time_float.Span.t -> t
     val schedule : t -> (unit -> 'a Deferred.t) -> 'a Deferred.t
   end;;
 module type Delayer_intf =
   sig
     type t
-    val create : Time.Span.t -> t
+    val create : Time_float.Span.t -> t
     val schedule : t -> (unit -> 'a Deferred.t) -> 'a Deferred.t
   end
 ```
@@ -365,7 +365,7 @@ which becomes determined after that time span elapses:
 
 ```ocaml env=main
 # module Delayer : Delayer_intf = struct
-    type t = { delay: Time.Span.t;
+    type t = { delay: Time_float.Span.t;
                jobs: (unit -> unit) Queue.t;
              }
 
@@ -1093,7 +1093,7 @@ the two behaviors on subsequent calls:
     fun () ->
       let will_fail = !should_fail in
       should_fail := not will_fail;
-      let%map () = after (Time.Span.of_sec 0.5) in
+      let%map () = after (Time_float.Span.of_sec 0.5) in
       if will_fail then raise Exit else ();;
 val maybe_raise : unit -> unit Deferred.t = <fun>
 # maybe_raise ();;
@@ -1203,7 +1203,7 @@ captures and ignores errors in the processes it spawns.
     Stream.iter (Monitor.detach_and_get_error_stream monitor)
       ~f:(fun _exn -> printf "an error happened\n");
     within' ~monitor (fun () ->
-      let%bind () = after (Time.Span.of_sec 0.25) in
+      let%bind () = after (Time_float.Span.of_sec 0.25) in
       failwith "Kaboom!");;
 val swallow_error : unit -> 'a Deferred.t = <fun>
 ```
@@ -1218,7 +1218,7 @@ list of deferreds, and returns a deferred which will become determined
 assuming any of its arguments becomes determined.
 
 ```ocaml env=main
-# Deferred.any [ after (Time.Span.of_sec 0.5)
+# Deferred.any [ after (Time_float.Span.of_sec 0.5)
                ; swallow_error () ];;
 an error happened
 - : unit = ()
@@ -1245,7 +1245,7 @@ exception Ignore_me
         | Ignore_me -> printf "ignoring exn\n"
         | _ -> Monitor.send_exn parent_monitor error);
     within' ~monitor:child_monitor (fun () ->
-      let%bind () = after (Time.Span.of_sec 0.25) in
+      let%bind () = after (Time_float.Span.of_sec 0.25) in
       raise exn_to_raise);;
 val swallow_some_errors : exn -> 'a Deferred.t = <fun>
 ```
@@ -1262,7 +1262,7 @@ monitor and delivered as usual:
 ```ocaml env=main,non-deterministic=command
 # exception Another_exception;;
 exception Another_exception
-# Deferred.any [ after (Time.Span.of_sec 0.5)
+# Deferred.any [ after (Time_float.Span.of_sec 0.5)
                ; swallow_some_errors Another_exception ];;
 Exception:
 (monitor.ml.Error (Another_exception) ("Caught by monitor (id 69)")).
@@ -1272,7 +1272,7 @@ If instead we use `Ignore_me`, the exception will be ignored, and the
 computation will finish when the timeout expires.
 
 ```ocaml env=main
-# Deferred.any [ after (Time.Span.of_sec 0.5)
+# Deferred.any [ after (Time_float.Span.of_sec 0.5)
                ; swallow_some_errors Ignore_me ];;
 ignoring exn
 - : unit = ()
@@ -1448,7 +1448,7 @@ list is determined.
 
 Let's use this to add timeouts to our DuckDuckGo searches. The
 following code is a wrapper for `get_definition` that takes a timeout
-(in the form of a `Time.Span.t`) and returns either the definition,
+(in the form of a `Time_float.Span.t`) and returns either the definition,
 or, if that takes too long, an error:
 
 ```ocaml file=examples/correct/search_with_timeout/search.ml,part=1
@@ -1665,10 +1665,10 @@ prints out one last timestamp:
 
 ```ocaml env=main
 # let log_delays thunk =
-    let start = Time.now () in
+    let start = Time_float.now () in
     let print_time () =
-      let diff = Time.diff (Time.now ()) start in
-      printf "%s, " (Time.Span.to_string diff)
+      let diff = Time_float.diff (Time_float.now ()) start in
+      printf "%s, " (Time_float.Span.to_string diff)
     in
     let d = thunk () in
     Clock.every (sec 0.1) ~stop:d print_time;

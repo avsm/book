@@ -2,10 +2,10 @@ open Core
 open Async
 
 let log_delays thunk =
-  let start = Time.now () in
+  let start = Time_float.now () in
   let print_time () =
-    let diff = Time.diff (Time.now ()) start in
-    printf "%s, " (Time.Span.to_string diff)
+    let diff = Time_float.diff (Time_float.now ()) start in
+    printf "%s, " (Time_float.Span.to_string diff)
   in
   let d = thunk () in
   Clock.every (sec 0.1) ~stop:d print_time;
