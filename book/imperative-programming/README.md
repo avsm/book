@@ -946,10 +946,10 @@ using Core's `Time` module.
 ```ocaml env=main
 # let time f =
     let open Core in
-    let start = Time.now () in
+    let start = Time_float.now () in
     let x = f () in
-    let stop = Time.now () in
-    printf "Time: %F ms\n" (Time.diff stop start |> Time.Span.to_ms);
+    let stop = Time_float.now () in
+    printf "Time: %F ms\n" (Time_float.diff stop start |> Time_float.Span.to_ms);
     x;;
 val time : (unit -> 'a) -> 'a = <fun>
 ```
@@ -1335,11 +1335,11 @@ let () =
   match In_channel.(input_line stdin) with
   | None -> failwith "No timezone provided"
   | Some zone_string ->
-    let zone = Time_unix.Zone.find_exn zone_string in
-    let time_string = Time.to_string_abs (Time.now ()) ~zone in
+    let zone = Time_float_unix.Zone.find_exn zone_string in
+    let time_string = Time_float.to_string_abs (Time_float.now ()) ~zone in
     Out_channel.output_string stdout
       (String.concat
-         ["The time in ";Time_unix.Zone.to_string zone;" is ";time_string;".\n"]);
+         ["The time in ";Time_float_unix.Zone.to_string zone;" is ";time_string;".\n"]);
     Out_channel.flush stdout
 ```
 
@@ -1481,9 +1481,9 @@ let () =
   match In_channel.input_line In_channel.stdin with
   | None -> failwith "No timezone provided"
   | Some zone_string ->
-    let zone = Time_unix.Zone.find_exn zone_string in
-    let time_string = Time.to_string_abs (Time.now ()) ~zone in
-    printf "The time in %s is %s.\n%!" (Time_unix.Zone.to_string zone) time_string
+    let zone = Time_float_unix.Zone.find_exn zone_string in
+    let time_string = Time_float.to_string_abs (Time_float.now ()) ~zone in
+    printf "The time in %s is %s.\n%!" (Time_float_unix.Zone.to_string zone) time_string
 ```
 
 In the preceding example, we've used only two formatting directives:

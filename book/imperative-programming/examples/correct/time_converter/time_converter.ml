@@ -6,9 +6,9 @@ let () =
   match In_channel.(input_line stdin) with
   | None -> failwith "No timezone provided"
   | Some zone_string ->
-    let zone = Time_unix.Zone.find_exn zone_string in
-    let time_string = Time.to_string_abs (Time.now ()) ~zone in
+    let zone = Time_float_unix.Zone.find_exn zone_string in
+    let time_string = Time_float.to_string_abs (Time_float.now ()) ~zone in
     Out_channel.output_string stdout
       (String.concat
-         ["The time in ";Time_unix.Zone.to_string zone;" is ";time_string;".\n"]);
+         ["The time in ";Time_float_unix.Zone.to_string zone;" is ";time_string;".\n"]);
     Out_channel.flush stdout
