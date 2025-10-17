@@ -145,7 +145,7 @@ Error: Some type variables are unbound in this type:
              method pop : 'b option
              method push : 'b -> unit
            end
-       The method pop has type 'a option where 'a is unbound
+       The method pop has type 'b option where 'b is unbound
 ```
 
 In general, we need to provide enough constraints so that the compiler will
@@ -1220,7 +1220,7 @@ class virtual animated span = object(self)
       Clock.after span
       >>| fun () -> running <- false
     in
-    Clock.every ~stop (Time.Span.of_sec (1.0 /. 24.0))
+    Clock.every ~stop (Time_float.Span.of_sec (1.0 /. 24.0))
       (fun () ->
          step <- step + 1;
          List.iter ~f:(fun f -> f step) updates
@@ -1237,7 +1237,7 @@ class will produce circles that move to the right for a second when clicked:
 ```ocaml file=examples/correct/shapes/shapes.ml,part=7
 class my_circle = object
   inherit circle 20 50 50
-  inherit animated Time.Span.second
+  inherit animated Time_float.Span.second
   initializer updates <- [fun _ -> x <- x + 5]
 end
 ```
@@ -1285,14 +1285,14 @@ produce a variety of different animations: [linear mixins]{.idx}
 class my_square x y = object
   inherit square 40 x y
   inherit draggable
-  inherit animated (Time.Span.of_int_sec 5)
+  inherit animated (Time_float.Span.of_int_sec 5)
   inherit linear 5 0
   inherit harmonic 0.0 7 ~-10
 end
 
 let my_circle = object
   inherit circle 30 250 250
-  inherit animated (Time.Span.minute)
+  inherit animated (Time_float.Span.minute)
   inherit harmonic 0.0 10 0
   inherit harmonic (pi /. 2.0) 0 10
 end
@@ -1320,7 +1320,7 @@ let main () =
   in
     open_graph "";
     auto_synchronize false;
-    Clock.every (Time.Span.of_sec (1.0 /. 24.0)) repaint
+    Clock.every (Time_float.Span.of_sec (1.0 /. 24.0)) repaint
 
 let () = never_returns (Scheduler.go_main ~main ())
 ```
