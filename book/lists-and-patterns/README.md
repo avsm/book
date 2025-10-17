@@ -403,7 +403,7 @@ when it's done. You can see some of this by looking at the type-signature for
 
 ```ocaml env=main
 # List.fold;;
-- : 'a list -> init:'accum -> f:('accum -> 'a -> 'accum) -> 'accum = <fun>
+- : 'a list -> init:'acc -> f:('acc -> 'a -> 'acc) -> 'acc = <fun>
 ```
 
 We can use `List.fold` for something as simple as summing up a list:
